@@ -40,6 +40,7 @@ import { hitTest, strokesHitBySegment } from './hit';
 import { strokeOutline, outlineToPath, type InputPoint } from './ink';
 import { drawScene, type GridSettings } from './renderer';
 import { snapBox, snapToGrid, type SnapResult } from './snap';
+import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
 import { useUI } from '../store/ui';
 import { saveComponent, type ComponentDef } from '../store/db';
@@ -84,6 +85,8 @@ type Interaction =
       id: string;
       from: { objectId?: string | null; anchor?: AnchorSide; point?: Vec };
       hover: { objectId: string; anchor: AnchorSide } | null;
+      /** set when started from a quick-connect chip: release on empty spawns a connected copy */
+      quick?: { sourceId: string; side: AnchorSide };
     }
   | { kind: 'endpointing'; id: string; end: 'from' | 'to' };
 
@@ -118,6 +121,10 @@ export class Controller {
 
   private cameraListeners = new Set<() => void>();
   onViewportChanged: (() => void) | null = null;
+
+  // glide-draw (⌘Y): ink follows the cursor with no button held
+  private glidePoints: InputPoint[] = [];
+  private glidePenDown = false;
 
   constructor(scene: HTMLCanvasElement, overlay: HTMLCanvasElement) {
     this.scene = scene;
@@ -264,6 +271,27 @@ export class Controller {
     if (!f) return;
     this.camera = cameraToFit(boundsOf(f, this.doc.resolve), this.viewW, this.viewH, 48);
     this.cameraChanged();
+  }
+
+  /** Center an object on screen (without zooming in past 150%) and select it. */
+  zoomToObject(id: string) {
+    const o = this.doc.get(id);
+    if (!o) return;
+    const fit = cameraToFit(aabbOf(o, this.doc.resolve), this.viewW, this.viewH, 160);
+    if (fit.zoom > 1.5) {
+      const b = aabbOf(o, this.doc.resolve);
+      const zoom = 1.5;
+      this.camera = {
+        x: b.x + b.w / 2 - this.viewW / 2 / zoom,
+        y: b.y + b.h / 2 - this.viewH / 2 / zoom,
+        zoom,
+      };
+    } else {
+      this.camera = fit;
+    }
+    this.cameraChanged();
+    this.selection = new Set([id]);
+    this.syncSelection();
   }
 
   setCamera(c: Camera) {
@@ -684,7 +712,8 @@ export class Controller {
 
   startEditingText(id: string) {
     const o = this.doc.get(id);
-    if (!o || (o.type !== 'shape' && o.type !== 'sticky' && o.type !== 'text')) return;
+    if (!o || (o.type !== 'shape' && o.type !== 'sticky' && o.type !== 'text' && o.type !== 'connector'))
+      return;
     useUI.getState().set({ editingTextId: id });
     this.overlayDirty = true;
   }
@@ -742,6 +771,21 @@ export class Controller {
     if (ui.editingTextId) {
       // clicking the canvas closes the editor (TextEditor commits on unmount)
       ui.set({ editingTextId: null });
+      return;
+    }
+
+    // glide-draw: a click toggles the pen up/down instead of starting a tool action
+    if (ui.glideDraw) {
+      const world = screenToWorld(this.camera, this.toScreen(e));
+      if (!this.glidePenDown) {
+        this.glidePenDown = true;
+        this.glidePoints = [{ x: world.x, y: world.y, p: 0.5 }];
+      } else {
+        if (this.glidePoints.length > 1) this.commitStroke(this.glidePoints);
+        this.glidePoints = [];
+        this.glidePenDown = false;
+      }
+      this.overlayDirty = true;
       return;
     }
 
@@ -883,6 +927,39 @@ export class Controller {
       }
     }
 
+    // 1a. quick-connect chips around a single selected object
+    const chip = this.quickChipAt(screen);
+    if (chip) {
+      const ui = useUI.getState();
+      const obj: ConnectorObj = {
+        id: nanoid(8),
+        type: 'connector',
+        x: world.x,
+        y: world.y,
+        rotation: 0,
+        z: this.doc.nextZ(),
+        from: { objectId: chip.obj.id, anchor: chip.side },
+        to: { point: world },
+        routing: ui.routing,
+        stroke: ui.stroke,
+        strokeWidth: ui.strokeWidth,
+        dash: ui.dash,
+        startArrow: 'none',
+        endArrow: 'triangle',
+        opacity: 1,
+      };
+      this.doc.begin();
+      this.doc.set(obj);
+      this.interaction = {
+        kind: 'connecting',
+        id: obj.id,
+        from: obj.from,
+        hover: null,
+        quick: { sourceId: chip.obj.id, side: chip.side },
+      };
+      return;
+    }
+
     // 1b. endpoint handles on a single selected connector → drag to re-angle / re-attach
     if (this.selection.size === 1) {
       const only = this.selectedObjects()[0];
@@ -996,6 +1073,17 @@ export class Controller {
     const world = screenToWorld(this.camera, screen);
     const ui = useUI.getState();
     const it = this.interaction;
+
+    if (ui.glideDraw && it.kind === 'idle') {
+      if (this.glidePenDown) {
+        const last = this.glidePoints[this.glidePoints.length - 1];
+        if (!last || Math.hypot(world.x - last.x, world.y - last.y) * this.camera.zoom >= 0.75) {
+          this.glidePoints.push({ x: world.x, y: world.y, p: 0.5 });
+        }
+        this.overlayDirty = true;
+      }
+      return;
+    }
 
     switch (it.kind) {
       case 'idle': {
@@ -1262,6 +1350,24 @@ export class Controller {
       }
       case 'connecting': {
         const c = this.doc.get(it.id) as ConnectorObj | undefined;
+        if (c && it.quick) {
+          // quick-connect: release on empty spawns a connected copy of the source
+          const src = this.doc.get(it.quick.sourceId);
+          if (src && !c.to.objectId) {
+            const pts = routeConnector(c, this.doc.resolve);
+            const end = pts[pts.length - 1];
+            const len = Math.hypot(end.x - pts[0].x, end.y - pts[0].y);
+            const spawn = this.spawnQuickTarget(src, it.quick.side, len > 40 ? end : null);
+            this.doc.update(c.id, { to: { objectId: spawn.id } });
+            this.selection = new Set([spawn.id]);
+            this.syncSelection();
+          } else if (c.to.objectId) {
+            this.selection = new Set([c.id]);
+            this.syncSelection();
+          }
+          this.doc.commit();
+          break;
+        }
         if (c) {
           const pts = routeConnector(c, this.doc.resolve);
           const len = Math.hypot(
@@ -1291,7 +1397,7 @@ export class Controller {
     const ui = useUI.getState();
     if (ui.tool !== 'select') return;
     const hit = hitTest(this.doc, world, 6 / this.camera.zoom);
-    if (hit && (hit.type === 'shape' || hit.type === 'sticky' || hit.type === 'text')) {
+    if (hit && (hit.type === 'shape' || hit.type === 'sticky' || hit.type === 'text' || hit.type === 'connector')) {
       this.selection = new Set([hit.id]);
       this.syncSelection();
       this.startEditingText(hit.id);
@@ -1319,6 +1425,14 @@ export class Controller {
   // ---------- tool internals ----------
 
   private commitStroke(points: InputPoint[]) {
+    const uiState = useUI.getState();
+    if (uiState.autoShape && points.length >= 8) {
+      const rec = recognizeStroke(points.map((p) => ({ x: p.x, y: p.y })));
+      if (rec) {
+        this.commitRecognized(rec);
+        return;
+      }
+    }
     if (points.length < 2) {
       // dot: synthesize a tiny segment so a tap leaves a mark
       const p = points[0];
@@ -1352,6 +1466,60 @@ export class Controller {
       points: flat,
       rotation: 0,
       z: this.doc.nextZ(),
+    };
+    this.doc.set(obj);
+  }
+
+  /** Turn a recognized rough stroke into a clean shape or line, styled like the pen. */
+  private commitRecognized(rec: Recognized) {
+    const ui = useUI.getState();
+    const strokeWidth = Math.min(Math.max(ui.penSize, 1.5), 8);
+    if (rec.kind === 'line') {
+      const allow = ui.attachEnabled;
+      const hitA = allow ? this.findAttachTarget(rec.a) : null;
+      const hitB = allow ? this.findAttachTarget(rec.b, hitA?.id) : null;
+      const obj: ConnectorObj = {
+        id: nanoid(8),
+        type: 'connector',
+        x: rec.a.x,
+        y: rec.a.y,
+        rotation: 0,
+        z: this.doc.nextZ(),
+        from: hitA ? { objectId: hitA.id } : { point: rec.a },
+        to: hitB ? { objectId: hitB.id } : { point: rec.b },
+        routing: 'straight',
+        stroke: ui.penColor,
+        strokeWidth,
+        dash: 'solid',
+        startArrow: 'none',
+        endArrow: 'none',
+        opacity: 1,
+      };
+      this.doc.set(obj);
+      return;
+    }
+    const obj: ShapeObj = {
+      id: nanoid(8),
+      type: 'shape',
+      shape: rec.kind === 'rect' ? 'rect' : rec.kind,
+      x: rec.box.x,
+      y: rec.box.y,
+      w: rec.box.w,
+      h: rec.box.h,
+      rotation: 0,
+      z: this.doc.nextZ(),
+      fill: 'transparent',
+      stroke: ui.penColor,
+      strokeWidth,
+      dash: 'solid',
+      radius: 12,
+      opacity: 1,
+      text: '',
+      textColor: '#1a1a1a',
+      fontSize: 16,
+      fontFamily: ui.fontFamily,
+      sketchy: ui.sketchy,
+      seed: Math.floor(Math.random() * 2 ** 31),
     };
     this.doc.set(obj);
   }
@@ -1689,6 +1857,24 @@ export class Controller {
           ctx.stroke();
           ctx.globalAlpha = 1;
         }
+        // quick-connect chips around a single selected object
+        const chipSrc = this.quickChipSource();
+        if (chipSrc) {
+          for (const { pos } of this.quickChipPositions(chipSrc)) {
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, Controller.CHIP_R, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(60,120,255,0.92)';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(pos.x - 4, pos.y);
+            ctx.lineTo(pos.x + 4, pos.y);
+            ctx.moveTo(pos.x, pos.y - 4);
+            ctx.lineTo(pos.x, pos.y + 4);
+            ctx.stroke();
+          }
+        }
         // endpoint handles for a single selected connector (drag to angle / re-attach)
         if (objs.length === 1 && objs[0].type === 'connector') {
           const pts = routeConnector(objs[0], this.doc.resolve);
@@ -1737,6 +1923,69 @@ export class Controller {
         }
       }
     }
+  }
+
+  private static QUICK_TYPES = new Set(['shape', 'sticky', 'icon', 'image']);
+  private static CHIP_OFFSET = 34; // screen px outside the object's bounds
+  private static CHIP_R = 10;
+
+  private quickChipSource(): SlateObj | null {
+    if (useUI.getState().tool !== 'select' || this.selection.size !== 1) return null;
+    const o = this.selectedObjects()[0];
+    return o && !o.locked && Controller.QUICK_TYPES.has(o.type) ? o : null;
+  }
+
+  private quickChipPositions(o: SlateObj): { side: AnchorSide; pos: Vec }[] {
+    const b = boundsOf(o, this.doc.resolve);
+    const out: { side: AnchorSide; pos: Vec }[] = [];
+    const dirs: Record<string, Vec> = {
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+      top: { x: 0, y: -1 },
+      bottom: { x: 0, y: 1 },
+    };
+    for (const side of ['left', 'right', 'top', 'bottom'] as AnchorSide[]) {
+      const p = this.worldToScreenPt(anchorPoint(b, side));
+      const d = dirs[side];
+      out.push({ side, pos: { x: p.x + d.x * Controller.CHIP_OFFSET, y: p.y + d.y * Controller.CHIP_OFFSET } });
+    }
+    return out;
+  }
+
+  private quickChipAt(screen: Vec): { obj: SlateObj; side: AnchorSide } | null {
+    const src = this.quickChipSource();
+    if (!src) return null;
+    for (const { side, pos } of this.quickChipPositions(src)) {
+      if (Math.hypot(screen.x - pos.x, screen.y - pos.y) <= Controller.CHIP_R + 2) {
+        return { obj: src, side };
+      }
+    }
+    return null;
+  }
+
+  /** Spawn a connected copy of the quick-connect source. Returns the new object. */
+  private spawnQuickTarget(src: SlateObj, side: AnchorSide, at: Vec | null): SlateObj {
+    const b = boundsOf(src, this.doc.resolve);
+    const GAP = 80;
+    let cx: number;
+    let cy: number;
+    if (at) {
+      cx = at.x;
+      cy = at.y;
+    } else {
+      cx = b.x + b.w / 2 + (side === 'left' ? -(b.w + GAP) : side === 'right' ? b.w + GAP : 0);
+      cy = b.y + b.h / 2 + (side === 'top' ? -(b.h + GAP) : side === 'bottom' ? b.h + GAP : 0);
+    }
+    const clone = structuredClone(src);
+    clone.id = nanoid(8);
+    clone.z = this.doc.nextZ();
+    clone.groupId = null;
+    clone.parentId = null;
+    if (clone.type === 'shape' || clone.type === 'sticky') clone.text = '';
+    clone.x = cx - b.w / 2;
+    clone.y = cy - b.h / 2;
+    this.doc.set(clone);
+    return clone;
   }
 
   private handlePositions(tl: Vec, br: Vec): [HandleId, number, number][] {

@@ -2,7 +2,7 @@ import type { Box, BoardMeta, ConnectorObj, IconObj, ImageObj, ShapeObj, SlateOb
 import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
-import { aabbOf, boundsOf, boxUnion, routeConnector, shapePolygon } from '../engine/geometry';
+import { aabbOf, boundsOf, boxUnion, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
 import { drawObject, getBitmap, sketchyPathInfos } from '../engine/renderer';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
@@ -187,6 +187,12 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       const headLen = c.strokeWidth * 4 + 4;
       if (c.endArrow === 'triangle') el += arrowSvg(pts[pts.length - 2], pts[pts.length - 1], headLen, c.stroke, c.opacity);
       if (c.startArrow === 'triangle') el += arrowSvg(pts[1], pts[0], headLen, c.stroke, c.opacity);
+      if (c.label) {
+        const mid = polylineMidpoint(pts);
+        const w = c.label.length * 7.5 + 12;
+        el += `<rect x="${mid.x - w / 2}" y="${mid.y - 10}" width="${w}" height="20" rx="6" fill="#f3f2ef"/>`;
+        el += `<text x="${mid.x}" y="${mid.y + 4}" font-size="13" font-weight="500" fill="${c.stroke}" text-anchor="middle">${esc(c.label)}</text>`;
+      }
       return el;
     }
     case 'icon': {

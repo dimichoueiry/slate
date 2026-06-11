@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
-import type { ShapeObj, StickyObj, TextObj } from '../types';
+import type { ConnectorObj, ShapeObj, StickyObj, TextObj } from '../types';
 import { fontStack } from '../types';
 import { useUI } from '../store/ui';
 import { lineHeight, textBlockSize } from '../engine/text';
+import { polylineMidpoint, routeConnector } from '../engine/geometry';
 
 /**
  * Floating textarea positioned over the edited object. While open, the canvas
@@ -11,8 +12,8 @@ import { lineHeight, textBlockSize } from '../engine/text';
  * undo step on close.
  */
 export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectId: string }) {
-  const obj = ctl.doc.get(objectId) as ShapeObj | StickyObj | TextObj | undefined;
-  const [value, setValue] = useState(obj?.text ?? '');
+  const obj = ctl.doc.get(objectId) as ShapeObj | StickyObj | TextObj | ConnectorObj | undefined;
+  const [value, setValue] = useState(obj ? (obj.type === 'connector' ? (obj.label ?? '') : obj.text) : '');
   const ref = useRef<HTMLTextAreaElement>(null);
   const [, force] = useReducer((n) => n + 1, 0);
   const committed = useRef(false);
@@ -25,9 +26,11 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
   const doCommit = (text: string) => {
     if (committed.current) return;
     committed.current = true;
-    const o = ctl.doc.get(objectId) as ShapeObj | StickyObj | TextObj | undefined;
+    const o = ctl.doc.get(objectId) as ShapeObj | StickyObj | TextObj | ConnectorObj | undefined;
     if (o) {
-      if (o.type === 'text') {
+      if (o.type === 'connector') {
+        ctl.doc.update<ConnectorObj>(o.id, { label: text.trim() });
+      } else if (o.type === 'text') {
         if (text.trim() === '') {
           ctl.doc.delete(o.id);
         } else {
@@ -79,9 +82,9 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
   if (!obj) return null;
 
   const zoom = ctl.camera.zoom;
-  const fontSize = obj.fontSize;
+  const fontSize = obj.type === 'connector' ? 13 : obj.fontSize;
   const lh = lineHeight(fontSize);
-  const family = fontStack(obj.fontFamily);
+  const family = fontStack(obj.type === 'connector' ? undefined : obj.fontFamily);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     e.stopPropagation();
@@ -98,7 +101,20 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     color: obj.type === 'text' ? obj.color : obj.type === 'shape' ? obj.textColor : 'rgba(20,20,20,0.92)',
   };
 
-  if (obj.type === 'text') {
+  if (obj.type === 'connector') {
+    const mid = ctl.worldToScreenPt(polylineMidpoint(routeConnector(obj, ctl.doc.resolve)));
+    style = {
+      ...style,
+      left: mid.x - 60,
+      top: mid.y - (lh * zoom) / 2,
+      width: 120,
+      textAlign: 'center',
+      background: '#f3f2ef',
+      borderRadius: 6,
+      color: obj.stroke,
+      fontWeight: 500,
+    };
+  } else if (obj.type === 'text') {
     style = {
       ...style,
       left: tl.x,

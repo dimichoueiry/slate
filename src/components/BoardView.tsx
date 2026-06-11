@@ -12,6 +12,7 @@ import TextEditor from './TextEditor';
 import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
+import CommandPalette from './CommandPalette';
 import { exportBounds, exportPng } from '../export/export';
 
 const TOOL_KEYS: Record<string, ToolId> = {
@@ -168,6 +169,12 @@ export default function BoardView({ boardId }: { boardId: string }) {
 
       const mod = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
+
+      if (mod && k === 'k') {
+        e.preventDefault();
+        useUI.getState().set({ paletteOpen: !useUI.getState().paletteOpen });
+        return;
+      }
 
       if (e.code === 'Space') {
         ctl.setSpaceDown(true);
@@ -385,6 +392,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
           {editingTextId && <TextEditor key={editingTextId} ctl={ctl} objectId={editingTextId} />}
           <NotesPanel boardId={boardId} />
           <IconTray ctl={ctl} />
+          <CommandPalette ctl={ctl} boardId={boardId} />
           {ctl.doc.objects.size === 0 && (
             <div className="hint">Press P and just draw — or double-click anywhere to type. Scroll to pan, pinch to zoom.</div>
           )}

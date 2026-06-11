@@ -343,6 +343,31 @@ export function pointInPolygon(p: Vec, poly: Vec[]): boolean {
   return inside;
 }
 
+/** Point halfway along a polyline by arc length. */
+export function polylineMidpoint(pts: Vec[]): Vec {
+  if (pts.length === 0) return { x: 0, y: 0 };
+  if (pts.length === 1) return pts[0];
+  let total = 0;
+  const lens: number[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const l = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    lens.push(l);
+    total += l;
+  }
+  let half = total / 2;
+  for (let i = 0; i < lens.length; i++) {
+    if (half <= lens[i]) {
+      const t = lens[i] === 0 ? 0 : half / lens[i];
+      return {
+        x: pts[i].x + (pts[i + 1].x - pts[i].x) * t,
+        y: pts[i].y + (pts[i + 1].y - pts[i].y) * t,
+      };
+    }
+    half -= lens[i];
+  }
+  return pts[pts.length - 1];
+}
+
 export function snapAngle(angle: number, stepDeg = 15): number {
   const step = (stepDeg * Math.PI) / 180;
   return Math.round(angle / step) * step;

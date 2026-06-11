@@ -120,6 +120,8 @@ export interface ConnectorObj extends BaseObj {
   startArrow: ArrowHead;
   endArrow: ArrowHead;
   opacity: number;
+  /** text drawn at the midpoint of the connector */
+  label?: string;
 }
 
 export interface IconObj extends BaseObj {
@@ -190,16 +192,33 @@ export const STICKY_COLORS = [
 ];
 
 export const FONTS: { id: string; label: string; stack: string }[] = [
+  // system stacks
   {
     id: 'sans',
-    label: 'Sans',
+    label: 'System Sans',
     stack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
   },
-  { id: 'serif', label: 'Serif', stack: "Georgia, 'Iowan Old Style', 'Times New Roman', serif" },
-  { id: 'elegant', label: 'Elegant', stack: "Didot, 'Bodoni 72', 'Playfair Display', Georgia, serif" },
+  { id: 'serif', label: 'System Serif', stack: "Georgia, 'Iowan Old Style', 'Times New Roman', serif" },
+  { id: 'elegant', label: 'Didot', stack: "Didot, 'Bodoni 72', 'Playfair Display', Georgia, serif" },
   { id: 'geo', label: 'Futura', stack: "Futura, 'Avenir Next', 'Century Gothic', sans-serif" },
-  { id: 'hand', label: 'Hand', stack: "Noteworthy, 'Marker Felt', 'Bradley Hand', 'Comic Sans MS', cursive" },
-  { id: 'mono', label: 'Mono', stack: "'SF Mono', Menlo, Consolas, 'Courier New', monospace" },
+  { id: 'hand', label: 'Noteworthy', stack: "Noteworthy, 'Marker Felt', 'Bradley Hand', 'Comic Sans MS', cursive" },
+  { id: 'mono', label: 'SF Mono', stack: "'SF Mono', Menlo, Consolas, 'Courier New', monospace" },
+  // bundled open-source faces (self-hosted, offline)
+  { id: 'inter', label: 'Inter', stack: "'Inter', sans-serif" },
+  { id: 'poppins', label: 'Poppins', stack: "'Poppins', sans-serif" },
+  { id: 'montserrat', label: 'Montserrat', stack: "'Montserrat', sans-serif" },
+  { id: 'space-grotesk', label: 'Space Grotesk', stack: "'Space Grotesk', sans-serif" },
+  { id: 'playfair', label: 'Playfair Display', stack: "'Playfair Display', serif" },
+  { id: 'lora', label: 'Lora', stack: "'Lora', serif" },
+  { id: 'merriweather', label: 'Merriweather', stack: "'Merriweather', serif" },
+  { id: 'bebas', label: 'Bebas Neue', stack: "'Bebas Neue', sans-serif" },
+  { id: 'oswald', label: 'Oswald', stack: "'Oswald', sans-serif" },
+  { id: 'abril', label: 'Abril Fatface', stack: "'Abril Fatface', serif" },
+  { id: 'pacifico', label: 'Pacifico', stack: "'Pacifico', cursive" },
+  { id: 'caveat', label: 'Caveat', stack: "'Caveat', cursive" },
+  { id: 'dancing', label: 'Dancing Script', stack: "'Dancing Script', cursive" },
+  { id: 'marker', label: 'Permanent Marker', stack: "'Permanent Marker', cursive" },
+  { id: 'jetbrains', label: 'JetBrains Mono', stack: "'JetBrains Mono', monospace" },
 ];
 
 export function fontStack(id?: string): string {

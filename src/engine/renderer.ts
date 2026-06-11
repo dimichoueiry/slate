@@ -15,7 +15,7 @@ import { iconPaths } from './icons';
 import type { Camera } from './camera';
 import { visibleWorldRect } from './camera';
 import type { Doc } from './doc';
-import { boundsOf, routeConnector, shapePolygon } from './geometry';
+import { boundsOf, polylineMidpoint, routeConnector, shapePolygon } from './geometry';
 import { PEN_CONFIGS, strokePath } from './ink';
 import { fontString, lineHeight, wrapText } from './text';
 import { fontStack } from '../types';
@@ -109,6 +109,10 @@ export function drawScene(
       if (o.type === 'text') continue;
       if (o.type === 'shape' || o.type === 'sticky') {
         drawObject(ctx, { ...o, text: '' }, doc, camera.zoom);
+        continue;
+      }
+      if (o.type === 'connector') {
+        drawObject(ctx, { ...o, label: '' }, doc, camera.zoom);
         continue;
       }
     }
@@ -522,6 +526,21 @@ export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, do
   }
   if (o.startArrow === 'triangle') {
     drawArrowhead(ctx, pts[1], pts[0], headLen);
+  }
+  if (o.label) {
+    const mid = polylineMidpoint(pts);
+    const fs = 13;
+    ctx.font = fontString(fs, 500);
+    const tw = ctx.measureText(o.label).width;
+    const padX = 6;
+    const bg = new Path2D();
+    bg.roundRect(mid.x - tw / 2 - padX, mid.y - 10, tw + padX * 2, 20, 6);
+    ctx.fillStyle = '#f3f2ef';
+    ctx.fill(bg);
+    ctx.fillStyle = o.stroke;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(o.label, mid.x, mid.y + 0.5);
   }
   ctx.restore();
 }

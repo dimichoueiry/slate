@@ -376,6 +376,14 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             onChange={(e) => ui.set({ penOpacity: Number(e.target.value) })}
           />
         </label>
+        <div className="seg" title="Recognize rough strokes as clean shapes and lines">
+          <button className={!ui.autoShape ? 'active' : ''} onClick={() => ui.set({ autoShape: false })}>
+            Raw ink
+          </button>
+          <button className={ui.autoShape ? 'active' : ''} onClick={() => ui.set({ autoShape: true })}>
+            Auto-shape
+          </button>
+        </div>
       </div>
     );
   }

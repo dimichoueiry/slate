@@ -413,6 +413,59 @@ button { font-family: inherit; }
   text-overflow: ellipsis;
 }
 
+/* ---------- command palette ---------- */
+
+.palette-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 14, 0.25);
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 14vh;
+}
+.palette {
+  width: min(560px, 90vw);
+  background: var(--chrome-bg);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+.palette input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--chrome-fg);
+  font-size: 15px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.palette-list { max-height: 46vh; overflow-y: auto; padding: 6px; }
+.palette-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--chrome-fg);
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.palette-list button.active { background: var(--accent); color: #fff; }
+.palette-icon { width: 20px; text-align: center; flex-shrink: 0; }
+.palette-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-hint { font-size: 11px; color: var(--chrome-dim); }
+.palette-list button.active .palette-hint { color: rgba(255, 255, 255, 0.75); }
+.palette-empty { color: var(--chrome-dim); font-size: 13px; padding: 14px; }
+
 /* ---------- notes panel ---------- */
 
 .notes-panel {

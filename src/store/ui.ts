@@ -14,6 +14,8 @@ interface UIState {
   penSize: number;
   penOpacity: number;
   smoothing: number; // 0..0.4 extra stabilization
+  autoShape: boolean; // recognize rough strokes as clean shapes
+  glideDraw: boolean; // ⌘Y: cursor inks without holding the button (trackpad drawing)
   // shapes
   fill: string;
   stroke: string;
@@ -37,6 +39,7 @@ interface UIState {
   minimapVisible: boolean;
   notesOpen: boolean;
   iconTrayOpen: boolean;
+  paletteOpen: boolean;
 
   selection: string[];
   editingTextId: string | null;
@@ -85,6 +88,8 @@ export const useUI = create<UIState>((setState) => ({
   penSize: 4,
   penOpacity: 1,
   smoothing: 0.1,
+  autoShape: false,
+  glideDraw: false,
 
   fill: 'transparent',
   stroke: '#1a1a1a',
@@ -105,6 +110,7 @@ export const useUI = create<UIState>((setState) => ({
   minimapVisible: true,
   notesOpen: false,
   iconTrayOpen: false,
+  paletteOpen: false,
 
   selection: [],
   editingTextId: null,
