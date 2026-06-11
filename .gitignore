@@ -4,3 +4,4 @@ dev-dist/
 scripts/shots/
 *.local
 .DS_Store
+tsconfig.tsbuildinfo
