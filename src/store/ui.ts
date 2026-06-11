@@ -23,6 +23,8 @@ interface UIState {
   rounded: boolean; // rect tool draws rounded rectangles
   // connector
   routing: Routing;
+  /** when false, lines/connectors never attach to nearby objects */
+  attachEnabled: boolean;
   // sticky
   stickyColor: string;
   // text
@@ -92,6 +94,7 @@ export const useUI = create<UIState>((setState) => ({
   rounded: false,
 
   routing: 'curved',
+  attachEnabled: true,
   stickyColor: '#FFE066',
   fontFamily: 'sans',
   fontSize: 20,

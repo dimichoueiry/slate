@@ -439,8 +439,16 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             ))}
           </div>
         )}
+        <div className="seg" title="When off, endpoints never stick to nearby shapes (hold ⌥ for a one-off)">
+          <button className={ui.attachEnabled ? 'active' : ''} onClick={() => ui.set({ attachEnabled: true })}>
+            Attach
+          </button>
+          <button className={!ui.attachEnabled ? 'active' : ''} onClick={() => ui.set({ attachEnabled: false })}>
+            Free
+          </button>
+        </div>
         <span style={{ fontSize: 11, color: 'var(--chrome-dim)' }}>
-          Drag from a shape — endpoints stay attached
+          {ui.attachEnabled ? 'Endpoints stick to shapes — hold ⌥ to draw free' : 'Endpoints stay exactly where you put them'}
         </span>
       </div>
     );

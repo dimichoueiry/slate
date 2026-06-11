@@ -791,7 +791,7 @@ export class Controller {
       }
       case 'line':
       case 'connector':
-        this.beginConnector(world, tool);
+        this.beginConnector(world, tool, this.attachAllowed(e));
         break;
       default: {
         // shape tools
@@ -976,7 +976,7 @@ export class Controller {
       case 'idle': {
         // anchor hints when hovering with connector tool
         if (ui.tool === 'connector' || ui.tool === 'line') {
-          const hit = this.findAttachTarget(world);
+          const hit = this.attachAllowed(e) ? this.findAttachTarget(world) : null;
           const next = hit ? { objectId: hit.id, box: boundsOf(hit, this.doc.resolve) } : null;
           if (next?.objectId !== this.hoverAnchors?.objectId) {
             this.hoverAnchors = next;
@@ -1115,7 +1115,9 @@ export class Controller {
         const c = this.doc.get(it.id) as ConnectorObj | undefined;
         if (!c) break;
         const otherEnd = it.end === 'from' ? c.to : c.from;
-        const hit = this.findAttachTarget(world, otherEnd.objectId ?? undefined);
+        const hit = this.attachAllowed(e)
+          ? this.findAttachTarget(world, otherEnd.objectId ?? undefined)
+          : null;
         let end: ConnectorObj['from'];
         if (hit) {
           end = { objectId: hit.id, anchor: nearestAnchor(boundsOf(hit, this.doc.resolve), world) };
@@ -1140,7 +1142,7 @@ export class Controller {
       case 'connecting': {
         const c = this.doc.get(it.id) as ConnectorObj | undefined;
         if (!c) break;
-        const hit = this.findAttachTarget(world, it.from.objectId);
+        const hit = this.attachAllowed(e) ? this.findAttachTarget(world, it.from.objectId) : null;
         let to: ConnectorObj['to'];
         if (hit) {
           const b = boundsOf(hit, this.doc.resolve);
@@ -1391,6 +1393,11 @@ export class Controller {
    * the nearest attachable object within ~36 screen px, so snapping doesn't require
    * pixel-perfect aim.
    */
+  /** Attachment is suppressed by the UI toggle or by holding Alt/Option while drawing. */
+  private attachAllowed(e: { altKey: boolean }): boolean {
+    return useUI.getState().attachEnabled && !e.altKey;
+  }
+
   private findAttachTarget(world: Vec, excludeId?: string | null): SlateObj | null {
     const attachable = (o: SlateObj) =>
       !o.locked && o.id !== excludeId && o.type !== 'connector' && o.type !== 'stroke' && o.type !== 'frame';
@@ -1413,9 +1420,9 @@ export class Controller {
     return best;
   }
 
-  private beginConnector(world: Vec, tool: 'line' | 'connector') {
+  private beginConnector(world: Vec, tool: 'line' | 'connector', allowAttach = true) {
     const ui = useUI.getState();
-    const hit = this.findAttachTarget(world);
+    const hit = allowAttach ? this.findAttachTarget(world) : null;
     let from: ConnectorObj['from'];
     if (hit) {
       from = { objectId: hit.id, anchor: nearestAnchor(boundsOf(hit, this.doc.resolve), world) };
