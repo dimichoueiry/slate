@@ -186,6 +186,17 @@ button { font-family: inherit; }
     linear-gradient(45deg, #777 25%, #bbb 25%, #bbb 75%, #777 75%) 4px 4px / 8px 8px;
 }
 
+.frame-name-input {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 8px;
+  color: var(--chrome-fg);
+  padding: 5px 8px;
+  font-size: 12px;
+  width: 120px;
+  outline: none;
+}
+
 .font-select {
   background: rgba(255, 255, 255, 0.08);
   color: var(--chrome-fg);

@@ -107,6 +107,8 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
     const types = new Set(selObjs.map((o) => o.type));
     const single = selObjs.length === 1 ? selObjs[0] : null;
     const anyLocked = selObjs.some((o) => o.locked);
+    const allOneGroup =
+      selObjs.length >= 2 && !!selObjs[0].groupId && selObjs.every((o) => o.groupId === selObjs[0].groupId);
     return (
       <div className="panel stylebar">
         {(types.has('stroke') || types.has('text') || types.has('icon')) && (
@@ -277,10 +279,31 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
                 <button title="Distribute vertically" onClick={() => ctl.distribute('y')}>↕</button>
               </div>
             )}
-            <button className="chrome-btn" onClick={() => ctl.groupSelection()}>
-              Group
-            </button>
+            {allOneGroup ? (
+              <button className="chrome-btn" title="Ungroup (⌘⇧G)" onClick={() => ctl.ungroupSelection()}>
+                Ungroup
+              </button>
+            ) : (
+              <button className="chrome-btn" title="Group (⌘G)" onClick={() => ctl.groupSelection()}>
+                Group
+              </button>
+            )}
           </>
+        )}
+        {single?.type === 'frame' && (
+          <label>
+            Frame
+            <input
+              className="frame-name-input"
+              value={single.name}
+              spellCheck={false}
+              onChange={(e) => ctl.updateSelected({ name: e.target.value })}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLElement).blur();
+              }}
+            />
+          </label>
         )}
         <div className="seg">
           <button title="Bring to front (⌘⇧])" onClick={() => ctl.reorderSelection('front')}>⏫</button>

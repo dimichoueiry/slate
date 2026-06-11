@@ -253,6 +253,19 @@ export class Controller {
     this.cameraChanged();
   }
 
+  frames(): FrameObj[] {
+    return this.doc
+      .allSorted()
+      .filter((o): o is FrameObj => o.type === 'frame');
+  }
+
+  zoomToFrame(id: string) {
+    const f = this.doc.get(id);
+    if (!f) return;
+    this.camera = cameraToFit(boundsOf(f, this.doc.resolve), this.viewW, this.viewH, 48);
+    this.cameraChanged();
+  }
+
   setCamera(c: Camera) {
     this.camera = { ...c, zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, c.zoom)) };
     this.cameraChanged();
@@ -922,6 +935,22 @@ export class Controller {
     this.interaction = { kind: 'marquee', start: world, current: world, additive: e.shiftKey };
   }
 
+  /** Objects currently inside a frame — live containment, so newly added objects count too. */
+  frameChildren(frameId: string): SlateObj[] {
+    const f = this.doc.get(frameId);
+    if (!f || f.type !== 'frame') return [];
+    const fb = boundsOf(f, this.doc.resolve);
+    return this.doc
+      .search(fb)
+      .filter(
+        (o) =>
+          o.id !== frameId &&
+          o.type !== 'frame' &&
+          !o.locked &&
+          boxContains(fb, aabbOf(o, this.doc.resolve))
+      );
+  }
+
   private expandGroup(o: SlateObj): string[] {
     const ids = [o.id];
     if (o.groupId) {
@@ -930,22 +959,18 @@ export class Controller {
       }
     }
     if (o.type === 'frame') {
-      for (const other of this.doc.all()) {
-        if (other.parentId === o.id) ids.push(other.id);
-      }
+      for (const child of this.frameChildren(o.id)) ids.push(child.id);
     }
     return ids;
   }
 
   private beginTranslate(world: Vec, clickIds: string[] | null = null) {
     const ids = new Set(this.selection);
-    // frames carry their children
+    // frames carry everything currently inside them
     for (const id of [...ids]) {
       const o = this.doc.get(id);
       if (o?.type === 'frame') {
-        for (const child of this.doc.all()) {
-          if (child.parentId === id) ids.add(child.id);
-        }
+        for (const child of this.frameChildren(id)) ids.add(child.id);
       }
     }
     const origins = new Map<string, SlateObj>();

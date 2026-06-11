@@ -8,24 +8,38 @@ import { downloadBlob, exportBounds, exportPng, exportSlateFile, exportSvg } fro
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
   const [menu, setMenu] = useState(false);
+  const [framesMenu, setFramesMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  useUI((s) => s.docVersion); // keep the frames list fresh
+  const frames = ctl.frames();
 
   const rename = (name: string) => {
     ui.set({ boardName: name });
     void updateBoardMeta(boardId, { name });
   };
 
-  const doExport = async (format: 'png' | 'png2x' | 'svg' | 'slate', selectionOnly: boolean) => {
+  const doExport = async (
+    format: 'png' | 'png2x' | 'svg' | 'slate',
+    selectionOnly: boolean,
+    frameId?: string
+  ) => {
     setMenu(false);
     setBusy(true);
     try {
-      const name = ui.boardName || 'board';
+      let name = ui.boardName || 'board';
       if (format === 'slate') {
         const meta = await db.boards.get(boardId);
         if (meta) downloadBlob(await exportSlateFile(meta, ctl.doc), `${name}.slate`);
         return;
       }
-      const box = exportBounds(ctl.doc, selectionOnly ? ctl.selection : undefined);
+      let box = exportBounds(ctl.doc, selectionOnly ? ctl.selection : undefined);
+      if (frameId) {
+        const f = ctl.doc.get(frameId);
+        if (f && f.type === 'frame') {
+          box = { x: f.x, y: f.y, w: f.w, h: f.h };
+          name = f.name || name;
+        }
+      }
       if (!box) {
         alert('Nothing to export yet — the board is empty.');
         return;
@@ -76,6 +90,18 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           ⌖
         </button>
+        {frames.length > 0 && (
+          <button
+            className="chrome-btn"
+            title="Jump to a frame"
+            onClick={() => {
+              setFramesMenu((m) => !m);
+              setMenu(false);
+            }}
+          >
+            ⧈ {frames.length}
+          </button>
+        )}
         <button
           className="chrome-btn"
           title="Markdown notes"
@@ -84,10 +110,33 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           🗒 Notes
         </button>
-        <button className="chrome-btn primary" disabled={busy} onClick={() => setMenu((m) => !m)}>
+        <button
+          className="chrome-btn primary"
+          disabled={busy}
+          onClick={() => {
+            setMenu((m) => !m);
+            setFramesMenu(false);
+          }}
+        >
           {busy ? 'Exporting…' : 'Export'}
         </button>
       </div>
+      {framesMenu && (
+        <div className="menu" style={{ top: 58, left: 12 }} onPointerLeave={() => setFramesMenu(false)}>
+          <div className="menu-label">Jump to frame</div>
+          {frames.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => {
+                ctl.zoomToFrame(f.id);
+                setFramesMenu(false);
+              }}
+            >
+              {f.name || 'Untitled frame'}
+            </button>
+          ))}
+        </div>
+      )}
       {menu && (
         <div className="menu" style={{ top: 58, left: 12 }} onPointerLeave={() => setMenu(false)}>
           <div className="menu-label">Whole board</div>
@@ -100,6 +149,17 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
               <div className="menu-label">Selection only</div>
               <button onClick={() => doExport('png2x', true)}>PNG <span>2×</span></button>
               <button onClick={() => doExport('svg', true)}>SVG</button>
+            </>
+          )}
+          {frames.length > 0 && (
+            <>
+              <div className="sep" />
+              <div className="menu-label">Frames</div>
+              {frames.slice(0, 8).map((f) => (
+                <button key={f.id} onClick={() => doExport('png2x', false, f.id)}>
+                  {f.name || 'Untitled frame'} <span>PNG 2×</span>
+                </button>
+              ))}
             </>
           )}
           <div className="sep" />
