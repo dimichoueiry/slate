@@ -162,56 +162,113 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
 }
 
 /** First line marks an AI node? */
-export function isAINode(o: AnyObj): boolean {
+export function isAINode(o: AnyObj | undefined): boolean {
   return (
+    !!o &&
     (o?.type === 'sticky' || o?.type === 'text') &&
     typeof o.text === 'string' &&
     RUN.test(o.text.split('\n')[0])
   );
 }
 
-/** Runnable nodes ordered so every node runs after the nodes feeding into it. */
-export function flowOrder(ctl: AnyObj): AnyObj[] {
+export interface Flow {
+  id: string;
+  label: string;
+  nodes: AnyObj[]; // runnable nodes in execution (topological) order
+}
+
+function nodeLabel(node: AnyObj): string {
+  const t = String(promptSource(node) ?? '')
+    .replace(/\n/g, ' ')
+    .trim();
+  return t.length > 30 ? t.slice(0, 30) + '…' : t || 'node';
+}
+
+/**
+ * Connected flows on the board. A flow is a group of objects wired together by
+ * connectors that contains at least one runnable node. Isolated/unconnected
+ * nodes are not flows (run those with their own ▶). Within each flow, nodes are
+ * ordered topologically so every node runs after the nodes feeding into it.
+ */
+export function getFlows(ctl: AnyObj): Flow[] {
   const objs: AnyObj[] = ctl.doc.all();
-  const ids = new Set(objs.map((o) => o.id));
-  const adj = new Map<string, string[]>(); // from -> [to]
+  const byId = new Map(objs.map((o) => [o.id, o]));
+
+  // build undirected (for components) + directed (for ordering) adjacency from connectors
+  const undirected = new Map<string, Set<string>>();
+  const directed = new Map<string, string[]>();
   const indeg = new Map<string, number>();
-  for (const o of objs) indeg.set(o.id, 0);
+  const link = (a: string, b: string) => {
+    (undirected.get(a) ?? undirected.set(a, new Set()).get(a)!).add(b);
+    (undirected.get(b) ?? undirected.set(b, new Set()).get(b)!).add(a);
+  };
   for (const c of objs) {
     if (c.type !== 'connector') continue;
     const from = c.from?.objectId;
     const to = c.to?.objectId;
-    if (from && to && ids.has(from) && ids.has(to) && from !== to) {
-      (adj.get(from) ?? adj.set(from, []).get(from)!).push(to);
+    if (from && to && byId.has(from) && byId.has(to) && from !== to) {
+      link(from, to);
+      (directed.get(from) ?? directed.set(from, []).get(from)!).push(to);
       indeg.set(to, (indeg.get(to) ?? 0) + 1);
+      if (!indeg.has(from)) indeg.set(from, 0);
     }
   }
-  // Kahn topological sort over all objects
-  const queue = objs.filter((o) => (indeg.get(o.id) ?? 0) === 0).map((o) => o.id);
-  const order: string[] = [];
-  const seen = new Set<string>();
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    order.push(id);
-    for (const next of adj.get(id) ?? []) {
-      indeg.set(next, (indeg.get(next) ?? 1) - 1);
-      if ((indeg.get(next) ?? 0) <= 0) queue.push(next);
+
+  // weakly-connected components over only the objects that take part in connectors
+  const visited = new Set<string>();
+  const flows: Flow[] = [];
+  for (const start of undirected.keys()) {
+    if (visited.has(start)) continue;
+    const comp: string[] = [];
+    const q = [start];
+    visited.add(start);
+    while (q.length) {
+      const id = q.shift()!;
+      comp.push(id);
+      for (const nb of undirected.get(id) ?? []) {
+        if (!visited.has(nb)) {
+          visited.add(nb);
+          q.push(nb);
+        }
+      }
     }
+    const compSet = new Set(comp);
+    if (!comp.some((id) => isAINode(byId.get(id)))) continue; // no runnable node → not a flow
+
+    // Kahn topo within the component
+    const localIndeg = new Map<string, number>();
+    for (const id of comp) localIndeg.set(id, indeg.get(id) ?? 0);
+    const ready = comp.filter((id) => (localIndeg.get(id) ?? 0) === 0);
+    const order: string[] = [];
+    const seen = new Set<string>();
+    while (ready.length) {
+      const id = ready.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      order.push(id);
+      for (const nxt of directed.get(id) ?? []) {
+        if (!compSet.has(nxt)) continue;
+        localIndeg.set(nxt, (localIndeg.get(nxt) ?? 1) - 1);
+        if ((localIndeg.get(nxt) ?? 0) <= 0) ready.push(nxt);
+      }
+    }
+    for (const id of comp) if (!seen.has(id)) order.push(id); // cycle leftovers
+    const nodes = order.map((id) => byId.get(id)!).filter((o) => o && isAINode(o));
+    const first = nodes[0];
+    if (!first) continue;
+    flows.push({ id: [...comp].sort()[0] ?? first.id, label: nodeLabel(first), nodes });
   }
-  // any objects left out by a cycle: append so they still run (best effort)
-  for (const o of objs) if (!seen.has(o.id)) order.push(o.id);
-  const byId = new Map(objs.map((o) => [o.id, o]));
-  return order.map((id) => byId.get(id)!).filter((o) => o && isAINode(o));
+  // stable order: by topmost node position
+  flows.sort((a, b) => (a.nodes[0]?.y ?? 0) - (b.nodes[0]?.y ?? 0) || (a.nodes[0]?.x ?? 0) - (b.nodes[0]?.x ?? 0));
+  return flows;
 }
 
-/** Execute every runnable node in dependency order, awaiting each. */
+/** Execute a specific flow's nodes in dependency order, awaiting each. */
 export async function runFlow(
   ctl: AnyObj,
+  nodes: AnyObj[],
   onProgress?: (done: number, total: number, node: AnyObj) => void
 ): Promise<{ ran: number }> {
-  const nodes = flowOrder(ctl);
   for (let i = 0; i < nodes.length; i++) {
     onProgress?.(i, nodes.length, nodes[i]);
     try {

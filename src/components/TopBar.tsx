@@ -4,23 +4,25 @@ import { useUI } from '../store/ui';
 import { db, updateBoardMeta } from '../store/db';
 import { goHome } from '../App';
 import { downloadBlob, exportBounds, exportPng, exportSlateFile, exportSvg } from '../export/export';
-import { flowOrder, runFlow } from '../ui/ainodes';
+import { getFlows, runFlow, type Flow } from '../ui/ainodes';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
   const [menu, setMenu] = useState(false);
   const [framesMenu, setFramesMenu] = useState(false);
+  const [flowMenu, setFlowMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const [flow, setFlow] = useState<{ done: number; total: number } | null>(null);
-  useUI((s) => s.docVersion); // keep the frames list fresh
+  useUI((s) => s.docVersion); // keep the frames/flows list fresh
   const frames = ctl.frames();
-  const nodeCount = flowOrder(ctl).length;
+  const flows = getFlows(ctl);
 
-  const onRunFlow = async () => {
+  const onRunFlow = async (f: Flow) => {
     if (flow) return;
-    setFlow({ done: 0, total: nodeCount });
+    setFlowMenu(false);
+    setFlow({ done: 0, total: f.nodes.length });
     try {
-      await runFlow(ctl, (done, total) => setFlow({ done, total }));
+      await runFlow(ctl, f.nodes, (done, total) => setFlow({ done, total }));
     } finally {
       setFlow(null);
     }
@@ -103,15 +105,27 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           ⌖
         </button>
-        {nodeCount > 0 && (
+        {flows.length > 0 && (
           <button
             className="chrome-btn"
             style={{ background: flow ? 'var(--accent)' : 'rgba(103,65,217,0.85)', color: '#fff' }}
             disabled={!!flow}
-            title="Run every ai:/img:/web:/search:/extract:/chart:/fix: node in dependency order"
-            onClick={() => void onRunFlow()}
+            title="Run a connected flow of nodes in dependency order"
+            onClick={() => {
+              if (flow) return;
+              if (flows.length === 1) void onRunFlow(flows[0]);
+              else {
+                setFlowMenu((m) => !m);
+                setMenu(false);
+                setFramesMenu(false);
+              }
+            }}
           >
-            {flow ? `Running ${flow.done}/${flow.total}…` : `▶▶ Run flow (${nodeCount})`}
+            {flow
+              ? `Running ${flow.done}/${flow.total}…`
+              : flows.length === 1
+                ? `▶▶ Run flow (${flows[0].nodes.length})`
+                : `▶▶ Run flow (${flows.length} flows)`}
           </button>
         )}
         {frames.length > 0 && (
@@ -159,6 +173,29 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
               {f.name || 'Untitled frame'}
             </button>
           ))}
+        </div>
+      )}
+      {flowMenu && (
+        <div className="menu" style={{ top: 58, left: 12 }} onPointerLeave={() => setFlowMenu(false)}>
+          <div className="menu-label">Run which flow?</div>
+          {flows.map((f) => (
+            <button key={f.id} onClick={() => void onRunFlow(f)}>
+              {f.label} <span>{f.nodes.length} node{f.nodes.length === 1 ? '' : 's'}</span>
+            </button>
+          ))}
+          <div className="sep" />
+          <button
+            onClick={async () => {
+              setFlowMenu(false);
+              for (const f of flows) {
+                setFlow({ done: 0, total: f.nodes.length });
+                await runFlow(ctl, f.nodes, (done, total) => setFlow({ done, total }));
+              }
+              setFlow(null);
+            }}
+          >
+            Run all flows <span>{flows.length}</span>
+          </button>
         </div>
       )}
       {menu && (
