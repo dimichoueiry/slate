@@ -46,10 +46,11 @@ async function brandLogoDataUrl(): Promise<string | null> {
   }
 }
 
-// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt
-const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix):/i;
+// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch
+const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix|data):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
+const DATA = /^(▶ ?)?data:/i;
 const SEARCH = /^(▶ ?)?search:/i;
 const RESEARCH = /^(▶ ?)?research:/i;
 const EXTRACT = /^(▶ ?)?extract:/i;
@@ -196,6 +197,7 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (EXTRACT.test(head)) return executeExtract(ctl, node);
   if (CHART.test(head)) return executeChart(ctl, node);
   if (FIX.test(head)) return executeFix(ctl, node);
+  if (DATA.test(head)) return executeData(ctl, node);
   return execute(ctl, node);
 }
 
@@ -734,6 +736,61 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
     for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
     doc.commit();
   }
+}
+
+// ---------- data: HTTP fetch from any REST endpoint via /api/fetch ----------
+
+async function executeData(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const raw = promptSource(node).replace(RUN, '').trim();
+  // first line: "[METHOD] URL" · any following lines: request body
+  const lines = raw.split('\n');
+  const firstLine = (lines.shift() ?? '').trim();
+  const inlineBody = lines.join('\n').trim();
+  const tokens = firstLine.split(/\s+/).filter(Boolean);
+  let method = 'GET';
+  if (/^(get|post|put|patch|delete)$/i.test(tokens[0] ?? '')) method = tokens.shift()!.toUpperCase();
+  const url = tokens.join(' ').trim();
+  // body: inline first; otherwise, for write methods, the wired-in text
+  const wired = gatherInputs(ctl, node).map((o: AnyObj) => o.text).join('\n').trim();
+  const body = inlineBody || (method !== 'GET' ? wired : '');
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { mono: true, w: 360 });
+  if (!url) {
+    for (const id of outIds) setText(ctl, id, '⚠ No URL — write one after "data:", e.g. data: https://api.example.com/v1/items');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, `⏳ ${method} ${url}…`);
+  doc.commit();
+
+  try {
+    const res = await fetch('/api/fetch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url, method, body }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `fetch failed (${res.status})`);
+    const out = formatFetchResult(data);
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, out);
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+/** Render an /api/fetch payload as readable text: a status header + pretty JSON or raw text. */
+function formatFetchResult(d: AnyObj): string {
+  const head = `// HTTP ${d.status ?? '?'}${d.contentType ? ` · ${String(d.contentType).split(';')[0]}` : ''}`;
+  let body = 'json' in d && d.json !== undefined ? JSON.stringify(d.json, null, 2) : String(d.text ?? '');
+  if (body.length > 8000) body = body.slice(0, 8000) + `\n… (truncated, ${body.length} chars)`;
+  else if (d.truncated) body += '\n… (response truncated by server)';
+  return `${head}\n${body}`.trim();
 }
 
 // ---------- research: deep multi-step agent (LangGraph on /api/research) ----------

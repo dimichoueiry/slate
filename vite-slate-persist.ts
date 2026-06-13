@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { scrapeUrls } from './api/scrape';
 import { searchWeb } from './api/search';
+import { proxyFetch } from './api/fetch';
 
 export default function slatePersist(): Plugin {
   let dataDir = '';
@@ -63,6 +64,27 @@ export default function slatePersist(): Plugin {
             query = '';
           }
           const { status, body: out } = await searchWeb(query);
+          res.statusCode = status;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(out));
+        });
+      });
+      server.middlewares.use('/api/fetch', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('{"error":"Method not allowed"}');
+          return;
+        }
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', async () => {
+          let parsed: any = {};
+          try {
+            parsed = JSON.parse(body || '{}');
+          } catch {
+            parsed = {};
+          }
+          const { status, body: out } = await proxyFetch(parsed);
           res.statusCode = status;
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify(out));

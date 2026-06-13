@@ -15,6 +15,7 @@ const SLASH_COMMANDS: { cmd: string; label: string; desc: string }[] = [
   { cmd: 'extract', label: 'extract:', desc: 'Pull a structured table' },
   { cmd: 'chart', label: 'chart:', desc: 'Draw a bar / line / pie chart' },
   { cmd: 'fix', label: 'fix:', desc: 'Improve a prompt' },
+  { cmd: 'data', label: 'data:', desc: 'Fetch JSON from any API endpoint' },
 ];
 
 /**
