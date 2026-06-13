@@ -4,14 +4,27 @@ import { useUI } from '../store/ui';
 import { db, updateBoardMeta } from '../store/db';
 import { goHome } from '../App';
 import { downloadBlob, exportBounds, exportPng, exportSlateFile, exportSvg } from '../export/export';
+import { flowOrder, runFlow } from '../ui/ainodes';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
   const [menu, setMenu] = useState(false);
   const [framesMenu, setFramesMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [flow, setFlow] = useState<{ done: number; total: number } | null>(null);
   useUI((s) => s.docVersion); // keep the frames list fresh
   const frames = ctl.frames();
+  const nodeCount = flowOrder(ctl).length;
+
+  const onRunFlow = async () => {
+    if (flow) return;
+    setFlow({ done: 0, total: nodeCount });
+    try {
+      await runFlow(ctl, (done, total) => setFlow({ done, total }));
+    } finally {
+      setFlow(null);
+    }
+  };
 
   const rename = (name: string) => {
     ui.set({ boardName: name });
@@ -90,6 +103,17 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           ⌖
         </button>
+        {nodeCount > 0 && (
+          <button
+            className="chrome-btn"
+            style={{ background: flow ? 'var(--accent)' : 'rgba(103,65,217,0.85)', color: '#fff' }}
+            disabled={!!flow}
+            title="Run every ai:/img:/web:/search:/extract:/chart:/fix: node in dependency order"
+            onClick={() => void onRunFlow()}
+          >
+            {flow ? `Running ${flow.done}/${flow.total}…` : `▶▶ Run flow (${nodeCount})`}
+          </button>
+        )}
         {frames.length > 0 && (
           <button
             className="chrome-btn"

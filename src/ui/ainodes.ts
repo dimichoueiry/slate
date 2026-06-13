@@ -170,6 +170,60 @@ export function isAINode(o: AnyObj): boolean {
   );
 }
 
+/** Runnable nodes ordered so every node runs after the nodes feeding into it. */
+export function flowOrder(ctl: AnyObj): AnyObj[] {
+  const objs: AnyObj[] = ctl.doc.all();
+  const ids = new Set(objs.map((o) => o.id));
+  const adj = new Map<string, string[]>(); // from -> [to]
+  const indeg = new Map<string, number>();
+  for (const o of objs) indeg.set(o.id, 0);
+  for (const c of objs) {
+    if (c.type !== 'connector') continue;
+    const from = c.from?.objectId;
+    const to = c.to?.objectId;
+    if (from && to && ids.has(from) && ids.has(to) && from !== to) {
+      (adj.get(from) ?? adj.set(from, []).get(from)!).push(to);
+      indeg.set(to, (indeg.get(to) ?? 0) + 1);
+    }
+  }
+  // Kahn topological sort over all objects
+  const queue = objs.filter((o) => (indeg.get(o.id) ?? 0) === 0).map((o) => o.id);
+  const order: string[] = [];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+    for (const next of adj.get(id) ?? []) {
+      indeg.set(next, (indeg.get(next) ?? 1) - 1);
+      if ((indeg.get(next) ?? 0) <= 0) queue.push(next);
+    }
+  }
+  // any objects left out by a cycle: append so they still run (best effort)
+  for (const o of objs) if (!seen.has(o.id)) order.push(o.id);
+  const byId = new Map(objs.map((o) => [o.id, o]));
+  return order.map((id) => byId.get(id)!).filter((o) => o && isAINode(o));
+}
+
+/** Execute every runnable node in dependency order, awaiting each. */
+export async function runFlow(
+  ctl: AnyObj,
+  onProgress?: (done: number, total: number, node: AnyObj) => void
+): Promise<{ ran: number }> {
+  const nodes = flowOrder(ctl);
+  for (let i = 0; i < nodes.length; i++) {
+    onProgress?.(i, nodes.length, nodes[i]);
+    try {
+      await runAINode(ctl, nodes[i]);
+    } catch {
+      // individual node failures already surface in their own output; keep going
+    }
+  }
+  onProgress?.(nodes.length, nodes.length, nodes[nodes.length - 1]);
+  return { ran: nodes.length };
+}
+
 async function execute(ctl: AnyObj, node: AnyObj) {
   const doc = ctl.doc;
   const conns = doc.all().filter((c: AnyObj) => c.type === 'connector');
