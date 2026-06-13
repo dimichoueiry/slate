@@ -1,9 +1,8 @@
 // Floating run buttons for ai: nodes — a real DOM button pinned to each
 // node's top-right corner, with spinner + success flash. Self-mounting.
 import { useEffect, useReducer, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { useUI } from '../store/ui';
-import { useCtl } from './useCtl';
+import type { Controller } from '../engine/controller';
 import { isAINode, isHiddenNode, runAINode, toggleHiddenPrompt } from './ainodes';
 
 type AnyObj = Record<string, any>;
@@ -22,16 +21,13 @@ const CSS = `
 .slate-lock-btn.locked{background:#6741d9;color:#fff}
 `;
 
-function RunButtons() {
-  const ctl = useCtl();
+export default function RunButtons({ ctl }: { ctl: Controller }) {
   const [, force] = useReducer((n: number) => n + 1, 0);
   useUI((s) => s.docVersion);
-  const route = useUI((s) => s.route);
   const [running, setRunning] = useState<Set<string>>(new Set());
   const [done, setDone] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!ctl) return;
     const offCam = ctl.onCamera(force);
     const offDoc = ctl.doc.subscribe(force);
     return () => {
@@ -40,7 +36,6 @@ function RunButtons() {
     };
   }, [ctl]);
 
-  if (!ctl || route.view !== 'board') return null;
   const zoom = ctl.camera.zoom;
   if (zoom < 0.18) return null; // overview zoom — buttons would be noise
   const f = Math.max(0.45, Math.min(1.25, zoom)); // button scales with the canvas, within reason
@@ -107,12 +102,3 @@ function RunButtons() {
   );
 }
 
-const id = 'slate-run-root';
-if (!document.getElementById(id)) {
-  const el = document.createElement('div');
-  el.id = id;
-  document.body.appendChild(el);
-  createRoot(el).render(<RunButtons />);
-}
-
-export {};

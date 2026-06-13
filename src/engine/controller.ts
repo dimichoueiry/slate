@@ -45,6 +45,8 @@ import { textBlockSize } from './text';
 import { useUI } from '../store/ui';
 import { saveComponent, type ComponentDef } from '../store/db';
 import { exportPng } from '../export/export';
+import { tryToggleCheckbox, isOnCheckbox, attachChecklistNormalizer } from '../ui/checkboxes';
+import { tryRunAINode, isOnRunGlyph, attachAINodeNormalizer, hiddenNodeAt } from '../ui/ainodes';
 
 type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate';
 
@@ -139,6 +141,14 @@ export class Controller {
       const ui = useUI.getState();
       ui.set({ docVersion: ui.docVersion + 1 });
     });
+
+    // expose the live controller for UI layers (run buttons, image actions, etc.)
+    (window as any).__slateCtl = this;
+    (window as any).__slateUIState = () => useUI.getState();
+
+    // interactive-element text normalizers ([] checkboxes, ai:/img: nodes)
+    attachChecklistNormalizer(this);
+    attachAINodeNormalizer(this);
 
     this.loop = this.loop.bind(this);
     this.rafId = requestAnimationFrame(this.loop);
@@ -774,6 +784,26 @@ export class Controller {
       return;
     }
 
+    // interactive elements take the click before any tool/selection logic
+    if (ui.tool === 'select') {
+      if (tryToggleCheckbox(this, e)) return; // [] checkbox toggle
+      if (tryRunAINode(this, e)) return; // ai:/img: run-glyph (legacy text glyph)
+      // resizing a frame selection resizes ONLY the frame, never its contents
+      if (this.selection.size > 1) {
+        const objs = [...this.selection].map((id) => this.doc.get(id)).filter(Boolean) as SlateObj[];
+        const frames = objs.filter((o) => o.type === 'frame');
+        if (frames.length === 1) {
+          const frame = frames[0];
+          const childIds = new Set(this.frameChildren(frame.id).map((o) => o.id));
+          const onlyFrameContents = objs.every((o) => o.id === frame.id || childIds.has(o.id));
+          if (onlyFrameContents && this.handleAt(this.toScreen(e))) {
+            this.selection = new Set([frame.id]);
+            this.syncSelection();
+          }
+        }
+      }
+    }
+
     // glide-draw: a click toggles the pen up/down instead of starting a tool action
     if (ui.glideDraw) {
       const world = screenToWorld(this.camera, this.toScreen(e));
@@ -1396,6 +1426,8 @@ export class Controller {
     const world = this.toWorld(e);
     const ui = useUI.getState();
     if (ui.tool !== 'select') return;
+    // interactive glyphs + locked AI prompts must not open the text editor
+    if (isOnCheckbox(this, e) || isOnRunGlyph(this, e) || hiddenNodeAt(this, e)) return;
     const hit = hitTest(this.doc, world, 6 / this.camera.zoom);
     if (hit && (hit.type === 'shape' || hit.type === 'sticky' || hit.type === 'text' || hit.type === 'connector')) {
       this.selection = new Set([hit.id]);
@@ -1610,7 +1642,26 @@ export class Controller {
         best = o;
       }
     }
-    return best;
+    if (best) return best;
+    // fallback: connectors may attach to a FRAME, grabbed near its border
+    const fr = 30 / this.camera.zoom;
+    let bestFrame: SlateObj | null = null;
+    let bestFrameD = Infinity;
+    for (const o of this.doc.all()) {
+      if (o.type !== 'frame' || o.locked || o.id === excludeId) continue;
+      const fb = o as FrameObj;
+      const dx = Math.max(fb.x - world.x, 0, world.x - (fb.x + fb.w));
+      const dy = Math.max(fb.y - world.y, 0, world.y - (fb.y + fb.h));
+      const inside = dx === 0 && dy === 0;
+      const d = inside
+        ? Math.min(world.x - fb.x, fb.x + fb.w - world.x, world.y - fb.y, fb.y + fb.h - world.y)
+        : Math.hypot(dx, dy);
+      if (d <= fr && d < bestFrameD) {
+        bestFrameD = d;
+        bestFrame = o;
+      }
+    }
+    return bestFrame;
   }
 
   private beginConnector(world: Vec, tool: 'line' | 'connector', allowAttach = true) {

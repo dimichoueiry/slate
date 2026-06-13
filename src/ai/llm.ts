@@ -17,7 +17,7 @@ export interface ChatMessage {
 
 /** Ollama wants {content, images[base64]} instead of OpenAI-style content parts. */
 function toOllamaMessage(m: ChatMessage): Record<string, unknown> {
-  if (typeof m.content === 'string') return m;
+  if (typeof m.content === 'string') return { role: m.role, content: m.content };
   const text = m.content
     .filter((p): p is Extract<ContentPart, { type: 'text' }> => p.type === 'text')
     .map((p) => p.text)

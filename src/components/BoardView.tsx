@@ -13,6 +13,10 @@ import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
 import CommandPalette from './CommandPalette';
+import AIPanel from '../ai/AIPanel';
+import RunButtons from '../ui/aiNodeButtons';
+import ImageActions from '../ui/imageActions';
+import FrameTitle from '../ui/frameTitle';
 import { exportBounds, exportPng } from '../export/export';
 
 const TOOL_KEYS: Record<string, ToolId> = {
@@ -398,6 +402,10 @@ export default function BoardView({ boardId }: { boardId: string }) {
           <NotesPanel boardId={boardId} ctl={ctl} />
           <IconTray ctl={ctl} />
           <CommandPalette ctl={ctl} boardId={boardId} />
+          <AIPanel ctl={ctl} />
+          <RunButtons ctl={ctl} />
+          <ImageActions ctl={ctl} />
+          <FrameTitle ctl={ctl} />
           {ctl.doc.objects.size === 0 && (
             <div className="hint">Press P and just draw — or double-click anywhere to type. Scroll to pan, pinch to zoom.</div>
           )}

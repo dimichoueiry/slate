@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useUI } from '../store/ui';
+import type { ShapeObj } from '../types';
+import type { Controller } from '../engine/controller';
 import { activeProvider, getOpenRouterModel } from './llm';
 import { aiEditSelection } from './aiEdit';
 
@@ -17,7 +19,7 @@ const CSS = `
 .slate-ai-note.err{color:#ff8787}
 `;
 
-export default function AIPanel() {
+export default function AIPanel({ ctl }: { ctl: Controller }) {
   const selCount = useUI((s) => s.selection.length);
   const editing = useUI((s) => s.editingTextId);
   const [prompt, setPrompt] = useState('');
@@ -37,12 +39,10 @@ export default function AIPanel() {
           className="slate-ai-pill input"
           title="Add an input field — a box you type into (great as ai:/img: node input)"
           onClick={() => {
-            const ctl = (window as any).__slateCtl;
-            if (!ctl) return;
             const cam = ctl.camera;
             const cx = cam.x + ctl.viewW / 2 / cam.zoom;
             const cy = cam.y + ctl.viewH / 2 / cam.zoom;
-            const obj = {
+            const obj: ShapeObj = {
               id: Math.random().toString(36).slice(2, 10),
               type: 'shape',
               shape: 'roundedRect',
@@ -75,13 +75,8 @@ export default function AIPanel() {
   }
 
   const run = async () => {
-    const ctl = (window as any).__slateCtl;
     const instruction = prompt.trim();
     if (!instruction || busy) return;
-    if (!ctl) {
-      setNote({ text: 'Canvas not ready yet — try again in a second', err: true });
-      return;
-    }
     setBusy(true);
     setNote({ text: `Asking ${activeProvider() === 'openrouter' ? 'OpenRouter' : 'local model'}…` });
     try {

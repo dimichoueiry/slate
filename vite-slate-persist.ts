@@ -11,21 +11,10 @@ export default function slatePersist(): Plugin {
 
   return {
     name: 'slate-persist',
-    apply: 'serve', // dev server only
+    apply: 'serve', // dev server only — provides the ./data file-mirror endpoints
     configResolved(config) {
       dataDir = path.join(config.root, 'data');
       fs.mkdirSync(boardsDir(), { recursive: true });
-    },
-    transformIndexHtml() {
-      // inject the client-side sync module without touching main.tsx
-      return [
-        { tag: 'script', attrs: { type: 'module', src: '/src/store/fsync.ts' }, injectTo: 'head' as const },
-        { tag: 'script', attrs: { type: 'module', src: '/src/settings/mount.tsx' }, injectTo: 'head' as const },
-        { tag: 'script', attrs: { type: 'module', src: '/src/ai/mount.tsx' }, injectTo: 'head' as const },
-        { tag: 'script', attrs: { type: 'module', src: '/src/ui/frameTitle.tsx' }, injectTo: 'head' as const },
-        { tag: 'script', attrs: { type: 'module', src: '/src/ui/aiNodeButtons.tsx' }, injectTo: 'head' as const },
-        { tag: 'script', attrs: { type: 'module', src: '/src/ui/imageActions.tsx' }, injectTo: 'head' as const },
-      ];
     },
     configureServer(server) {
       server.middlewares.use('/__slate', (req, res) => {

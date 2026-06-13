@@ -1,12 +1,9 @@
 // Floating actions for a selected image object: download, copy to clipboard.
 // Self-mounting; reads the blob from the store by blobId.
 import { useEffect, useReducer, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { useUI } from '../store/ui';
-import { useCtl } from './useCtl';
+import type { Controller } from '../engine/controller';
 import { getBlob } from '../store/db';
-
-type AnyObj = Record<string, any>;
 
 const CSS = `
 .slate-img-actions{position:fixed;z-index:46;display:flex;gap:4px;background:rgba(28,28,32,.94);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(12px);padding:5px;pointer-events:auto}
@@ -15,8 +12,7 @@ const CSS = `
 .slate-img-actions .ok{background:#2f9e44}
 `;
 
-function ImageActions() {
-  const ctl = useCtl();
+export default function ImageActions({ ctl }: { ctl: Controller }) {
   const [, force] = useReducer((n: number) => n + 1, 0);
   const selection = useUI((s) => s.selection);
   const editing = useUI((s) => s.editingTextId);
@@ -24,12 +20,11 @@ function ImageActions() {
   const [flash, setFlash] = useState('');
 
   useEffect(() => {
-    if (!ctl) return;
     const offCam = ctl.onCamera(force);
     return () => offCam?.();
   }, [ctl]);
 
-  if (!ctl || editing || selection.length !== 1) return null;
+  if (editing || selection.length !== 1) return null;
   const obj = ctl.doc.get(selection[0]);
   if (!obj || obj.type !== 'image' || !obj.blobId || String(obj.blobId).startsWith('pending-')) return null;
 
@@ -100,13 +95,3 @@ function ImageActions() {
     </>
   );
 }
-
-const id = 'slate-img-actions-root';
-if (!document.getElementById(id)) {
-  const el = document.createElement('div');
-  el.id = id;
-  document.body.appendChild(el);
-  createRoot(el).render(<ImageActions />);
-}
-
-export {};

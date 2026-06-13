@@ -1,7 +1,7 @@
-// Frame title editor (injected): shows whenever the selection contains exactly
-// one frame — works even though selecting a frame also selects its contents.
-import { createRoot } from 'react-dom/client';
+// Frame title editor: shows whenever the selection contains exactly one frame
+// (selecting a frame also selects its contents, so we filter for the frame).
 import { useUI } from '../store/ui';
+import type { Controller } from '../engine/controller';
 
 const CSS = `
 .slate-frame-title{position:fixed;top:60px;right:12px;z-index:40;display:flex;align-items:center;gap:7px;background:rgba(28,28,32,.94);border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.25);backdrop-filter:blur(12px);padding:7px 10px;font-size:12px;color:#9a9aa2}
@@ -9,16 +9,15 @@ const CSS = `
 .slate-frame-title input:focus{box-shadow:0 0 0 1.5px #3c78ff}
 `;
 
-function FrameTitle() {
+export default function FrameTitle({ ctl }: { ctl: Controller }) {
   const selection = useUI((s) => s.selection);
   useUI((s) => s.docVersion); // re-render when the doc (incl. frame names) changes
   const editing = useUI((s) => s.editingTextId);
 
-  const ctl = (window as any).__slateCtl;
-  if (!ctl || editing) return null;
+  if (editing) return null;
   const frames = selection
-    .map((id: string) => ctl.doc.get(id))
-    .filter((o: any) => o && o.type === 'frame');
+    .map((id) => ctl.doc.get(id))
+    .filter((o): o is import('../types').FrameObj => !!o && o.type === 'frame');
   if (frames.length !== 1) return null;
   const frame = frames[0];
 
@@ -41,13 +40,3 @@ function FrameTitle() {
     </>
   );
 }
-
-const id = 'slate-frame-title-root';
-if (!document.getElementById(id)) {
-  const el = document.createElement('div');
-  el.id = id;
-  document.body.appendChild(el);
-  createRoot(el).render(<FrameTitle />);
-}
-
-export {};

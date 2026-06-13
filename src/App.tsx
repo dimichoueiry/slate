@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useUI } from './store/ui';
 import Home from './components/Home';
 import BoardView from './components/BoardView';
+import SettingsPanel from './settings/SettingsPanel';
 
 export default function App() {
   const route = useUI((s) => s.route);
@@ -17,10 +18,13 @@ export default function App() {
     return () => window.removeEventListener('hashchange', apply);
   }, []);
 
-  if (route.view === 'board') {
-    return <BoardView key={route.boardId} boardId={route.boardId} />;
-  }
-  return <Home />;
+  return (
+    <>
+      {route.view === 'board' ? <BoardView key={route.boardId} boardId={route.boardId} /> : <Home />}
+      {/* global settings (AI providers) — available on every screen */}
+      <SettingsPanel />
+    </>
+  );
 }
 
 export function openBoard(id: string) {
