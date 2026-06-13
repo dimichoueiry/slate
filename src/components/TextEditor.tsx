@@ -9,7 +9,8 @@ import { polylineMidpoint, routeConnector } from '../engine/geometry';
 const SLASH_COMMANDS: { cmd: string; label: string; desc: string }[] = [
   { cmd: 'ai', label: 'ai:', desc: 'Ask AI — text in, text out' },
   { cmd: 'img', label: 'img:', desc: 'Generate an image' },
-  { cmd: 'search', label: 'search:', desc: 'Web search a query' },
+  { cmd: 'search', label: 'search:', desc: 'Quick web search' },
+  { cmd: 'research', label: 'research:', desc: 'Deep multi-step research agent' },
   { cmd: 'web', label: 'web:', desc: 'Scrape a link / sketch frame' },
   { cmd: 'extract', label: 'extract:', desc: 'Pull a structured table' },
   { cmd: 'chart', label: 'chart:', desc: 'Draw a bar / line / pie chart' },

@@ -68,6 +68,29 @@ export default function slatePersist(): Plugin {
           res.end(JSON.stringify(out));
         });
       });
+      server.middlewares.use('/api/research', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('{"error":"Method not allowed"}');
+          return;
+        }
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', async () => {
+          let parsed: any = {};
+          try {
+            parsed = JSON.parse(body || '{}');
+          } catch {
+            parsed = {};
+          }
+          // lazy-load so LangGraph isn't pulled in at dev-server startup
+          const { runResearch } = await import('./api/research');
+          const { status, body: out } = await runResearch(parsed.query, parsed.apiKey, parsed.model);
+          res.statusCode = status;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(out));
+        });
+      });
 
       server.middlewares.use('/__slate', (req, res) => {
         const url = req.url ?? '';

@@ -45,11 +45,12 @@ async function brandLogoDataUrl(): Promise<string | null> {
   }
 }
 
-// ai: text · img: image · web: scrape · search: query · extract: table · chart: graph · fix: better prompt
-const RUN = /^(▶ ?)?(ai|img|web|search|extract|chart|fix):/i;
+// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt
+const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
 const SEARCH = /^(▶ ?)?search:/i;
+const RESEARCH = /^(▶ ?)?research:/i;
 const EXTRACT = /^(▶ ?)?extract:/i;
 const CHART = /^(▶ ?)?chart:/i;
 const FIX = /^(▶ ?)?fix:/i;
@@ -190,6 +191,7 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (IMG.test(head)) return executeImage(ctl, node);
   if (WEB.test(head)) return executeWeb(ctl, node);
   if (SEARCH.test(head)) return executeSearch(ctl, node);
+  if (RESEARCH.test(head)) return executeResearch(ctl, node);
   if (EXTRACT.test(head)) return executeExtract(ctl, node);
   if (CHART.test(head)) return executeChart(ctl, node);
   if (FIX.test(head)) return executeFix(ctl, node);
@@ -602,6 +604,50 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
     const out = [answer.trim(), sources && `Sources:\n${sources}`].filter(Boolean).join('\n\n') || '(no results)';
     doc.begin();
     for (const id of outIds) setText(ctl, id, out);
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+// ---------- research: deep multi-step agent (LangGraph on /api/research) ----------
+
+async function executeResearch(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const typed = promptSource(node).replace(RUN, '').trim();
+  const query = [typed, ...gatherInputs(ctl, node).map((o: AnyObj) => o.text)].filter(Boolean).join(' ').trim();
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { color: '#A8D8EA', w: 320 });
+  if (!query) {
+    for (const id of outIds) setText(ctl, id, '⚠ No question — type one after "research:" or wire one in.');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, '⏳ researching… (planning · searching · synthesizing)');
+  doc.commit();
+
+  const { getOpenRouterKey, getOpenRouterModel } = await import('../ai/llm');
+  const apiKey = getOpenRouterKey();
+  if (!apiKey) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ Research needs an OpenRouter key — add one in ⚙ Settings.');
+    doc.commit();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/research', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query, apiKey, model: getOpenRouterModel() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `research failed (${res.status})`);
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, String(data?.report || '(no report)').trim());
     doc.commit();
   } catch (err) {
     doc.begin();
