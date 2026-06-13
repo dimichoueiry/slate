@@ -16,6 +16,7 @@ import { stopAllSchedules } from '../ui/ainodes';
 import CommandPalette from './CommandPalette';
 import AIPanel from '../ai/AIPanel';
 import RunButtons from '../ui/aiNodeButtons';
+import DataNodeEditor from '../ui/DataNodeEditor';
 import ImageActions from '../ui/imageActions';
 import FrameTitle from '../ui/frameTitle';
 import UsageMeter from './UsageMeter';
@@ -408,6 +409,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
           <CommandPalette ctl={ctl} boardId={boardId} />
           <AIPanel ctl={ctl} />
           <RunButtons ctl={ctl} />
+          <DataNodeEditor ctl={ctl} />
           <ImageActions ctl={ctl} />
           <FrameTitle ctl={ctl} />
           <UsageMeter />

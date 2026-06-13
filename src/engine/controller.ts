@@ -46,7 +46,7 @@ import { useUI } from '../store/ui';
 import { saveComponent, type ComponentDef } from '../store/db';
 import { exportPng } from '../export/export';
 import { tryToggleCheckbox, isOnCheckbox, attachChecklistNormalizer } from '../ui/checkboxes';
-import { tryRunAINode, isOnRunGlyph, attachAINodeNormalizer, hiddenNodeAt } from '../ui/ainodes';
+import { tryRunAINode, isOnRunGlyph, attachAINodeNormalizer, hiddenNodeAt, isDataNode } from '../ui/ainodes';
 
 type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'rotate';
 
@@ -1501,6 +1501,7 @@ export class Controller {
     if (hit && (hit.type === 'shape' || hit.type === 'sticky' || hit.type === 'text' || hit.type === 'connector')) {
       this.selection = new Set([hit.id]);
       this.syncSelection();
+      if (isDataNode(this.doc.get(hit.id))) return; // data: nodes are edited via the structured popover, not free text
       this.startEditingText(hit.id);
       return;
     }

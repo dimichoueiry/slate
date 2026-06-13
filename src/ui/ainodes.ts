@@ -947,25 +947,54 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
 
 // ---------- data: HTTP fetch from any REST endpoint via /api/fetch ----------
 
-async function executeData(ctl: AnyObj, node: AnyObj) {
-  const doc = ctl.doc;
-  const raw = promptSource(node).replace(RUN, '').trim();
-  // first line: "[METHOD] URL" · any following lines: request body
+export interface HttpHeader {
+  key: string;
+  value: string;
+}
+export interface HttpConfig {
+  method: string; // GET | POST | PUT | PATCH | DELETE
+  url: string;
+  headers?: HttpHeader[];
+  body?: string;
+}
+
+/** Is this a data: node? (used by the structured editor + edit guards) */
+export function isDataNode(o: AnyObj | undefined): boolean {
+  return !!o && (o.type === 'sticky' || o.type === 'text') && typeof o.text === 'string' && DATA.test(o.text.split('\n')[0]);
+}
+
+/** Parse a free-text data: node ("[METHOD] URL\nbody") into a structured config — used to migrate typed nodes. */
+export function parseDataText(text: string): HttpConfig {
+  const raw = String(text ?? '').replace(RUN, '').trim();
   const lines = raw.split('\n');
   const firstLine = (lines.shift() ?? '').trim();
-  const inlineBody = lines.join('\n').trim();
+  const body = lines.join('\n').trim();
   const tokens = firstLine.split(/\s+/).filter(Boolean);
   let method = 'GET';
   if (/^(get|post|put|patch|delete)$/i.test(tokens[0] ?? '')) method = tokens.shift()!.toUpperCase();
-  const url = tokens.join(' ').trim();
-  // body: inline first; otherwise, for write methods, the wired-in text
+  return { method, url: tokens.join(' ').trim(), headers: [], body };
+}
+
+/** A short canvas label reflecting a data node's structured config. */
+export function dataSummary(cfg: HttpConfig): string {
+  return `data: ${(cfg.method || 'GET').toUpperCase()} ${cfg.url || '(set endpoint)'}`.trim();
+}
+
+async function executeData(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const cfg: HttpConfig = node.http && node.http.url !== undefined ? node.http : parseDataText(promptSource(node));
+  const method = (cfg.method || 'GET').toUpperCase();
+  const url = (cfg.url || '').trim();
+  // body: configured first; otherwise, for write methods, the wired-in text
   const wired = gatherInputs(ctl, node).map((o: AnyObj) => o.text).join('\n').trim();
-  const body = inlineBody || (method !== 'GET' ? wired : '');
+  const body = (cfg.body || '').trim() || (method !== 'GET' ? wired : '');
+  const headers: Record<string, string> = {};
+  for (const h of cfg.headers ?? []) if (h.key?.trim()) headers[h.key.trim()] = h.value ?? '';
 
   doc.begin();
   const outIds = prepTextOutputs(ctl, node, { mono: true, w: 360 });
   if (!url) {
-    for (const id of outIds) setText(ctl, id, '⚠ No URL — write one after "data:", e.g. data: https://api.example.com/v1/items');
+    for (const id of outIds) setText(ctl, id, '⚠ No endpoint set — select the node and fill in the URL.');
     doc.commit();
     return;
   }
@@ -976,7 +1005,7 @@ async function executeData(ctl: AnyObj, node: AnyObj) {
     const res = await fetch('/api/fetch', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url, method, body }),
+      body: JSON.stringify({ url, method, body, headers }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `fetch failed (${res.status})`);
