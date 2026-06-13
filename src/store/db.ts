@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { nanoid } from 'nanoid';
-import type { BoardMeta, SlateObj } from '../types';
+import type { BoardMeta, BrandKit, SlateObj } from '../types';
 import type { Doc } from '../engine/doc';
 
 interface ObjectRow {
@@ -39,6 +39,7 @@ class SlateDB extends Dexie {
   blobs!: EntityTable<BlobRow, 'id'>;
   components!: EntityTable<ComponentDef, 'id'>;
   prompts!: EntityTable<PromptDef, 'id'>;
+  brandKits!: EntityTable<BrandKit, 'id'>;
 
   constructor() {
     super('slate');
@@ -59,6 +60,14 @@ class SlateDB extends Dexie {
       blobs: 'id',
       components: 'id, createdAt',
       prompts: 'id, createdAt',
+    });
+    this.version(4).stores({
+      boards: 'id, updatedAt',
+      objects: 'id, boardId',
+      blobs: 'id',
+      components: 'id, createdAt',
+      prompts: 'id, createdAt',
+      brandKits: 'id, createdAt',
     });
   }
 }
@@ -143,6 +152,52 @@ export async function savePrompt(name: string, text: string): Promise<PromptDef>
 
 export async function deletePrompt(id: string) {
   await db.prompts.delete(id);
+}
+
+// ---------- brand kits ----------
+
+const DEFAULT_KIT_KEY = 'slate-default-brand-kit';
+
+export async function listBrandKits(): Promise<BrandKit[]> {
+  const rows = await db.brandKits.toArray();
+  return rows.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function getBrandKit(id: string | null | undefined): Promise<BrandKit | undefined> {
+  if (!id) return undefined;
+  return db.brandKits.get(id);
+}
+
+export async function saveBrandKit(kit: BrandKit) {
+  await db.brandKits.put(kit);
+}
+
+export async function deleteBrandKit(id: string) {
+  await db.brandKits.delete(id);
+}
+
+export function getDefaultKitId(): string | null {
+  try {
+    return localStorage.getItem(DEFAULT_KIT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setDefaultKitId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(DEFAULT_KIT_KEY, id);
+    else localStorage.removeItem(DEFAULT_KIT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Resolve the active kit for a board: its own kit, else the default. */
+export async function resolveBoardKit(meta: BoardMeta | undefined): Promise<BrandKit | undefined> {
+  if (meta?.brandKitId === null) return undefined; // explicitly "None"
+  const id = meta?.brandKitId ?? getDefaultKitId();
+  return getBrandKit(id);
 }
 
 export async function putBlob(blob: Blob): Promise<string> {

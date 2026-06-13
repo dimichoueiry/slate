@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DashStyle, PenTool, Routing, ToolId } from '../types';
+import type { BrandKit, DashStyle, PenTool, Routing, ToolId } from '../types';
 
 export type Route = { view: 'home' } | { view: 'board'; boardId: string };
 
@@ -62,6 +62,11 @@ interface UIState {
   usage: Usage;
   addUsage: (delta: Partial<Usage>) => void;
   resetUsage: () => void;
+
+  /** brand kit active for the current board (auto-applied to AI nodes) */
+  activeBrandKit: BrandKit | null;
+  /** bumped when the brand-kit library changes so pickers reload */
+  brandKitsVersion: number;
 
   set: (patch: Partial<UIState>) => void;
 }
@@ -169,6 +174,9 @@ export const useUI = create<UIState>((setState) => ({
       saveCustomColors(colors);
       return { customColors: colors };
     }),
+
+  activeBrandKit: null,
+  brandKitsVersion: 0,
 
   usage: loadUsage(),
   addUsage: (delta) =>

@@ -163,6 +163,20 @@ export interface BoardMeta {
   thumb?: string; // small png data url
   pinned?: boolean;
   notes?: string; // markdown side-panel content
+  brandKitId?: string | null; // active brand kit for this board
+}
+
+/** A reusable brand kit applied to AI nodes on a board. */
+export interface BrandKit {
+  id: string;
+  name: string;
+  voice: string; // tone / writing style guidance
+  audience: string; // who the content is for
+  donts: string; // things to avoid
+  palette: string[]; // hex colors
+  fontFamily?: string; // FONTS id
+  logoBlobId?: string; // optional logo image
+  createdAt: number;
 }
 
 export type ToolId =

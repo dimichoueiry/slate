@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
-import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta } from '../store/db';
+import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit } from '../store/db';
 import { useUI } from '../store/ui';
 import type { ToolId } from '../types';
 import Toolbar from './Toolbar';
@@ -72,7 +72,8 @@ export default function BoardView({ boardId }: { boardId: string }) {
       controller.doc.load(objects);
       controller.doc.dirty.clear(); // loading isn't an edit
       controller.setCamera(meta.viewport);
-      useUI.getState().set({ boardName: meta.name, selection: [], editingTextId: null });
+      const kit = await resolveBoardKit(meta);
+      useUI.getState().set({ boardName: meta.name, selection: [], editingTextId: null, activeBrandKit: kit ?? null });
       autosave = startAutosave(controller.doc, boardId);
       setLoaded(true);
     })();

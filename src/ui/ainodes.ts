@@ -11,6 +11,40 @@ import { lineHeight, textBlockSize } from '../engine/text';
 
 type AnyObj = Record<string, any>;
 
+/** Brand voice/audience/don'ts guidance for text (ai:) system prompts. */
+function brandTextAddon(): string {
+  const k = useUI.getState().activeBrandKit;
+  if (!k) return '';
+  const parts: string[] = [];
+  if (k.voice?.trim()) parts.push(`Voice/tone: ${k.voice.trim()}`);
+  if (k.audience?.trim()) parts.push(`Audience: ${k.audience.trim()}`);
+  if (k.donts?.trim()) parts.push(`Avoid: ${k.donts.trim()}`);
+  if (parts.length === 0) return '';
+  return `\n\nBRAND GUIDELINES (follow these) — ${k.name}:\n${parts.join('\n')}`;
+}
+
+/** Brand style guidance appended to img: prompts. */
+function brandImageAddon(): string {
+  const k = useUI.getState().activeBrandKit;
+  if (!k) return '';
+  const bits: string[] = [];
+  if (k.palette?.length) bits.push(`color palette ${k.palette.join(', ')}`);
+  if (k.voice?.trim()) bits.push(`brand feel: ${k.voice.trim()}`);
+  return bits.length ? `\n\nMatch this brand style: ${bits.join('; ')}.` : '';
+}
+
+/** The active kit's logo as a data URL, if any (used as an img: reference). */
+async function brandLogoDataUrl(): Promise<string | null> {
+  const k = useUI.getState().activeBrandKit;
+  if (!k?.logoBlobId) return null;
+  try {
+    const blob = await getBlob(k.logoBlobId);
+    return blob ? await blobToDataUrl(blob) : null;
+  } catch {
+    return null;
+  }
+}
+
 // ai: text · img: image · web: scrape · search: query · extract: table · chart: graph · fix: better prompt
 const RUN = /^(▶ ?)?(ai|img|web|search|extract|chart|fix):/i;
 const IMG = /^(▶ ?)?img:/i;
@@ -350,7 +384,8 @@ async function execute(ctl: AnyObj, node: AnyObj) {
         {
           role: 'system',
           content:
-            'You are a function node on a visual whiteboard. Use the INPUTS (text and/or attached images) to produce what the INSTRUCTION asks for. Reply with plain text only (or the exact JSON shape when versions are requested) — no markdown, no preamble. Keep it concise enough to read on a sticky note unless asked otherwise.',
+            'You are a function node on a visual whiteboard. Use the INPUTS (text and/or attached images) to produce what the INSTRUCTION asks for. Reply with plain text only (or the exact JSON shape when versions are requested) — no markdown, no preamble. Keep it concise enough to read on a sticky note unless asked otherwise.' +
+            brandTextAddon(),
         },
         imageInputs.length
           ? {
@@ -982,15 +1017,17 @@ async function executeImage(ctl: AnyObj, node: AnyObj) {
 
   const instruction = promptSource(node).replace(RUN, '').trim();
   const prompt =
-    inputs.length > 0
+    (inputs.length > 0
       ? `${instruction}\n\nContext / subject:\n${inputs.map((o: AnyObj) => o.text).join('\n')}`
-      : instruction;
+      : instruction) + brandImageAddon();
+  const logo = await brandLogoDataUrl();
+  const refImages = logo ? [...imageInputs, logo] : imageInputs;
   try {
     const many = outIds.length > 1;
     await Promise.all(
       outIds.map(async (id: string, i: number) => {
         const p = many ? `${prompt}\n\n(Variation ${i + 1} of ${outIds.length} — make it clearly distinct from the others.)` : prompt;
-        const blob = await generateImage(p, { inputImages: imageInputs });
+        const blob = await generateImage(p, { inputImages: refImages });
         const bmp = await createImageBitmap(blob);
         const blobId = await putBlob(blob);
         const scale = Math.min(1, 420 / Math.max(bmp.width, bmp.height));

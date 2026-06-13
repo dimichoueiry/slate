@@ -5,6 +5,7 @@ import { db, updateBoardMeta } from '../store/db';
 import { goHome } from '../App';
 import { downloadBlob, exportBounds, exportPng, exportSlateFile, exportSvg } from '../export/export';
 import { getFlows, runFlow, type Flow } from '../ui/ainodes';
+import BrandKitControl from './BrandKit';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
@@ -128,6 +129,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
                 : `▶▶ Run flow (${flows.length} flows)`}
           </button>
         )}
+        <BrandKitControl ctl={ctl} boardId={boardId} />
         {frames.length > 0 && (
           <button
             className="chrome-btn"
