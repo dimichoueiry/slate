@@ -14,7 +14,8 @@ const BLOCKED_HOST =
 
 const ALLOWED_METHODS = /^(GET|POST|PUT|PATCH|DELETE)$/;
 const MAX_BYTES = 200_000;
-const MAX_IMG_BYTES = 6_000_000;
+// base64 inflates ~37%; keep the encoded response under Vercel's ~4.5 MB function limit
+const MAX_IMG_BYTES = 3_000_000;
 const TIMEOUT_MS = 12_000;
 
 /** Framework-agnostic core: proxy one HTTP request and return its (capped) body. */
@@ -70,7 +71,7 @@ export async function proxyFetch(input: {
     // images (and other binary) come back base64 so the canvas can render them
     if (/^image\//i.test(ct)) {
       if (ab.byteLength > MAX_IMG_BYTES) {
-        return { status: 200, body: { status: r.status, contentType: ct, error: 'Image is too large to render (over 6 MB).' } };
+        return { status: 200, body: { status: r.status, contentType: ct, error: 'Image is too large to render (over 3 MB).' } };
       }
       return { status: 200, body: { status: r.status, contentType: ct, image: true, base64: Buffer.from(ab).toString('base64') } };
     }
