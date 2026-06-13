@@ -12,6 +12,7 @@ import TextEditor from './TextEditor';
 import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
+import { stopAllSchedules } from '../ui/ainodes';
 import CommandPalette from './CommandPalette';
 import AIPanel from '../ai/AIPanel';
 import RunButtons from '../ui/aiNodeButtons';
@@ -91,6 +92,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
 
     return () => {
       cancelled = true;
+      stopAllSchedules(); // don't let interval/timer nodes keep ticking after leaving the board
       ro.disconnect();
       // final flush + thumbnail
       (async () => {

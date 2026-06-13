@@ -46,12 +46,13 @@ async function brandLogoDataUrl(): Promise<string | null> {
   }
 }
 
-// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch
-const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix|data|condition|if):/i;
+// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch · interval/timer: schedule
+const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix|data|condition|if|interval|timer|every):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
 const DATA = /^(▶ ?)?data:/i;
 const COND = /^(▶ ?)?(condition|if):/i;
+const TICK = /^(▶ ?)?(interval|every|timer):/i;
 const SEARCH = /^(▶ ?)?search:/i;
 const RESEARCH = /^(▶ ?)?research:/i;
 const EXTRACT = /^(▶ ?)?extract:/i;
@@ -200,6 +201,7 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (FIX.test(head)) return executeFix(ctl, node);
   if (DATA.test(head)) return executeData(ctl, node);
   if (COND.test(head)) return executeCondition(ctl, node);
+  if (TICK.test(head)) return executeTick(ctl, node);
   return execute(ctl, node);
 }
 
@@ -446,6 +448,151 @@ function planExecution(ctl: AnyObj, nodes: AnyObj[]): RunPlan {
   return { steps, loop, incoming };
 }
 
+// ---------- interval/timer: in-tab scheduling ----------
+//
+// These run a flow on a clock *while the board is open in the tab*. `interval:`
+// (alias `every:`) re-runs on a period; `timer:` fires once after a countdown.
+// They are not a server cron — closing the tab stops them. State lives in a
+// module map so the floating run button can show / toggle the active schedule.
+
+interface Schedule {
+  handle: ReturnType<typeof setInterval>;
+  kind: 'interval' | 'timer';
+}
+const schedules = new Map<string, Schedule>();
+
+/** Is this node a scheduling trigger (interval/timer/every)? */
+export function isTickNode(o: AnyObj | undefined): boolean {
+  return !!o && (o.type === 'sticky' || o.type === 'text') && typeof o.text === 'string' && TICK.test(o.text.split('\n')[0]);
+}
+
+/** Is a schedule currently ticking for this node? (used by the run button) */
+export function isScheduleActive(id: string): boolean {
+  return schedules.has(id);
+}
+
+/** Stop every schedule — called when the board unmounts so timers don't leak. */
+export function stopAllSchedules() {
+  for (const s of schedules.values()) clearInterval(s.handle);
+  schedules.clear();
+}
+
+/** Parse "60s" / "5m" / "1h" / "24h" / "30" (seconds default) → milliseconds. */
+function parseDuration(s: string): number | null {
+  const m = s.trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|sec(?:s|onds)?|m|min(?:s|utes)?|h|hr(?:s)?|hours?|d|days?)?$/i);
+  if (!m) return null;
+  const n = parseFloat(m[1]!);
+  if (!isFinite(n) || n <= 0) return null;
+  const u = (m[2] || 's').toLowerCase();
+  let mult = 1000; // seconds default
+  if (/^ms/.test(u)) mult = 1;
+  else if (/^s/.test(u)) mult = 1000;
+  else if (/^m/.test(u)) mult = 60_000;
+  else if (/^h/.test(u)) mult = 3_600_000;
+  else if (/^d/.test(u)) mult = 86_400_000;
+  return Math.round(n * mult);
+}
+
+/** Humanize a millisecond period back to a compact label. */
+function fmtPeriod(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s % 86400 === 0) return `${s / 86400}d`;
+  if (s % 3600 === 0) return `${s / 3600}h`;
+  if (s % 60 === 0) return `${s / 60}m`;
+  return `${s}s`;
+}
+
+/** Write a one-line status under a trigger node (spawns a small note once, then reuses it). */
+function tickStatus(ctl: AnyObj, nodeId: string, msg: string) {
+  const doc = ctl.doc;
+  const node = doc.get(nodeId);
+  if (!node) return;
+  doc.begin();
+  const existing = node.statusId ? doc.get(node.statusId) : null;
+  if (existing) {
+    setText(ctl, node.statusId, msg);
+  } else {
+    const id = nid();
+    doc.set({
+      id,
+      type: 'text',
+      x: node.x,
+      y: node.y + (node.h ?? 60) + 8,
+      w: 260,
+      h: 18,
+      rotation: 0,
+      z: doc.nextZ(),
+      text: msg,
+      color: '#6741d9',
+      fontSize: 12,
+      fontFamily: 'jetbrains',
+      fixedWidth: false,
+    });
+    doc.update(nodeId, { statusId: id });
+  }
+  doc.commit();
+}
+
+function stopSchedule(ctl: AnyObj, nodeId: string) {
+  const s = schedules.get(nodeId);
+  if (s) {
+    clearInterval(s.handle);
+    schedules.delete(nodeId);
+  }
+  if (ctl.doc.get(nodeId)) {
+    ctl.doc.begin();
+    ctl.doc.update(nodeId, { ticking: false });
+    ctl.doc.commit();
+  }
+}
+
+/** Toggle a node's schedule on/off. Firing runs the node's whole flow (the trigger itself is skipped). */
+async function executeTick(ctl: AnyObj, node: AnyObj) {
+  if (schedules.has(node.id)) {
+    stopSchedule(ctl, node.id);
+    tickStatus(ctl, node.id, '⏹ stopped');
+    return;
+  }
+  const head = promptSource(node).split('\n')[0];
+  const kind: 'interval' | 'timer' = /timer:/i.test(head) ? 'timer' : 'interval';
+  const period = parseDuration(promptSource(node).replace(RUN, '').trim());
+  if (!period) {
+    tickStatus(ctl, node.id, '⚠ set a duration — e.g. interval: 60s  ·  timer: 10m');
+    return;
+  }
+  const periodMs = Math.max(kind === 'interval' ? 1000 : 100, period);
+
+  const fire = () => {
+    if (!ctl.doc.get(node.id)) {
+      stopSchedule(ctl, node.id); // node was deleted — clean up
+      return;
+    }
+    const flow = getFlows(ctl).find((f) => f.nodes.some((n) => n.id === node.id));
+    const toRun = flow ? flow.nodes : [];
+    tickStatus(ctl, node.id, `▶ running… (${new Date().toLocaleTimeString()})`);
+    void runFlow(ctl, toRun).then(() => {
+      if (kind === 'timer') {
+        stopSchedule(ctl, node.id);
+        tickStatus(ctl, node.id, `✓ ran once at ${new Date().toLocaleTimeString()}`);
+      } else if (schedules.has(node.id)) {
+        tickStatus(ctl, node.id, `⏱ every ${fmtPeriod(periodMs)} · last ${new Date().toLocaleTimeString()}`);
+      }
+    });
+  };
+
+  ctl.doc.begin();
+  ctl.doc.update(node.id, { ticking: true });
+  ctl.doc.commit();
+
+  if (kind === 'timer') {
+    schedules.set(node.id, { handle: setTimeout(fire, periodMs), kind });
+    tickStatus(ctl, node.id, `⏳ runs in ${fmtPeriod(periodMs)}…`);
+  } else {
+    schedules.set(node.id, { handle: setInterval(fire, periodMs), kind });
+    fire(); // first run immediately, then every period
+  }
+}
+
 /** Iterations for a loop-closing connector: its numeric label, default 3, capped 1–10. */
 function loopCount(ctl: AnyObj, fromId: string, toId: string): number {
   const c = ctl.doc
@@ -488,6 +635,10 @@ export async function runFlow(
     const lp = loop[i];
     onProgress?.(i, steps.length, node, lp && lp.total > 0 ? lp : undefined);
     if (!enabled(node.id)) continue; // branch not taken → skip this node
+    if (isTickNode(node)) {
+      ran.add(node.id); // trigger nodes are pass-through inside a run (no recursion)
+      continue;
+    }
     try {
       await runAINode(ctl, node);
     } catch {
