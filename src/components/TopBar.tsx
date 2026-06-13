@@ -13,7 +13,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
   const [framesMenu, setFramesMenu] = useState(false);
   const [flowMenu, setFlowMenu] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [flow, setFlow] = useState<{ done: number; total: number } | null>(null);
+  const [flow, setFlow] = useState<{ done: number; total: number; loop?: { iter: number; total: number } } | null>(null);
   useUI((s) => s.docVersion); // keep the frames/flows list fresh
   const frames = ctl.frames();
   const flows = getFlows(ctl);
@@ -23,7 +23,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
     setFlowMenu(false);
     setFlow({ done: 0, total: f.nodes.length });
     try {
-      await runFlow(ctl, f.nodes, (done, total) => setFlow({ done, total }));
+      await runFlow(ctl, f.nodes, (done, total, _node, loop) => setFlow({ done, total, loop }));
     } finally {
       setFlow(null);
     }
@@ -123,7 +123,9 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
             }}
           >
             {flow
-              ? `Running ${flow.done}/${flow.total}…`
+              ? flow.loop
+                ? `Loop ${flow.loop.iter}/${flow.loop.total} · ${flow.done}/${flow.total}…`
+                : `Running ${flow.done}/${flow.total}…`
               : flows.length === 1
                 ? `▶▶ Run flow (${flows[0].nodes.length})`
                 : `▶▶ Run flow (${flows.length} flows)`}
@@ -191,7 +193,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
               setFlowMenu(false);
               for (const f of flows) {
                 setFlow({ done: 0, total: f.nodes.length });
-                await runFlow(ctl, f.nodes, (done, total) => setFlow({ done, total }));
+                await runFlow(ctl, f.nodes, (done, total, _node, loop) => setFlow({ done, total, loop }));
               }
               setFlow(null);
             }}

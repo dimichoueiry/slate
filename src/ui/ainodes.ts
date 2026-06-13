@@ -301,22 +301,148 @@ export function getFlows(ctl: AnyObj): Flow[] {
   return flows;
 }
 
-/** Execute a specific flow's nodes in dependency order, awaiting each. */
+export interface LoopProgress {
+  /** 1-based current iteration of the loop body, when the running node is inside a loop */
+  iter: number;
+  /** total iterations the loop will run */
+  total: number;
+}
+
+/**
+ * Build the actual execution sequence for a flow, expanding any closed loop.
+ *
+ * A loop is a connector that points "backwards" — from a later node to an
+ * earlier one — closing a cycle. Its label (a number) sets how many times the
+ * loop body repeats (default 3, capped at 10). The body runs N times, then
+ * downstream nodes run once. Acyclic flows are unaffected.
+ */
+function planExecution(ctl: AnyObj, nodes: AnyObj[]): { steps: AnyObj[]; loop: LoopProgress[] } {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ids = nodes.map((n) => n.id);
+  const idSet = new Set(ids);
+
+  // object-level adjacency from connectors (so node→sticky→node chains resolve)
+  const objAdj = new Map<string, string[]>();
+  for (const c of ctl.doc.all()) {
+    if (c.type === 'connector' && c.from?.objectId && c.to?.objectId && c.from.objectId !== c.to.objectId) {
+      (objAdj.get(c.from.objectId) ?? objAdj.set(c.from.objectId, []).get(c.from.objectId)!).push(c.to.objectId);
+    }
+  }
+
+  // collapse to a node→node graph: from each node, walk forward until hitting nodes
+  const edges = new Map<string, Set<string>>();
+  for (const n of nodes) {
+    const succ = new Set<string>();
+    const seen = new Set<string>([n.id]);
+    const q = [...(objAdj.get(n.id) ?? [])];
+    while (q.length) {
+      const cur = q.shift()!;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      if (idSet.has(cur)) {
+        succ.add(cur); // stop at the next node
+        continue;
+      }
+      for (const nx of objAdj.get(cur) ?? []) q.push(nx);
+    }
+    edges.set(n.id, succ);
+  }
+
+  // DFS to find back-edges (an edge into a node still on the recursion stack)
+  const color = new Map<string, number>(); // 0 white, 1 gray, 2 black
+  const backEdges: Array<{ from: string; to: string }> = [];
+  const dfs = (u: string) => {
+    color.set(u, 1);
+    for (const v of edges.get(u) ?? []) {
+      const c = color.get(v) ?? 0;
+      if (c === 1) backEdges.push({ from: u, to: v });
+      else if (c === 0) dfs(v);
+    }
+    color.set(u, 2);
+  };
+  for (const id of ids) if ((color.get(id) ?? 0) === 0) dfs(id);
+
+  // topo sort with back-edges removed → a clean DAG ordering
+  const skip = new Set(backEdges.map((e) => `${e.from}->${e.to}`));
+  const indeg = new Map<string, number>(ids.map((id) => [id, 0]));
+  for (const [u, vs] of edges) for (const v of vs) {
+    if (skip.has(`${u}->${v}`)) continue;
+    indeg.set(v, (indeg.get(v) ?? 0) + 1);
+  }
+  const ready = ids.filter((id) => (indeg.get(id) ?? 0) === 0);
+  const order: string[] = [];
+  const done = new Set<string>();
+  while (ready.length) {
+    const u = ready.shift()!;
+    if (done.has(u)) continue;
+    done.add(u);
+    order.push(u);
+    for (const v of edges.get(u) ?? []) {
+      if (skip.has(`${u}->${v}`)) continue;
+      indeg.set(v, (indeg.get(v) ?? 1) - 1);
+      if ((indeg.get(v) ?? 0) <= 0) ready.push(v);
+    }
+  }
+  for (const id of ids) if (!done.has(id)) order.push(id);
+
+  // pick the outermost loop (widest span in the ordering) — v1 supports one loop
+  let best: { start: number; end: number; n: number } | null = null;
+  for (const e of backEdges) {
+    const start = order.indexOf(e.to); // loop entry (earlier node)
+    const end = order.indexOf(e.from); // loop exit (later node)
+    if (start < 0 || end < 0 || end < start) continue;
+    const n = loopCount(ctl, e.from, e.to);
+    if (!best || end - start > best.end - best.start) best = { start, end, n };
+  }
+
+  const steps: AnyObj[] = [];
+  const loop: LoopProgress[] = [];
+  const push = (id: string, lp: LoopProgress | null) => {
+    const o = byId.get(id);
+    if (!o) return;
+    steps.push(o);
+    loop.push(lp ?? { iter: 0, total: 0 });
+  };
+  if (!best) {
+    for (const id of order) push(id, null);
+  } else {
+    for (let i = 0; i < best.start; i++) push(order[i]!, null);
+    for (let it = 1; it <= best.n; it++) {
+      for (let i = best.start; i <= best.end; i++) push(order[i]!, { iter: it, total: best.n });
+    }
+    for (let i = best.end + 1; i < order.length; i++) push(order[i]!, null);
+  }
+  return { steps, loop };
+}
+
+/** Iterations for a loop-closing connector: its numeric label, default 3, capped 1–10. */
+function loopCount(ctl: AnyObj, fromId: string, toId: string): number {
+  const c = ctl.doc
+    .all()
+    .find((o: AnyObj) => o.type === 'connector' && o.from?.objectId === fromId && o.to?.objectId === toId);
+  const m = typeof c?.label === 'string' ? c.label.match(/\d+/) : null;
+  const n = m ? parseInt(m[0], 10) : 3;
+  return Math.max(1, Math.min(10, Number.isFinite(n) ? n : 3));
+}
+
+/** Execute a specific flow's nodes in dependency order, expanding loops, awaiting each. */
 export async function runFlow(
   ctl: AnyObj,
   nodes: AnyObj[],
-  onProgress?: (done: number, total: number, node: AnyObj) => void
+  onProgress?: (done: number, total: number, node: AnyObj, loop?: LoopProgress) => void
 ): Promise<{ ran: number }> {
-  for (let i = 0; i < nodes.length; i++) {
-    onProgress?.(i, nodes.length, nodes[i]);
+  const { steps, loop } = planExecution(ctl, nodes);
+  for (let i = 0; i < steps.length; i++) {
+    const lp = loop[i];
+    onProgress?.(i, steps.length, steps[i]!, lp && lp.total > 0 ? lp : undefined);
     try {
-      await runAINode(ctl, nodes[i]);
+      await runAINode(ctl, steps[i]!);
     } catch {
       // individual node failures already surface in their own output; keep going
     }
   }
-  onProgress?.(nodes.length, nodes.length, nodes[nodes.length - 1]);
-  return { ran: nodes.length };
+  onProgress?.(steps.length, steps.length, steps[steps.length - 1]!);
+  return { ran: steps.length };
 }
 
 async function execute(ctl: AnyObj, node: AnyObj) {
@@ -941,8 +1067,33 @@ function inputObjects(ctl: AnyObj, node: AnyObj): AnyObj[] {
     .sort((a: AnyObj, b: AnyObj) => a.y - b.y || a.x - b.x);
 }
 
+/** Text an AI node has produced (its first non-node output object). */
+function nodeOutputText(ctl: AnyObj, node: AnyObj): string {
+  const outs = ctl.doc
+    .all()
+    .filter((c: AnyObj) => c.type === 'connector' && c.from?.objectId === node.id && c.to?.objectId)
+    .map((c: AnyObj) => ctl.doc.get(c.to.objectId))
+    .filter(Boolean);
+  for (const o of outs) {
+    if ((o.type === 'sticky' || o.type === 'text' || o.type === 'shape') && !isAINode(o) && typeof o.text === 'string' && o.text.trim()) {
+      return o.text;
+    }
+  }
+  return '';
+}
+
 function gatherInputs(ctl: AnyObj, node: AnyObj): AnyObj[] {
-  return inputObjects(ctl, node).filter((o: AnyObj) => typeof o.text === 'string' && o.text.trim());
+  return inputObjects(ctl, node)
+    .map((o: AnyObj) => {
+      // when an AI node is wired straight into another node, feed its RESULT,
+      // not its prompt — this is what makes node→node chains and loops work
+      if (isAINode(o)) {
+        const t = nodeOutputText(ctl, o);
+        return t ? { ...o, text: t } : null;
+      }
+      return typeof o.text === 'string' && o.text.trim() ? o : null;
+    })
+    .filter(Boolean) as AnyObj[];
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
