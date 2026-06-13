@@ -25,11 +25,20 @@ export interface ComponentDef {
   createdAt: number;
 }
 
+/** A saved prompt template — reusable text dropped onto the canvas as a node. */
+export interface PromptDef {
+  id: string;
+  name: string;
+  text: string;
+  createdAt: number;
+}
+
 class SlateDB extends Dexie {
   boards!: EntityTable<BoardMeta, 'id'>;
   objects!: EntityTable<ObjectRow, 'id'>;
   blobs!: EntityTable<BlobRow, 'id'>;
   components!: EntityTable<ComponentDef, 'id'>;
+  prompts!: EntityTable<PromptDef, 'id'>;
 
   constructor() {
     super('slate');
@@ -43,6 +52,13 @@ class SlateDB extends Dexie {
       objects: 'id, boardId',
       blobs: 'id',
       components: 'id, createdAt',
+    });
+    this.version(3).stores({
+      boards: 'id, updatedAt',
+      objects: 'id, boardId',
+      blobs: 'id',
+      components: 'id, createdAt',
+      prompts: 'id, createdAt',
     });
   }
 }
@@ -112,6 +128,21 @@ export async function saveComponent(comp: ComponentDef) {
 
 export async function deleteComponent(id: string) {
   await db.components.delete(id);
+}
+
+export async function listPrompts(): Promise<PromptDef[]> {
+  const rows = await db.prompts.toArray();
+  return rows.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function savePrompt(name: string, text: string): Promise<PromptDef> {
+  const p: PromptDef = { id: nanoid(10), name, text, createdAt: Date.now() };
+  await db.prompts.put(p);
+  return p;
+}
+
+export async function deletePrompt(id: string) {
+  await db.prompts.delete(id);
 }
 
 export async function putBlob(blob: Blob): Promise<string> {

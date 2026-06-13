@@ -4,6 +4,7 @@
 // glyph gathers input texts, runs the instruction through the LLM, and writes
 // the result into the output objects (creating one if none is wired).
 import { chat, generateImage } from '../ai/llm';
+import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
 import { lineHeight, textBlockSize } from '../engine/text';
@@ -462,6 +463,7 @@ async function executeWeb(ctl: AnyObj, node: AnyObj) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `scrape failed (${res.status})`);
+    if (data?.usage?.credits) useUI.getState().addUsage({ tavilyCredits: data.usage.credits });
     const pages: { url: string; raw_content?: string }[] = data?.results ?? [];
     if (pages.length === 0) throw new Error('No content extracted from those links.');
     // cap content per page so prompts stay sane
@@ -558,6 +560,7 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error || `search failed (${res.status})`);
+    if (data?.usage?.credits) useUI.getState().addUsage({ tavilyCredits: data.usage.credits });
     const results: { title?: string; url?: string; content?: string }[] = data?.results ?? [];
     const answer: string = data?.answer || '';
     const sources = results.map((r) => `• ${r.title || r.url}\n  ${r.url}`).join('\n');

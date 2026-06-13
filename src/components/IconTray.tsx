@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { ICON_CATEGORIES, type IconDef } from '../engine/icons';
-import { deleteComponent, listComponents, type ComponentDef } from '../store/db';
+import { TEMPLATES } from '../engine/templates';
+import { deleteComponent, deletePrompt, listComponents, listPrompts, savePrompt, type ComponentDef, type PromptDef } from '../store/db';
 import { useUI } from '../store/ui';
 import FloatingPanel from './FloatingPanel';
 
@@ -33,10 +34,16 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
   const set = useUI((s) => s.set);
   const [query, setQuery] = useState('');
   const [comps, setComps] = useState<ComponentDef[]>([]);
+  const [prompts, setPrompts] = useState<PromptDef[]>([]);
 
   useEffect(() => {
-    if (open) void listComponents().then(setComps);
+    if (open) {
+      void listComponents().then(setComps);
+      void listPrompts().then(setPrompts);
+    }
   }, [open, compsVersion]);
+
+  const reloadPrompts = () => void listPrompts().then(setPrompts);
 
   if (!open) return null;
 
@@ -71,6 +78,64 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
     </div>
   );
 
+  const visiblePrompts = q ? prompts.filter((p) => p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)) : prompts;
+  const visibleTemplates = q ? TEMPLATES.filter((t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)) : TEMPLATES;
+
+  const saveCurrentPrompt = () => {
+    const text = ctl.selectedPromptText();
+    if (!text) {
+      alert('Select a single sticky/text/node first, then Save prompt.');
+      return;
+    }
+    const name = prompt('Name this prompt', text.split('\n')[0].slice(0, 40));
+    if (name) void savePrompt(name, text).then(reloadPrompts);
+  };
+
+  const templatesSection = !q || visibleTemplates.length > 0 ? (
+    <div>
+      <div className="icon-cat-label">Flow templates</div>
+      <div className="prompt-list">
+        {visibleTemplates.map((t) => (
+          <button key={t.id} className="prompt-cell" title={t.description} onClick={() => ctl.placeObjects(t.build())}>
+            <span className="prompt-name">⚡ {t.name}</span>
+            <span className="prompt-text">{t.description}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  const promptsSection = (
+    <div>
+      <div className="icon-cat-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Prompt templates</span>
+        <button className="chrome-btn" style={{ padding: '2px 8px', fontSize: 11 }} onClick={saveCurrentPrompt}>
+          ＋ Save
+        </button>
+      </div>
+      <div className="prompt-list">
+        {visiblePrompts.map((p) => (
+          <button
+            key={p.id}
+            className="prompt-cell"
+            title={`${p.text}\n\n(right-click to delete)`}
+            onClick={() => ctl.addPromptSticky(p.text)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              if (confirm(`Delete prompt “${p.name}”?`)) void deletePrompt(p.id).then(reloadPrompts);
+            }}
+          >
+            <span className="prompt-name">{p.name}</span>
+            <span className="prompt-text">{p.text}</span>
+          </button>
+        ))}
+        {visiblePrompts.length === 0 && (
+          <div className="icon-empty">No saved prompts yet — select a node and hit ＋ Save.</div>
+        )}
+      </div>
+    </div>
+  );
+
   const matches = (i: IconDef) =>
     i.label.toLowerCase().includes(q) || i.tags.includes(q) || i.id.includes(q);
 
@@ -94,6 +159,8 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
         </button>
       </div>
       <div className="icon-scroll">
+        {templatesSection}
+        {promptsSection}
         {componentsSection}
         {q ? (
           <div className="icon-grid">

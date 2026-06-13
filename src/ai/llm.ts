@@ -6,6 +6,19 @@
 // (adjust the relative path). To set a key quickly for testing:
 //   localStorage.setItem('slate-openrouter-key', 'sk-or-...')
 
+import { useUI } from '../store/ui';
+
+/** Record an OpenRouter or Ollama usage object into the session cost meter. */
+function recordUsage(u: any) {
+  if (!u) return;
+  useUI.getState().addUsage({
+    calls: 1,
+    promptTokens: u.prompt_tokens ?? u.prompt_eval_count ?? 0,
+    completionTokens: u.completion_tokens ?? u.eval_count ?? 0,
+    costUsd: typeof u.cost === 'number' ? u.cost : typeof u.total_cost === 'number' ? u.total_cost : 0,
+  });
+}
+
 export type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } };
@@ -110,6 +123,7 @@ async function openRouterChat(messages: ChatMessage[], opts: LLMOptions): Promis
         messages,
         temperature: opts.temperature,
         max_tokens: opts.maxTokens,
+        usage: { include: true }, // ask OpenRouter to report token usage + cost
         ...(withJsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
@@ -123,6 +137,7 @@ async function openRouterChat(messages: ChatMessage[], opts: LLMOptions): Promis
     throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`);
   }
   const data = await res.json();
+  recordUsage(data?.usage);
   return data?.choices?.[0]?.message?.content ?? '';
 }
 
@@ -197,6 +212,7 @@ export async function generateImage(
     throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`);
   }
   const data = await res.json();
+  recordUsage(data?.usage);
   const url = data?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
   if (!url) {
     throw new Error(`No image returned — make sure the image model (⚙ settings, currently "${getImageModel()}") supports generation`);
@@ -224,6 +240,7 @@ async function ollamaChat(messages: ChatMessage[], opts: LLMOptions): Promise<st
     throw new Error(`Ollama ${res.status}: ${text.slice(0, 300)}`);
   }
   const data = await res.json();
+  recordUsage(data);
   return data?.message?.content ?? '';
 }
 

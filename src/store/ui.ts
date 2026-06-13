@@ -58,10 +58,41 @@ interface UIState {
   addCustomColor: (c: string) => void;
   removeCustomColor: (c: string) => void;
 
+  /** running usage/cost across the session (persisted) */
+  usage: Usage;
+  addUsage: (delta: Partial<Usage>) => void;
+  resetUsage: () => void;
+
   set: (patch: Partial<UIState>) => void;
 }
 
+export interface Usage {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  tavilyCredits: number;
+}
+
 const CUSTOM_COLORS_KEY = 'slate-custom-colors';
+const USAGE_KEY = 'slate-usage';
+const ZERO_USAGE: Usage = { calls: 0, promptTokens: 0, completionTokens: 0, costUsd: 0, tavilyCredits: 0 };
+
+function loadUsage(): Usage {
+  try {
+    return { ...ZERO_USAGE, ...JSON.parse(localStorage.getItem(USAGE_KEY) ?? '{}') };
+  } catch {
+    return { ...ZERO_USAGE };
+  }
+}
+
+function saveUsage(u: Usage) {
+  try {
+    localStorage.setItem(USAGE_KEY, JSON.stringify(u));
+  } catch {
+    // ignore
+  }
+}
 
 function loadCustomColors(): string[] {
   try {
@@ -138,6 +169,24 @@ export const useUI = create<UIState>((setState) => ({
       saveCustomColors(colors);
       return { customColors: colors };
     }),
+
+  usage: loadUsage(),
+  addUsage: (delta) =>
+    setState((s) => {
+      const u: Usage = {
+        calls: s.usage.calls + (delta.calls ?? 0),
+        promptTokens: s.usage.promptTokens + (delta.promptTokens ?? 0),
+        completionTokens: s.usage.completionTokens + (delta.completionTokens ?? 0),
+        costUsd: s.usage.costUsd + (delta.costUsd ?? 0),
+        tavilyCredits: s.usage.tavilyCredits + (delta.tavilyCredits ?? 0),
+      };
+      saveUsage(u);
+      return { usage: u };
+    }),
+  resetUsage: () => {
+    saveUsage({ ...ZERO_USAGE });
+    setState({ usage: { ...ZERO_USAGE } });
+  },
 
   set: (patch) => setState(patch),
 }));

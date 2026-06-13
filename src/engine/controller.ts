@@ -485,6 +485,40 @@ export class Controller {
     this.syncSelection();
   }
 
+  /** Drop a saved prompt as a sticky at the viewport center (becomes a node if it starts with ai:/img:/etc). */
+  addPromptSticky(text: string) {
+    const center = screenToWorld(this.camera, { x: this.viewW / 2, y: this.viewH / 2 });
+    const fontSize = 16;
+    const w = 220;
+    const m = textBlockSize(text || ' ', fontSize, w - 24, 500, useUI.getState().fontFamily);
+    const obj: StickyObj = {
+      id: nanoid(8),
+      type: 'sticky',
+      x: center.x - w / 2,
+      y: center.y - Math.max(120, m.h + 24) / 2,
+      w,
+      h: Math.max(120, m.h + 24),
+      rotation: 0,
+      z: this.doc.nextZ(),
+      color: '#FFE066',
+      text,
+      fontSize,
+      fontFamily: useUI.getState().fontFamily,
+    };
+    this.doc.set(obj);
+    this.selection = new Set([obj.id]);
+    this.syncSelection();
+    useUI.getState().set({ tool: 'select' });
+  }
+
+  /** Text of the single selected text/sticky/shape (for "save as prompt"). */
+  selectedPromptText(): string | null {
+    if (this.selection.size !== 1) return null;
+    const o = this.selectedObjects()[0];
+    if (o && (o.type === 'sticky' || o.type === 'text' || o.type === 'shape') && o.text.trim()) return o.text;
+    return null;
+  }
+
   groupSelection() {
     if (this.selection.size < 2) return;
     const gid = nanoid(8);
@@ -718,6 +752,41 @@ export class Controller {
     this.selection = new Set(clones.map((c) => c.id));
     this.syncSelection();
     useUI.getState().set({ tool: 'select' });
+  }
+
+  /**
+   * Drop a self-contained bundle (template) onto the board, centered in view.
+   * Objects already carry their own fresh ids and internal connector refs; we
+   * just translate them to the viewport center and assign z-order.
+   */
+  placeObjects(objs: SlateObj[]) {
+    if (objs.length === 0) return;
+    const boxes = objs
+      .filter((o) => o.type !== 'connector')
+      .map((o) => boundsOf(o, (id) => objs.find((x) => x.id === id)));
+    const union = boxUnion(boxes);
+    const center = screenToWorld(this.camera, { x: this.viewW / 2, y: this.viewH / 2 });
+    const dx = center.x - (union.x + union.w / 2);
+    const dy = center.y - (union.y + union.h / 2);
+    const placed = objs.map((o) => {
+      const c = structuredClone(o);
+      c.z = this.doc.nextZ();
+      if (c.type === 'connector') {
+        if (c.from.point) c.from = { point: { x: c.from.point.x + dx, y: c.from.point.y + dy } };
+        if (c.to.point) c.to = { point: { x: c.to.point.x + dx, y: c.to.point.y + dy } };
+      } else {
+        c.x += dx;
+        c.y += dy;
+      }
+      return c;
+    });
+    this.doc.begin();
+    this.doc.setMany(placed);
+    this.doc.commit();
+    this.selection = new Set(placed.filter((o) => o.type !== 'connector').map((o) => o.id));
+    this.syncSelection();
+    useUI.getState().set({ tool: 'select' });
+    this.zoomToSelection();
   }
 
   startEditingText(id: string) {
