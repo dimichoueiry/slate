@@ -5,6 +5,7 @@ import { loadEnv, type Plugin } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { scrapeUrls } from './api/scrape';
+import { searchWeb } from './api/search';
 
 export default function slatePersist(): Plugin {
   let dataDir = '';
@@ -41,6 +42,27 @@ export default function slatePersist(): Plugin {
             urls = [];
           }
           const { status, body: out } = await scrapeUrls(urls);
+          res.statusCode = status;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(out));
+        });
+      });
+      server.middlewares.use('/api/search', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('{"error":"Method not allowed"}');
+          return;
+        }
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', async () => {
+          let query: unknown = '';
+          try {
+            query = JSON.parse(body || '{}').query;
+          } catch {
+            query = '';
+          }
+          const { status, body: out } = await searchWeb(query);
           res.statusCode = status;
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify(out));

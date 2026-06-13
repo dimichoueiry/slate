@@ -10,9 +10,14 @@ import { lineHeight, textBlockSize } from '../engine/text';
 
 type AnyObj = Record<string, any>;
 
-const RUN = /^(▶ ?)?(ai|img|web):/i; // ai: text · img: image · web: scrape + summarize
+// ai: text · img: image · web: scrape · search: query · extract: table · chart: graph · fix: better prompt
+const RUN = /^(▶ ?)?(ai|img|web|search|extract|chart|fix):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
+const SEARCH = /^(▶ ?)?search:/i;
+const EXTRACT = /^(▶ ?)?extract:/i;
+const CHART = /^(▶ ?)?chart:/i;
+const FIX = /^(▶ ?)?fix:/i;
 const RAW = /^(\s*)ai:/i;
 const nid = () => Math.random().toString(36).slice(2, 10);
 const last = { id: '', t: 0 };
@@ -149,6 +154,10 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   const head = promptSource(node).split('\n')[0];
   if (IMG.test(head)) return executeImage(ctl, node);
   if (WEB.test(head)) return executeWeb(ctl, node);
+  if (SEARCH.test(head)) return executeSearch(ctl, node);
+  if (EXTRACT.test(head)) return executeExtract(ctl, node);
+  if (CHART.test(head)) return executeChart(ctl, node);
+  if (FIX.test(head)) return executeFix(ctl, node);
   return execute(ctl, node);
 }
 
@@ -366,6 +375,367 @@ async function executeWeb(ctl: AnyObj, node: AnyObj) {
   } catch (err) {
     doc.begin();
     for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+// ---------- shared output plumbing for the function nodes ----------
+
+function wireOutput(ctl: AnyObj, node: AnyObj, out: AnyObj) {
+  ctl.doc.set(out);
+  ctl.doc.set({
+    id: nid(),
+    type: 'connector',
+    x: node.x,
+    y: node.y,
+    rotation: 0,
+    z: ctl.doc.nextZ(),
+    from: { objectId: node.id },
+    to: { objectId: out.id },
+    routing: 'curved',
+    stroke: '#868e96',
+    strokeWidth: 2,
+    dash: 'dashed',
+    startArrow: 'none',
+    endArrow: 'triangle',
+    opacity: 1,
+  });
+}
+
+/** Wired text-ish outputs, or spawn one. Call inside a doc.begin()/commit(). */
+function prepTextOutputs(ctl: AnyObj, node: AnyObj, opts: { color?: string; mono?: boolean; w?: number } = {}): string[] {
+  const doc = ctl.doc;
+  const outIds: string[] = doc
+    .all()
+    .filter((c: AnyObj) => c.type === 'connector' && c.from?.objectId === node.id && c.to?.objectId && c.to.objectId !== node.id)
+    .map((c: AnyObj) => c.to.objectId)
+    .filter((id: string) => {
+      const t = doc.get(id);
+      return t && (t.type === 'sticky' || t.type === 'text' || t.type === 'shape');
+    });
+  if (outIds.length) return outIds;
+  const x = node.x + (node.w ?? 200) + 80;
+  const out: AnyObj = opts.mono
+    ? { id: nid(), type: 'text', x, y: node.y, w: opts.w ?? 380, h: 60, rotation: 0, z: doc.nextZ(), text: '', color: '#1a1a1a', fontSize: 13, fontFamily: 'jetbrains', fixedWidth: false }
+    : { id: nid(), type: 'sticky', x, y: node.y, w: opts.w ?? 240, h: Math.max(140, node.h ?? 140), rotation: 0, z: doc.nextZ(), color: opts.color ?? '#F1F0EC', text: '', fontSize: 15 };
+  wireOutput(ctl, node, out);
+  return [out.id];
+}
+
+// ---------- search: web search via /api/search ----------
+
+async function executeSearch(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const typed = promptSource(node).replace(RUN, '').trim();
+  const query = [typed, ...gatherInputs(ctl, node).map((o: AnyObj) => o.text)].filter(Boolean).join(' ').trim();
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { color: '#B5EAD7' });
+  if (!query) {
+    for (const id of outIds) setText(ctl, id, '⚠ No query — type one after "search:" or wire in a sticky.');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, '⏳ searching…');
+  doc.commit();
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `search failed (${res.status})`);
+    const results: { title?: string; url?: string; content?: string }[] = data?.results ?? [];
+    const answer: string = data?.answer || '';
+    const sources = results.map((r) => `• ${r.title || r.url}\n  ${r.url}`).join('\n');
+    const out = [answer.trim(), sources && `Sources:\n${sources}`].filter(Boolean).join('\n\n') || '(no results)';
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, out);
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+// ---------- extract: structured data → table ----------
+
+async function executeExtract(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const instruction = promptSource(node).replace(RUN, '').trim() || 'Extract the key structured fields.';
+  const corpus = gatherInputs(ctl, node).map((o: AnyObj) => o.text).join('\n---\n');
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { mono: true, w: 460 });
+  if (!corpus.trim()) {
+    for (const id of outIds) setText(ctl, id, '⚠ Nothing to extract — wire in some content.');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, '⏳ extracting…');
+  doc.commit();
+
+  try {
+    const result = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            'Extract the requested structured data from the content. Reply with ONLY a GitHub-flavored markdown table (header row, separator row, then data rows). No prose, no code fences. Keep cell text short.',
+        },
+        { role: 'user', content: `CONTENT:\n${corpus.slice(0, 12000)}\n\nEXTRACT: ${instruction}` },
+      ],
+      { temperature: 0.2, maxTokens: 2000 }
+    );
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, result.replace(/```/g, '').trim() || '(nothing extracted)');
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+// ---------- fix: prompt improver ----------
+
+async function executeFix(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const typed = promptSource(node).replace(RUN, '').trim();
+  const source = [typed, ...gatherInputs(ctl, node).map((o: AnyObj) => o.text)].filter(Boolean).join('\n').trim();
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { color: '#E2C2FF' });
+  if (!source) {
+    for (const id of outIds) setText(ctl, id, '⚠ No prompt to improve — type one or wire one in.');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, '⏳ improving…');
+  doc.commit();
+
+  try {
+    const result = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            'You are a prompt engineer. Rewrite the user\'s prompt into a clearer, more specific, higher-quality prompt: add helpful structure, constraints, role, and desired output format where useful, but keep the original intent. Reply with ONLY the improved prompt — no commentary, no quotes.',
+        },
+        { role: 'user', content: source },
+      ],
+      { temperature: 0.5, maxTokens: 1500 }
+    );
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, result.trim() || '(no output)');
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+// ---------- chart: data → rendered chart image ----------
+
+interface ChartSpec {
+  type: 'bar' | 'line' | 'pie';
+  title?: string;
+  labels: string[];
+  values: number[];
+}
+
+const CHART_COLORS = ['#3c78ff', '#e64980', '#2f9e44', '#f08c00', '#6741d9', '#15aabf', '#e03131', '#ffd43b'];
+
+async function drawChart(spec: ChartSpec): Promise<Blob> {
+  const W = 720;
+  const H = 460;
+  const dpr = 2;
+  const c = document.createElement('canvas');
+  c.width = W * dpr;
+  c.height = H * dpr;
+  const ctx = c.getContext('2d')!;
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = '600 20px -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  if (spec.title) ctx.fillText(spec.title, 32, 36);
+
+  const padL = 56;
+  const padR = 24;
+  const padT = spec.title ? 58 : 32;
+  const padB = 56;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const vals = spec.values;
+  const labels = spec.labels;
+  const max = Math.max(1, ...vals);
+
+  ctx.font = '12px -apple-system, sans-serif';
+  ctx.fillStyle = '#868e96';
+  ctx.strokeStyle = '#e9ecef';
+
+  if (spec.type === 'pie') {
+    const cx = W / 2;
+    const cy = padT + plotH / 2;
+    const r = Math.min(plotW, plotH) / 2 - 10;
+    const total = vals.reduce((a, b) => a + b, 0) || 1;
+    let a0 = -Math.PI / 2;
+    vals.forEach((v, i) => {
+      const a1 = a0 + (v / total) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, a0, a1);
+      ctx.closePath();
+      ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
+      ctx.fill();
+      const mid = (a0 + a1) / 2;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${labels[i] ?? ''}`, cx + Math.cos(mid) * (r + 24), cy + Math.sin(mid) * (r + 24));
+      a0 = a1;
+    });
+    return canvasToBlob(c);
+  }
+
+  // axes
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, padT + plotH);
+  ctx.lineTo(padL + plotW, padT + plotH);
+  ctx.stroke();
+  // y gridlines/labels
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + plotH - (plotH * i) / 4;
+    ctx.strokeStyle = '#f1f3f5';
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+    ctx.fillStyle = '#adb5bd';
+    ctx.fillText(String(Math.round((max * i) / 4)), padL - 8, y + 4);
+  }
+
+  const n = vals.length || 1;
+  const slot = plotW / n;
+  ctx.textAlign = 'center';
+  if (spec.type === 'bar') {
+    const bw = Math.min(slot * 0.6, 64);
+    vals.forEach((v, i) => {
+      const x = padL + slot * i + slot / 2;
+      const h = (v / max) * plotH;
+      ctx.fillStyle = CHART_COLORS[i % CHART_COLORS.length];
+      ctx.fillRect(x - bw / 2, padT + plotH - h, bw, h);
+      ctx.fillStyle = '#868e96';
+      ctx.fillText(labels[i] ?? '', x, padT + plotH + 18);
+    });
+  } else {
+    ctx.strokeStyle = CHART_COLORS[0];
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    vals.forEach((v, i) => {
+      const x = padL + slot * i + slot / 2;
+      const y = padT + plotH - (v / max) * plotH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    vals.forEach((v, i) => {
+      const x = padL + slot * i + slot / 2;
+      const y = padT + plotH - (v / max) * plotH;
+      ctx.fillStyle = CHART_COLORS[0];
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#868e96';
+      ctx.fillText(labels[i] ?? '', x, padT + plotH + 18);
+    });
+  }
+  return canvasToBlob(c);
+}
+
+function canvasToBlob(c: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('chart render failed'))), 'image/png'));
+}
+
+async function executeChart(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const instruction = promptSource(node).replace(RUN, '').trim() || 'Chart this data.';
+  const corpus = [instruction, ...gatherInputs(ctl, node).map((o: AnyObj) => o.text)].join('\n');
+
+  // find a wired image output or spawn one
+  let outId: string | null = doc
+    .all()
+    .filter((c: AnyObj) => c.type === 'connector' && c.from?.objectId === node.id && c.to?.objectId)
+    .map((c: AnyObj) => c.to.objectId)
+    .find((id: string) => doc.get(id)?.type === 'image') ?? null;
+
+  doc.begin();
+  if (!outId) {
+    const out: AnyObj = {
+      id: nid(),
+      type: 'image',
+      x: node.x + (node.w ?? 200) + 80,
+      y: node.y,
+      w: 360,
+      h: 230,
+      rotation: 0,
+      z: doc.nextZ(),
+      blobId: 'pending-' + nid(),
+      opacity: 1,
+      radius: 6,
+    };
+    wireOutput(ctl, node, out);
+    outId = out.id;
+  }
+  doc.commit();
+
+  try {
+    const reply = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            'Turn the user\'s request and data into a chart spec. Reply with ONLY JSON: {"type":"bar"|"line"|"pie","title":"...","labels":["..."],"values":[n,...]}. labels and values must be equal length. Infer sensible numbers if the data is approximate.',
+        },
+        { role: 'user', content: corpus.slice(0, 8000) },
+      ],
+      { temperature: 0.2, maxTokens: 1000, json: true }
+    );
+    const cleaned = reply.replace(/```(?:json)?/gi, '').trim();
+    const spec = JSON.parse(cleaned.slice(cleaned.indexOf('{'), cleaned.lastIndexOf('}') + 1)) as ChartSpec;
+    if (!Array.isArray(spec.labels) || !Array.isArray(spec.values) || spec.values.length === 0) {
+      throw new Error('Could not derive chart data from the input.');
+    }
+    spec.type = ['bar', 'line', 'pie'].includes(spec.type) ? spec.type : 'bar';
+    spec.values = spec.values.map((v) => Number(v) || 0);
+    const blob = await drawChart(spec);
+    const bmp = await createImageBitmap(blob);
+    const blobId = await putBlob(blob);
+    const scale = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
+    doc.begin();
+    doc.update(outId, { blobId, w: bmp.width * scale, h: bmp.height * scale });
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    doc.set({
+      id: nid(),
+      type: 'sticky',
+      x: node.x + (node.w ?? 200) + 80,
+      y: node.y + (node.h ?? 160) + 24,
+      w: 220,
+      h: 110,
+      rotation: 0,
+      z: doc.nextZ(),
+      color: '#FFB3BA',
+      text: '⚠ ' + (err instanceof Error ? err.message : String(err)),
+      fontSize: 14,
+    });
     doc.commit();
   }
 }
