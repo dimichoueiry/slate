@@ -6,10 +6,20 @@ import { useUI } from '../store/ui';
 import { lineHeight, textBlockSize } from '../engine/text';
 import { polylineMidpoint, routeConnector } from '../engine/geometry';
 
+const SLASH_COMMANDS: { cmd: string; label: string; desc: string }[] = [
+  { cmd: 'ai', label: 'ai:', desc: 'Ask AI — text in, text out' },
+  { cmd: 'img', label: 'img:', desc: 'Generate an image' },
+  { cmd: 'search', label: 'search:', desc: 'Web search a query' },
+  { cmd: 'web', label: 'web:', desc: 'Scrape a link / sketch frame' },
+  { cmd: 'extract', label: 'extract:', desc: 'Pull a structured table' },
+  { cmd: 'chart', label: 'chart:', desc: 'Draw a bar / line / pie chart' },
+  { cmd: 'fix', label: 'fix:', desc: 'Improve a prompt' },
+];
+
 /**
  * Floating textarea positioned over the edited object. While open, the canvas
  * renders the object without its text (see renderer editingId). Commits one
- * undo step on close.
+ * undo step on close. Typing "/" at the start opens a command menu.
  */
 export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectId: string }) {
   const obj = ctl.doc.get(objectId) as ShapeObj | StickyObj | TextObj | ConnectorObj | undefined;
@@ -19,6 +29,8 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
   const committed = useRef(false);
   const valueRef = useRef(value);
   valueRef.current = value;
+  const [slashSel, setSlashSel] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
 
   // reposition while panning/zooming
   useEffect(() => ctl.onCamera(force), [ctl]);
@@ -88,8 +100,54 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
   const lh = lineHeight(fontSize);
   const family = fontStack(obj.type === 'connector' ? undefined : obj.fontFamily);
 
+  // slash-command menu: "/" then optional filter, at the very start, on non-connectors
+  const slashMatch = obj.type !== 'connector' ? /^\/(\w*)$/.exec(value) : null;
+  const slashFilter = slashMatch ? slashMatch[1].toLowerCase() : '';
+  const slashItems =
+    slashMatch && !slashDismissed
+      ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashFilter) || c.label.includes(slashFilter))
+      : [];
+  const showSlash = slashItems.length > 0;
+  const sel = Math.min(slashSel, slashItems.length - 1);
+
+  const pickSlash = (cmd: string) => {
+    const v = `${cmd}: `;
+    setValue(v);
+    valueRef.current = v;
+    setSlashDismissed(true);
+    requestAnimationFrame(() => {
+      const t = ref.current;
+      if (t) {
+        t.focus();
+        t.setSelectionRange(v.length, v.length);
+      }
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     e.stopPropagation();
+    if (showSlash) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSel((i) => (i + 1) % slashItems.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSel((i) => (i - 1 + slashItems.length) % slashItems.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        pickSlash(slashItems[sel]!.cmd);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashDismissed(true);
+        return;
+      }
+    }
     if (e.key === 'Escape') doCommit(valueRef.current);
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doCommit(valueRef.current);
   };
@@ -149,17 +207,44 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     };
   }
 
+  const menuLeft = typeof style.left === 'number' ? style.left : tl.x;
+  const menuTop = (typeof style.top === 'number' ? style.top : tl.y) + lh * zoom + 6;
+
   return (
-    <textarea
-      ref={ref}
-      className="text-editor"
-      style={style}
-      value={value}
-      spellCheck={false}
-      onChange={(e) => setValue(e.target.value)}
-      onKeyDown={onKeyDown}
-      onBlur={() => doCommit(valueRef.current)}
-      onPointerDown={(e) => e.stopPropagation()}
-    />
+    <>
+      <textarea
+        ref={ref}
+        className="text-editor"
+        style={style}
+        value={value}
+        spellCheck={false}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setSlashDismissed(false);
+          setSlashSel(0);
+        }}
+        onKeyDown={onKeyDown}
+        onBlur={() => {
+          if (!showSlash) doCommit(valueRef.current);
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      />
+      {showSlash && (
+        <div className="slash-menu" style={{ left: menuLeft, top: menuTop }} onPointerDown={(e) => e.preventDefault()}>
+          <div className="slash-hint">Insert a command</div>
+          {slashItems.map((c, i) => (
+            <button
+              key={c.cmd}
+              className={i === sel ? 'active' : ''}
+              onMouseEnter={() => setSlashSel(i)}
+              onClick={() => pickSlash(c.cmd)}
+            >
+              <span className="slash-cmd">{c.label}</span>
+              <span className="slash-desc">{c.desc}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
