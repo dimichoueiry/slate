@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { nanoid } from 'nanoid';
-import type { BoardMeta, BrandKit, SlateObj } from '../types';
+import type { BoardMeta, BrandKit, Project, SlateObj } from '../types';
 import type { Doc } from '../engine/doc';
 
 interface ObjectRow {
@@ -40,6 +40,7 @@ class SlateDB extends Dexie {
   components!: EntityTable<ComponentDef, 'id'>;
   prompts!: EntityTable<PromptDef, 'id'>;
   brandKits!: EntityTable<BrandKit, 'id'>;
+  projects!: EntityTable<Project, 'id'>;
 
   constructor() {
     super('slate');
@@ -69,6 +70,15 @@ class SlateDB extends Dexie {
       prompts: 'id, createdAt',
       brandKits: 'id, createdAt',
     });
+    this.version(5).stores({
+      boards: 'id, updatedAt, projectId',
+      objects: 'id, boardId',
+      blobs: 'id',
+      components: 'id, createdAt',
+      prompts: 'id, createdAt',
+      brandKits: 'id, createdAt',
+      projects: 'id, createdAt',
+    });
   }
 }
 
@@ -79,13 +89,14 @@ export async function listBoards(): Promise<BoardMeta[]> {
   return boards.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt);
 }
 
-export async function createBoard(name = 'Untitled board'): Promise<BoardMeta> {
+export async function createBoard(name = 'Untitled board', projectId: string | null = null): Promise<BoardMeta> {
   const board: BoardMeta = {
     id: nanoid(10),
     name,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     viewport: { x: -200, y: -200, zoom: 1 },
+    projectId,
   };
   await db.boards.add(board);
   return board;
@@ -152,6 +163,32 @@ export async function savePrompt(name: string, text: string): Promise<PromptDef>
 
 export async function deletePrompt(id: string) {
   await db.prompts.delete(id);
+}
+
+// ---------- projects / folders ----------
+
+export async function listProjects(): Promise<Project[]> {
+  const rows = await db.projects.toArray();
+  return rows.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function createProject(name = 'New project'): Promise<Project> {
+  const p: Project = { id: nanoid(10), name, createdAt: Date.now() };
+  await db.projects.add(p);
+  return p;
+}
+
+export async function renameProject(id: string, name: string) {
+  await db.projects.update(id, { name });
+}
+
+/** Delete a project; its boards become standalone (unfiled), not deleted. */
+export async function deleteProject(id: string) {
+  await db.transaction('rw', db.projects, db.boards, async () => {
+    const boards = await db.boards.where('projectId').equals(id).toArray();
+    for (const b of boards) await db.boards.update(b.id, { projectId: null });
+    await db.projects.delete(id);
+  });
 }
 
 // ---------- brand kits ----------

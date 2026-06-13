@@ -790,3 +790,43 @@ button { font-family: inherit; }
 }
 .new-board:hover { border-color: var(--accent); color: #ececf0; }
 .new-board .plus { font-size: 28px; }
+.new-board.small { min-height: 120px; }
+
+.project-section { margin-top: 30px; }
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2a2a31;
+}
+.project-name { font-size: 16px; font-weight: 600; color: #ececf0; }
+.project-count {
+  font-size: 11px;
+  color: #8d8d96;
+  background: #1f1f25;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.proj-act {
+  border: none;
+  background: transparent;
+  color: #8d8d96;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.proj-act:hover { background: #1f1f25; color: #ececf0; }
+
+.move-select {
+  border: none;
+  border-radius: 6px;
+  background: rgba(20, 20, 24, 0.85);
+  color: #ececf0;
+  font-size: 11px;
+  max-width: 84px;
+  cursor: pointer;
+  padding: 3px 2px;
+}

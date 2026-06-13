@@ -164,6 +164,14 @@ export interface BoardMeta {
   pinned?: boolean;
   notes?: string; // markdown side-panel content
   brandKitId?: string | null; // active brand kit for this board
+  projectId?: string | null; // folder/project this board belongs to
+}
+
+/** A folder/project grouping boards on the home screen. */
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: number;
 }
 
 /** A reusable brand kit applied to AI nodes on a board. */

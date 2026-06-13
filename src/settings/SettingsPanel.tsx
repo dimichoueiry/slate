@@ -15,6 +15,9 @@ import {
   setOpenRouterKey,
   setOpenRouterModel,
 } from '../ai/llm';
+import type { BrandKit } from '../types';
+import { listBrandKits, getDefaultKitId, setDefaultKitId } from '../store/db';
+import { BrandKitEditor, blankKit } from '../components/BrandKit';
 
 interface ModelInfo {
   id: string;
@@ -82,6 +85,16 @@ const CSS = `
 .slate-model-list button.sel{background:rgba(60,120,255,.4);color:#fff}
 .slate-model-list .mid{color:#9a9aa2;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
 .slate-model-count{font-size:10.5px;color:#9a9aa2;margin-top:4px}
+.settings-kits{display:flex;flex-direction:column;gap:5px;margin-top:6px}
+.settings-kit{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border-radius:8px;padding:6px 9px;font-size:12.5px}
+.settings-kit .kdot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.settings-kit .kname{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.settings-kit .kdef{font-size:10px;color:#7ce29a;background:rgba(47,158,68,.18);border-radius:6px;padding:1px 6px}
+.settings-kit button{border:none;background:rgba(255,255,255,.08);color:#e8e8ea;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer}
+.settings-kit button:hover:not(:disabled){background:#3c78ff}
+.settings-kit button:disabled{opacity:.4;cursor:default}
+.settings-newkit{border:1px dashed rgba(255,255,255,.2);background:transparent;color:#9a9aa2;border-radius:8px;padding:7px;font-size:12px;cursor:pointer}
+.settings-newkit:hover{border-color:#3c78ff;color:#fff}
 `;
 
 export default function SettingsPanel() {
@@ -96,6 +109,9 @@ export default function SettingsPanel() {
   const [imgFilter, setImgFilter] = useState('');
   const [ollamaUrl, setOllamaUrlState] = useState('');
   const [ollamaModel, setOllamaModelState] = useState('');
+  const [kits, setKits] = useState<BrandKit[]>([]);
+  const [defaultKit, setDefaultKit] = useState<string | null>(null);
+  const [editingKit, setEditingKit] = useState<BrandKit | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +123,8 @@ export default function SettingsPanel() {
     setImgFilter('');
     setOllamaUrlState(getOllamaUrl());
     setOllamaModelState(getOllamaModel());
+    void listBrandKits().then(setKits);
+    setDefaultKit(getDefaultKitId());
     fetchModels()
       .then((m) => {
         setModels(m);
@@ -224,6 +242,23 @@ export default function SettingsPanel() {
             <label>Model</label>
             <input placeholder={DEFAULT_OLLAMA_MODEL} value={ollamaModel} onChange={(e) => setOllamaModelState(e.target.value)} />
 
+            <h3>Brand kits</h3>
+            <div className="settings-kits">
+              {kits.map((k) => (
+                <div key={k.id} className="settings-kit">
+                  <span className="kdot" style={{ background: k.palette[0] ?? '#555' }} />
+                  <span className="kname">{k.name}</span>
+                  {defaultKit === k.id && <span className="kdef">default</span>}
+                  <button onClick={() => setEditingKit(k)}>Edit</button>
+                  <button onClick={() => { setDefaultKitId(k.id); setDefaultKit(k.id); }} disabled={defaultKit === k.id}>
+                    Set default
+                  </button>
+                </div>
+              ))}
+              {kits.length === 0 && <div style={{ color: '#8d8d96', fontSize: 12 }}>No brand kits yet.</div>}
+              <button className="settings-newkit" onClick={() => setEditingKit(blankKit())}>＋ New brand kit</button>
+            </div>
+
             <div className="row">
               {savedKey && (
                 <button
@@ -244,6 +279,13 @@ export default function SettingsPanel() {
             </div>
           </div>
         </div>
+      )}
+      {editingKit && (
+        <BrandKitEditor
+          kit={editingKit}
+          onClose={() => setEditingKit(null)}
+          afterChange={() => void listBrandKits().then(setKits)}
+        />
       )}
     </>
   );
