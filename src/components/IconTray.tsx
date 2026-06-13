@@ -3,6 +3,7 @@ import type { Controller } from '../engine/controller';
 import { ICON_CATEGORIES, type IconDef } from '../engine/icons';
 import { isAINode } from '../ui/ainodes';
 import { TEMPLATES } from '../engine/templates';
+import { PROMPT_STARTERS } from '../engine/prompts';
 import { deleteComponent, deletePrompt, listComponents, listPrompts, savePrompt, type ComponentDef, type PromptDef } from '../store/db';
 import { useUI } from '../store/ui';
 import FloatingPanel from './FloatingPanel';
@@ -148,6 +149,27 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
     </div>
   );
 
+  const starters = q
+    ? PROMPT_STARTERS.filter(
+        (p) => p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)
+      )
+    : PROMPT_STARTERS;
+  const startersSection = starters.length > 0 && (
+    <div>
+      <div className="icon-cat-label">Starter prompts</div>
+      <div className="prompt-list">
+        {starters.map((p) => (
+          <button key={p.id} className="prompt-cell" title={p.text} onClick={() => ctl.addPromptSticky(p.text)}>
+            <span className="prompt-name">
+              {p.name} <span style={{ color: 'var(--chrome-dim)', fontWeight: 400, fontSize: 10 }}>· {p.category}</span>
+            </span>
+            <span className="prompt-text">{p.text.replace(/^ai:\s*/i, '')}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   const matches = (i: IconDef) =>
     i.label.toLowerCase().includes(q) || i.tags.includes(q) || i.id.includes(q);
 
@@ -173,6 +195,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
       <div className="icon-scroll">
         {templatesSection}
         {promptsSection}
+        {startersSection}
         {componentsSection}
         {q ? (
           <div className="icon-grid">
