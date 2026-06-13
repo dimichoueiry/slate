@@ -46,10 +46,11 @@ async function brandLogoDataUrl(): Promise<string | null> {
   }
 }
 
-// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch · interval/timer: schedule
-const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix|data|condition|if|interval|timer|every):/i;
+// ai: text · img: image · web: scrape · search: links · ask: answered web search · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch · interval/timer: schedule
+const RUN = /^(▶ ?)?(ai|img|web|search|ask|research|extract|chart|fix|data|condition|if|interval|timer|every):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
+const ASK = /^(▶ ?)?ask:/i;
 const DATA = /^(▶ ?)?data:/i;
 const COND = /^(▶ ?)?(condition|if):/i;
 const TICK = /^(▶ ?)?(interval|every|timer):/i;
@@ -195,6 +196,7 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (IMG.test(head)) return executeImage(ctl, node);
   if (WEB.test(head)) return executeWeb(ctl, node);
   if (SEARCH.test(head)) return executeSearch(ctl, node);
+  if (ASK.test(head)) return executeAsk(ctl, node);
   if (RESEARCH.test(head)) return executeResearch(ctl, node);
   if (EXTRACT.test(head)) return executeExtract(ctl, node);
   if (CHART.test(head)) return executeChart(ctl, node);
@@ -935,6 +937,69 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
     const answer: string = data?.answer || '';
     const sources = results.map((r) => `• ${r.title || r.url}\n  ${r.url}`).join('\n');
     const out = [answer.trim(), sources && `Sources:\n${sources}`].filter(Boolean).join('\n\n') || '(no results)';
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, out);
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
+
+// ---------- ask: answered web search (search → LLM synthesis with citations) ----------
+
+async function executeAsk(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const typed = promptSource(node).replace(RUN, '').trim();
+  const question = [typed, ...gatherInputs(ctl, node).map((o: AnyObj) => o.text)].filter(Boolean).join(' ').trim();
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { color: '#C7CEEA', w: 300 });
+  if (!question) {
+    for (const id of outIds) setText(ctl, id, '⚠ No question — type one after "ask:" or wire one in.');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, '⏳ searching the web…');
+  doc.commit();
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: question }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `search failed (${res.status})`);
+    if (data?.usage?.credits) useUI.getState().addUsage({ tavilyCredits: data.usage.credits });
+    const results: { title?: string; url?: string; content?: string }[] = data?.results ?? [];
+    if (results.length === 0 && !data?.answer) throw new Error('No web results found for that question.');
+
+    const context = results
+      .map((r, i) => `[${i + 1}] ${r.title || r.url}\nURL: ${r.url}\n${(r.content || '').slice(0, 1500)}`)
+      .join('\n\n');
+
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⏳ writing answer…');
+    doc.commit();
+
+    const answer = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            "You are a precise research assistant. Answer the user's question using ONLY the web results provided. " +
+            'Be specific, accurate, and complete but concise. Cite sources inline as [1], [2]… matching the result numbers. ' +
+            "If the results don't contain the answer, say so plainly. Never invent facts, numbers, or URLs.",
+        },
+        { role: 'user', content: `QUESTION: ${question}\n\nWEB RESULTS:\n${context || data?.answer || '(none)'}` },
+      ],
+      { temperature: 0.3, maxTokens: 1200 }
+    );
+
+    const sources = results.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.url}`).join('\n');
+    const out = [answer.trim() || '(no answer)', sources && `\nSources:\n${sources}`].filter(Boolean).join('\n');
     doc.begin();
     for (const id of outIds) setText(ctl, id, out);
     doc.commit();
