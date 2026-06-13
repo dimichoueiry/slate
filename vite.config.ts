@@ -6,6 +6,21 @@ import slatePersist from './vite-slate-persist';
 export default defineConfig({
   // fixed port so the browser origin (and its IndexedDB) never changes
   server: { port: 5180, strictPort: true },
+  build: {
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        // split rarely-changing third-party libs into their own chunk so app
+        // updates don't bust the vendor cache (and it quiets the size warning)
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react-vendor';
+          if (/[\\/]node_modules[\\/](roughjs|perfect-freehand|marked|dexie)[\\/]/.test(id)) return 'canvas-vendor';
+          return 'vendor';
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     slatePersist(),
