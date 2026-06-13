@@ -46,11 +46,12 @@ async function brandLogoDataUrl(): Promise<string | null> {
   }
 }
 
-// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch
-const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix|data):/i;
+// ai: text · img: image · web: scrape · search: query · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch
+const RUN = /^(▶ ?)?(ai|img|web|search|research|extract|chart|fix|data|condition|if):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
 const DATA = /^(▶ ?)?data:/i;
+const COND = /^(▶ ?)?(condition|if):/i;
 const SEARCH = /^(▶ ?)?search:/i;
 const RESEARCH = /^(▶ ?)?research:/i;
 const EXTRACT = /^(▶ ?)?extract:/i;
@@ -198,6 +199,7 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (CHART.test(head)) return executeChart(ctl, node);
   if (FIX.test(head)) return executeFix(ctl, node);
   if (DATA.test(head)) return executeData(ctl, node);
+  if (COND.test(head)) return executeCondition(ctl, node);
   return execute(ctl, node);
 }
 
@@ -310,52 +312,74 @@ export interface LoopProgress {
   total: number;
 }
 
+type Branch = 'yes' | 'no' | null;
+
+interface RunPlan {
+  steps: AnyObj[];
+  loop: LoopProgress[];
+  /** edges into each node id (within the flow), each carrying any branch gate */
+  incoming: Map<string, Array<{ from: string; branch: Branch }>>;
+}
+
+/** Classify a connector label as a yes/no branch gate (for condition nodes). */
+function branchOf(label: unknown): Branch {
+  const s = typeof label === 'string' ? label.trim().toLowerCase() : '';
+  if (!s) return null;
+  if (/^(y\b|yes|true|✓|✔|pass|success)/.test(s)) return 'yes';
+  if (/^(n\b|no|false|✗|✘|fail)/.test(s)) return 'no';
+  return null;
+}
+
 /**
- * Build the actual execution sequence for a flow, expanding any closed loop.
+ * Build the execution sequence for a flow: topological order, expanding any
+ * closed loop, plus the incoming-edge map used to gate condition branches.
  *
- * A loop is a connector that points "backwards" — from a later node to an
- * earlier one — closing a cycle. Its label (a number) sets how many times the
- * loop body repeats (default 3, capped at 10). The body runs N times, then
- * downstream nodes run once. Acyclic flows are unaffected.
+ * A loop is a connector pointing "backwards" — from a later node to an earlier
+ * one — closing a cycle; its numeric label sets how many times the body repeats
+ * (default 3, cap 10). A condition node's outgoing connectors labeled yes/no are
+ * branch gates: at run time the untaken branch is skipped. Acyclic, label-free
+ * flows are unaffected.
  */
-function planExecution(ctl: AnyObj, nodes: AnyObj[]): { steps: AnyObj[]; loop: LoopProgress[] } {
+function planExecution(ctl: AnyObj, nodes: AnyObj[]): RunPlan {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const ids = nodes.map((n) => n.id);
   const idSet = new Set(ids);
 
-  // object-level adjacency from connectors (so node→sticky→node chains resolve)
-  const objAdj = new Map<string, string[]>();
+  // object-level adjacency from connectors, keeping each connector's label
+  const objAdj = new Map<string, Array<{ to: string; label: unknown }>>();
   for (const c of ctl.doc.all()) {
     if (c.type === 'connector' && c.from?.objectId && c.to?.objectId && c.from.objectId !== c.to.objectId) {
-      (objAdj.get(c.from.objectId) ?? objAdj.set(c.from.objectId, []).get(c.from.objectId)!).push(c.to.objectId);
+      (objAdj.get(c.from.objectId) ?? objAdj.set(c.from.objectId, []).get(c.from.objectId)!).push({ to: c.to.objectId, label: c.label });
     }
   }
 
-  // collapse to a node→node graph: from each node, walk forward until hitting nodes
-  const edges = new Map<string, Set<string>>();
+  // collapse to a node→node graph; the branch gate is the label of the connector
+  // leaving the source node (carried through any plain stickies on the path)
+  const edges = new Map<string, Array<{ to: string; branch: Branch }>>();
   for (const n of nodes) {
-    const succ = new Set<string>();
+    const list: Array<{ to: string; branch: Branch }> = [];
     const seen = new Set<string>([n.id]);
-    const q = [...(objAdj.get(n.id) ?? [])];
+    const q: Array<{ id: string; branch: Branch }> = (objAdj.get(n.id) ?? []).map((e) => ({ id: e.to, branch: branchOf(e.label) }));
     while (q.length) {
-      const cur = q.shift()!;
-      if (seen.has(cur)) continue;
-      seen.add(cur);
-      if (idSet.has(cur)) {
-        succ.add(cur); // stop at the next node
+      const { id, branch } = q.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (idSet.has(id)) {
+        list.push({ to: id, branch }); // stop at the next node
         continue;
       }
-      for (const nx of objAdj.get(cur) ?? []) q.push(nx);
+      for (const nx of objAdj.get(id) ?? []) q.push({ id: nx.to, branch });
     }
-    edges.set(n.id, succ);
+    edges.set(n.id, list);
   }
+  const targets = (u: string) => (edges.get(u) ?? []).map((e) => e.to);
 
   // DFS to find back-edges (an edge into a node still on the recursion stack)
   const color = new Map<string, number>(); // 0 white, 1 gray, 2 black
   const backEdges: Array<{ from: string; to: string }> = [];
   const dfs = (u: string) => {
     color.set(u, 1);
-    for (const v of edges.get(u) ?? []) {
+    for (const v of targets(u)) {
       const c = color.get(v) ?? 0;
       if (c === 1) backEdges.push({ from: u, to: v });
       else if (c === 0) dfs(v);
@@ -367,7 +391,7 @@ function planExecution(ctl: AnyObj, nodes: AnyObj[]): { steps: AnyObj[]; loop: L
   // topo sort with back-edges removed → a clean DAG ordering
   const skip = new Set(backEdges.map((e) => `${e.from}->${e.to}`));
   const indeg = new Map<string, number>(ids.map((id) => [id, 0]));
-  for (const [u, vs] of edges) for (const v of vs) {
+  for (const u of ids) for (const v of targets(u)) {
     if (skip.has(`${u}->${v}`)) continue;
     indeg.set(v, (indeg.get(v) ?? 0) + 1);
   }
@@ -379,13 +403,18 @@ function planExecution(ctl: AnyObj, nodes: AnyObj[]): { steps: AnyObj[]; loop: L
     if (done.has(u)) continue;
     done.add(u);
     order.push(u);
-    for (const v of edges.get(u) ?? []) {
+    for (const v of targets(u)) {
       if (skip.has(`${u}->${v}`)) continue;
       indeg.set(v, (indeg.get(v) ?? 1) - 1);
       if ((indeg.get(v) ?? 0) <= 0) ready.push(v);
     }
   }
   for (const id of ids) if (!done.has(id)) order.push(id);
+
+  // incoming edges (within the flow), for runtime branch gating
+  const incoming = new Map<string, Array<{ from: string; branch: Branch }>>();
+  for (const id of ids) incoming.set(id, []);
+  for (const u of ids) for (const e of edges.get(u) ?? []) incoming.get(e.to)?.push({ from: u, branch: e.branch });
 
   // pick the outermost loop (widest span in the ordering) — v1 supports one loop
   let best: { start: number; end: number; n: number } | null = null;
@@ -414,7 +443,7 @@ function planExecution(ctl: AnyObj, nodes: AnyObj[]): { steps: AnyObj[]; loop: L
     }
     for (let i = best.end + 1; i < order.length; i++) push(order[i]!, null);
   }
-  return { steps, loop };
+  return { steps, loop, incoming };
 }
 
 /** Iterations for a loop-closing connector: its numeric label, default 3, capped 1–10. */
@@ -427,24 +456,51 @@ function loopCount(ctl: AnyObj, fromId: string, toId: string): number {
   return Math.max(1, Math.min(10, Number.isFinite(n) ? n : 3));
 }
 
-/** Execute a specific flow's nodes in dependency order, expanding loops, awaiting each. */
+/**
+ * Execute a flow in dependency order, expanding loops and honoring condition
+ * branches: a node runs only if it's a root or has at least one *active*
+ * incoming edge. An edge is active when its source actually ran and — if the
+ * source is a condition node — the edge's yes/no gate matches the verdict. The
+ * untaken branch (and everything downstream of it) is skipped.
+ */
 export async function runFlow(
   ctl: AnyObj,
   nodes: AnyObj[],
   onProgress?: (done: number, total: number, node: AnyObj, loop?: LoopProgress) => void
 ): Promise<{ ran: number }> {
-  const { steps, loop } = planExecution(ctl, nodes);
+  const { steps, loop, incoming } = planExecution(ctl, nodes);
+  const ran = new Set<string>(); // nodes that actually executed
+  const verdict = new Map<string, boolean>(); // condition id → yes(true) / no(false)
+
+  const edgeActive = (from: string, branch: Branch) => {
+    if (!ran.has(from)) return false;
+    if (verdict.has(from) && branch) return verdict.get(from) === (branch === 'yes');
+    return true; // plain edge, or an unlabeled edge out of a condition
+  };
+  const enabled = (id: string) => {
+    const inc = incoming.get(id) ?? [];
+    return inc.length === 0 || inc.some((e) => edgeActive(e.from, e.branch));
+  };
+
+  let count = 0;
   for (let i = 0; i < steps.length; i++) {
+    const node = steps[i]!;
     const lp = loop[i];
-    onProgress?.(i, steps.length, steps[i]!, lp && lp.total > 0 ? lp : undefined);
+    onProgress?.(i, steps.length, node, lp && lp.total > 0 ? lp : undefined);
+    if (!enabled(node.id)) continue; // branch not taken → skip this node
     try {
-      await runAINode(ctl, steps[i]!);
+      await runAINode(ctl, node);
     } catch {
       // individual node failures already surface in their own output; keep going
     }
+    ran.add(node.id);
+    count++;
+    if (COND.test(promptSource(node).split('\n')[0])) {
+      verdict.set(node.id, ctl.doc.get(node.id)?.conditionResult === 'yes');
+    }
   }
   onProgress?.(steps.length, steps.length, steps[steps.length - 1]!);
-  return { ran: steps.length };
+  return { ran: count };
 }
 
 async function execute(ctl: AnyObj, node: AnyObj) {
@@ -791,6 +847,56 @@ function formatFetchResult(d: AnyObj): string {
   if (body.length > 8000) body = body.slice(0, 8000) + `\n… (truncated, ${body.length} chars)`;
   else if (d.truncated) body += '\n… (response truncated by server)';
   return `${head}\n${body}`.trim();
+}
+
+// ---------- condition: yes/no branch — routes the flow down a labeled arrow ----------
+
+async function executeCondition(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const question = promptSource(node).replace(RUN, '').trim();
+  const context = gatherInputs(ctl, node)
+    .map((o: AnyObj) => o.text)
+    .filter(Boolean)
+    .join('\n---\n')
+    .trim();
+
+  let verdict: 'yes' | 'no' = 'no';
+  let detail = '';
+  if (!question) {
+    detail = 'no question';
+  } else {
+    try {
+      const ans = await chat(
+        [
+          { role: 'system', content: 'You decide a yes/no question from the given context. Reply with exactly one word: YES or NO.' },
+          {
+            role: 'user',
+            content: `Question: ${question}` + (context ? `\n\nContext:\n${context}` : '\n\n(No context provided — answer from the question alone.)'),
+          },
+        ],
+        { temperature: 0, maxTokens: 5 }
+      );
+      const a = ans.trim().toLowerCase();
+      verdict = a.startsWith('yes') || (/\byes\b/.test(a) && !/\bno\b/.test(a)) ? 'yes' : 'no';
+      detail = ans.trim();
+    } catch (err) {
+      detail = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  doc.begin();
+  doc.update(node.id, { conditionResult: verdict });
+  // feedback for standalone runs: if a plain (unlabeled) text output is wired, show the verdict there
+  const plainOut = doc
+    .all()
+    .filter((c: AnyObj) => c.type === 'connector' && c.from?.objectId === node.id && c.to?.objectId && branchOf(c.label) === null)
+    .map((c: AnyObj) => doc.get(c.to.objectId))
+    .find((o: AnyObj) => o && (o.type === 'sticky' || o.type === 'text') && !isAINode(o));
+  if (plainOut) {
+    const tag = verdict === 'yes' ? '✓ YES' : '✗ NO';
+    setText(ctl, plainOut.id, detail && detail.length < 40 && detail.toLowerCase() !== verdict ? `${tag} — ${detail}` : tag);
+  }
+  doc.commit();
 }
 
 // ---------- research: deep multi-step agent (LangGraph on /api/research) ----------

@@ -16,6 +16,7 @@ const SLASH_COMMANDS: { cmd: string; label: string; desc: string }[] = [
   { cmd: 'chart', label: 'chart:', desc: 'Draw a bar / line / pie chart' },
   { cmd: 'fix', label: 'fix:', desc: 'Improve a prompt' },
   { cmd: 'data', label: 'data:', desc: 'Fetch JSON from any API endpoint' },
+  { cmd: 'condition', label: 'condition:', desc: 'Yes/No branch — label arrows "yes" / "no"' },
 ];
 
 /**
