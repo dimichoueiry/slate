@@ -87,14 +87,24 @@ export async function proxyFetch(input: {
       },
     };
   } catch (e) {
-    const msg =
-      (e as { name?: string })?.name === 'AbortError'
-        ? `Request timed out after ${TIMEOUT_MS / 1000}s.`
-        : `Fetch failed: ${e instanceof Error ? e.message : String(e)}`;
-    return { status: 502, body: { error: msg } };
+    return { status: 502, body: { error: describeFetchError(e) } };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Turn Node/undici's vague "fetch failed" into something actionable by digging into error.cause. */
+function describeFetchError(e: unknown): string {
+  if ((e as { name?: string })?.name === 'AbortError') return `Request timed out after ${TIMEOUT_MS / 1000}s.`;
+  const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+  const detail = cause?.code || cause?.message || (e instanceof Error ? e.message : String(e));
+  const d = String(detail);
+  if (/ENOTFOUND|EAI_AGAIN/.test(d)) return `Could not resolve host — check the URL or that the API still exists (DNS lookup failed: ${d}).`;
+  if (/ECONNREFUSED/.test(d)) return `Connection refused by the server (${d}).`;
+  if (/ECONNRESET|EPIPE/.test(d)) return `Connection dropped by the server (${d}).`;
+  if (/ETIMEDOUT/.test(d)) return `The server took too long to respond (${d}).`;
+  if (/CERT|SSL|TLS|DEPTH_ZERO/i.test(d)) return `TLS/certificate problem reaching the server (${d}).`;
+  return `Fetch failed: ${d}`;
 }
 
 async function readJson(req: any): Promise<any> {
