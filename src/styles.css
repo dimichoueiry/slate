@@ -412,6 +412,29 @@ button { font-family: inherit; }
   color: var(--chrome-dim);
   padding: 10px 12px 2px;
 }
+.tray-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.tray-section-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--chrome-dim);
+  font: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.tray-section-toggle:hover { color: var(--chrome-fg); }
+.tray-section-toggle .chev { font-size: 9px; width: 10px; display: inline-block; }
 .icon-tray-header {
   display: flex;
   gap: 6px;

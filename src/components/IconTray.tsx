@@ -6,6 +6,41 @@ import { TEMPLATES } from '../engine/templates';
 import { PROMPT_STARTERS } from '../engine/prompts';
 import { deleteComponent, deletePrompt, listComponents, listPrompts, savePrompt, type ComponentDef, type PromptDef } from '../store/db';
 import { useUI } from '../store/ui';
+
+/** A collapsible tray section whose open/closed state persists per id. */
+function Section({ id, label, right, children }: { id: string; label: string; right?: React.ReactNode; children: React.ReactNode }) {
+  const key = `slate-tray-collapsed-${id}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setCollapsed((c) => {
+      const n = !c;
+      try {
+        localStorage.setItem(key, n ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return n;
+    });
+  };
+  return (
+    <div>
+      <div className="icon-cat-label tray-section-head">
+        <button className="tray-section-toggle" onClick={toggle}>
+          <span className="chev">{collapsed ? '▸' : '▾'}</span>
+          {label}
+        </button>
+        {right}
+      </div>
+      {!collapsed && children}
+    </div>
+  );
+}
 import FloatingPanel from './FloatingPanel';
 
 function IconButton({ icon, onPlace }: { icon: IconDef; onPlace: (id: string) => void }) {
@@ -77,16 +112,14 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
   const componentsSection = (
     <>
       {myFlows.length > 0 && (
-        <div>
-          <div className="icon-cat-label">My flows</div>
+        <Section id="my-flows" label="My flows">
           <div className="comp-grid">{myFlows.map(compCell)}</div>
-        </div>
+        </Section>
       )}
       {myComponents.length > 0 && (
-        <div>
-          <div className="icon-cat-label">My components</div>
+        <Section id="my-components" label="My components">
           <div className="comp-grid">{myComponents.map(compCell)}</div>
-        </div>
+        </Section>
       )}
     </>
   );
@@ -105,8 +138,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
   };
 
   const templatesSection = !q || visibleTemplates.length > 0 ? (
-    <div>
-      <div className="icon-cat-label">Flow templates</div>
+    <Section id="flow-templates" label="Flow templates">
       <div className="prompt-list">
         {visibleTemplates.map((t) => (
           <button key={t.id} className="prompt-cell" title={t.description} onClick={() => ctl.placeObjects(t.build())}>
@@ -115,17 +147,19 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
           </button>
         ))}
       </div>
-    </div>
+    </Section>
   ) : null;
 
   const promptsSection = (
-    <div>
-      <div className="icon-cat-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Prompt templates</span>
+    <Section
+      id="prompt-templates"
+      label="Prompt templates"
+      right={
         <button className="chrome-btn" style={{ padding: '2px 8px', fontSize: 11 }} onClick={saveCurrentPrompt}>
           ＋ Save
         </button>
-      </div>
+      }
+    >
       <div className="prompt-list">
         {visiblePrompts.map((p) => (
           <button
@@ -146,7 +180,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
           <div className="icon-empty">No saved prompts yet — select a node and hit ＋ Save.</div>
         )}
       </div>
-    </div>
+    </Section>
   );
 
   const starters = q
@@ -155,8 +189,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
       )
     : PROMPT_STARTERS;
   const startersSection = starters.length > 0 && (
-    <div>
-      <div className="icon-cat-label">Starter prompts</div>
+    <Section id="starter-prompts" label="Starter prompts">
       <div className="prompt-list">
         {starters.map((p) => (
           <button key={p.id} className="prompt-cell" title={p.text} onClick={() => ctl.addPromptSticky(p.text)}>
@@ -167,7 +200,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
           </button>
         ))}
       </div>
-    </div>
+    </Section>
   );
 
   const matches = (i: IconDef) =>
@@ -208,14 +241,13 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
           </div>
         ) : (
           ICON_CATEGORIES.map((cat) => (
-            <div key={cat.id}>
-              <div className="icon-cat-label">{cat.label}</div>
+            <Section key={cat.id} id={`icons-${cat.id}`} label={cat.label}>
               <div className="icon-grid">
                 {cat.icons.map((icon) => (
                   <IconButton key={icon.id} icon={icon} onPlace={place} />
                 ))}
               </div>
-            </div>
+            </Section>
           ))
         )}
       </div>
