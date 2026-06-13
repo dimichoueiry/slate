@@ -1021,11 +1021,27 @@ async function executeData(ctl: AnyObj, node: AnyObj) {
         const imgUrl = findImageUrl(data);
         if (imgUrl) {
           const dataUrl = await fetchImageDataUrl(imgUrl);
-          if (dataUrl) await renderDataImage(ctl, node, dataUrl);
+          if (!dataUrl) throw new Error(`image fetch returned no data for ${imgUrl}`);
+          await renderDataImage(ctl, node, dataUrl);
         }
       }
-    } catch {
-      // image rendering is best-effort — the JSON output already landed
+    } catch (e) {
+      // surface why an image didn't render instead of silently showing only JSON
+      doc.begin();
+      doc.set({
+        id: nid(),
+        type: 'sticky',
+        x: node.x,
+        y: node.y + (node.h ?? 160) + 16,
+        w: 260,
+        h: 80,
+        rotation: 0,
+        z: doc.nextZ(),
+        color: '#FFD9A8',
+        text: '⚠ image: ' + (e instanceof Error ? e.message : String(e)),
+        fontSize: 13,
+      });
+      doc.commit();
     }
   } catch (err) {
     doc.begin();
