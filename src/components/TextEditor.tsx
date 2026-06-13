@@ -22,6 +22,8 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
 
   // reposition while panning/zooming
   useEffect(() => ctl.onCamera(force), [ctl]);
+  // restyle live when the object changes (e.g. text color picked while editing)
+  useUI((s) => s.docVersion);
 
   const doCommit = (text: string) => {
     if (committed.current) return;

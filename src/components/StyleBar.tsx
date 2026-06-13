@@ -1,6 +1,7 @@
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type Routing } from '../types';
+import FloatingPanel from './FloatingPanel';
 
 const FONT_SIZES = [12, 14, 16, 20, 24, 32, 40, 56, 72, 96];
 
@@ -17,13 +18,19 @@ function FontSizeSelect({ value, onPick }: { value: number; onPick: (n: number) 
   );
 }
 
+const FONT_CATS = ['Sans', 'Serif', 'Display', 'Handwriting', 'Mono', 'Retro'] as const;
+
 function FontSelect({ value, onPick }: { value: string; onPick: (id: string) => void }) {
   return (
     <select className="font-select" value={value} onChange={(e) => onPick(e.target.value)}>
-      {FONTS.map((f) => (
-        <option key={f.id} value={f.id} style={{ fontFamily: f.stack }}>
-          {f.label}
-        </option>
+      {FONT_CATS.map((cat) => (
+        <optgroup key={cat} label={cat}>
+          {FONTS.filter((f) => f.cat === cat).map((f) => (
+            <option key={f.id} value={f.id} style={{ fontFamily: f.stack }}>
+              {f.label}
+            </option>
+          ))}
+        </optgroup>
       ))}
     </select>
   );
@@ -110,7 +117,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
     const allOneGroup =
       selObjs.length >= 2 && !!selObjs[0].groupId && selObjs.every((o) => o.groupId === selObjs[0].groupId);
     return (
-      <div className="panel stylebar">
+      <FloatingPanel id="stylebar" className="stylebar">
         {(types.has('stroke') || types.has('text') || types.has('icon')) && (
           <label>
             Color
@@ -130,14 +137,29 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
               />
             </label>
             {types.has('shape') && (
-              <label>
-                Fill
-                <Swatches
-                  allowTransparent
-                  value={(single as any)?.fill ?? ''}
-                  onPick={(c) => ctl.updateSelected({ fill: c })}
-                />
-              </label>
+              <>
+                <label>
+                  Fill
+                  <Swatches
+                    allowTransparent
+                    value={(single as any)?.fill ?? ''}
+                    onPick={(c) => ctl.updateSelected({ fill: c })}
+                  />
+                </label>
+                {ui.editingTextId !== null &&
+                  selObjs.some((o) => o.id === ui.editingTextId && o.type === 'shape') && (
+                    <label
+                      title="Color of the text inside the shape"
+                      onMouseDown={(e) => e.preventDefault() /* keep the text editor focused */}
+                    >
+                      Text
+                      <Swatches
+                        value={single?.type === 'shape' ? single.textColor : ''}
+                        onPick={(c) => ctl.updateSelected({ textColor: c })}
+                      />
+                    </label>
+                  )}
+              </>
             )}
             <label>
               W
@@ -322,14 +344,14 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
         >
           ⊕ Save
         </button>
-      </div>
+      </FloatingPanel>
     );
   }
 
   // ---------- tool contexts ----------
   if (ui.tool === 'pen') {
     return (
-      <div className="panel stylebar">
+      <FloatingPanel id="stylebar" className="stylebar">
         <div className="seg">
           {PEN_TOOLS.map((p) => (
             <button
@@ -384,13 +406,13 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             Auto-shape
           </button>
         </div>
-      </div>
+      </FloatingPanel>
     );
   }
 
   if (['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond'].includes(ui.tool)) {
     return (
-      <div className="panel stylebar">
+      <FloatingPanel id="stylebar" className="stylebar">
         <label>
           Stroke
           <Swatches value={ui.stroke} onPick={(c) => ui.set({ stroke: c })} />
@@ -435,13 +457,13 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             </button>
           </div>
         )}
-      </div>
+      </FloatingPanel>
     );
   }
 
   if (ui.tool === 'text') {
     return (
-      <div className="panel stylebar">
+      <FloatingPanel id="stylebar" className="stylebar">
         <label>
           Font
           <FontSelect value={ui.fontFamily} onPick={(id) => ui.set({ fontFamily: id })} />
@@ -450,13 +472,13 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
         <label>
           <Swatches value={ui.penColor} onPick={(c) => ui.set({ penColor: c })} />
         </label>
-      </div>
+      </FloatingPanel>
     );
   }
 
   if (ui.tool === 'connector' || ui.tool === 'line') {
     return (
-      <div className="panel stylebar">
+      <FloatingPanel id="stylebar" className="stylebar">
         <label>
           Stroke
           <Swatches value={ui.stroke} onPick={(c) => ui.set({ stroke: c })} />
@@ -481,18 +503,18 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
         <span style={{ fontSize: 11, color: 'var(--chrome-dim)' }}>
           {ui.attachEnabled ? 'Endpoints stick to shapes — hold ⌥ to draw free' : 'Endpoints stay exactly where you put them'}
         </span>
-      </div>
+      </FloatingPanel>
     );
   }
 
   if (ui.tool === 'sticky') {
     return (
-      <div className="panel stylebar">
+      <FloatingPanel id="stylebar" className="stylebar">
         <label>
           Color
           <Swatches colors={STICKY_COLORS} value={ui.stickyColor} onPick={(c) => ui.set({ stickyColor: c })} />
         </label>
-      </div>
+      </FloatingPanel>
     );
   }
 

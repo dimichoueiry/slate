@@ -25,7 +25,8 @@ const roughGenerator = rough.generator();
 
 // ---------- image bitmap cache ----------
 
-const bitmapCache = new Map<string, ImageBitmap | 'loading' | 'missing'>();
+type CachedImage = ImageBitmap | HTMLImageElement;
+const bitmapCache = new Map<string, CachedImage | 'loading' | 'missing'>();
 let onBitmapReady: (() => void) | null = null;
 let blobLoader: ((blobId: string) => Promise<Blob | undefined>) | null = null;
 
@@ -37,9 +38,22 @@ export function configureImageLoading(
   onBitmapReady = onReady;
 }
 
-export function getBitmap(blobId: string): ImageBitmap | null {
+async function loadViaImgTag(blob: Blob): Promise<HTMLImageElement> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode();
+  return img;
+}
+
+export function getBitmap(blobId: string): CachedImage | null {
   const hit = bitmapCache.get(blobId);
-  if (hit instanceof ImageBitmap) return hit;
+  if (hit instanceof ImageBitmap || hit instanceof HTMLImageElement) return hit;
   if (hit === 'loading' || hit === 'missing') return null;
   bitmapCache.set(blobId, 'loading');
   blobLoader?.(blobId).then(async (blob) => {
@@ -52,7 +66,15 @@ export function getBitmap(blobId: string): ImageBitmap | null {
       bitmapCache.set(blobId, bmp);
       onBitmapReady?.();
     } catch {
-      bitmapCache.set(blobId, 'missing');
+      try {
+        // Some environments fail createImageBitmap for SVG blobs.
+        // Fallback to decoding via <img> so vector inserts still render.
+        const img = await loadViaImgTag(blob);
+        bitmapCache.set(blobId, img);
+        onBitmapReady?.();
+      } catch {
+        bitmapCache.set(blobId, 'missing');
+      }
     }
   });
   return null;

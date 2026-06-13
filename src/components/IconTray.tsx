@@ -3,6 +3,7 @@ import type { Controller } from '../engine/controller';
 import { ICON_CATEGORIES, type IconDef } from '../engine/icons';
 import { deleteComponent, listComponents, type ComponentDef } from '../store/db';
 import { useUI } from '../store/ui';
+import FloatingPanel from './FloatingPanel';
 
 function IconButton({ icon, onPlace }: { icon: IconDef; onPlace: (id: string) => void }) {
   return (
@@ -76,7 +77,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
   const total = ICON_CATEGORIES.reduce((n, c) => n + c.icons.length, 0);
 
   return (
-    <div className="panel icon-tray">
+    <FloatingPanel id="icontray" className="icon-tray">
       <div className="icon-tray-header">
         <input
           placeholder={`Search ${total} icons…`}
@@ -116,6 +117,6 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
           ))
         )}
       </div>
-    </div>
+    </FloatingPanel>
   );
 }

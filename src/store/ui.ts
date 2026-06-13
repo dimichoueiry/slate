@@ -40,6 +40,8 @@ interface UIState {
   notesOpen: boolean;
   iconTrayOpen: boolean;
   paletteOpen: boolean;
+  localAiModel: string;
+  localAiSystemPrompt: string;
 
   selection: string[];
   editingTextId: string | null;
@@ -111,6 +113,9 @@ export const useUI = create<UIState>((setState) => ({
   notesOpen: false,
   iconTrayOpen: false,
   paletteOpen: false,
+  localAiModel: 'qwen2.5:3b',
+  localAiSystemPrompt:
+    'You are a concise writing assistant for a visual canvas. Keep answers practical and structured.',
 
   selection: [],
   editingTextId: null,

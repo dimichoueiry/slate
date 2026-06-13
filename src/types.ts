@@ -191,34 +191,78 @@ export const STICKY_COLORS = [
   '#F1F0EC',
 ];
 
-export const FONTS: { id: string; label: string; stack: string }[] = [
-  // system stacks
+export interface FontDef {
+  id: string;
+  label: string;
+  stack: string;
+  cat: 'Sans' | 'Serif' | 'Display' | 'Handwriting' | 'Mono' | 'Retro';
+}
+
+export const FONTS: FontDef[] = [
+  // ---- sans ----
   {
     id: 'sans',
     label: 'System Sans',
     stack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+    cat: 'Sans',
   },
-  { id: 'serif', label: 'System Serif', stack: "Georgia, 'Iowan Old Style', 'Times New Roman', serif" },
-  { id: 'elegant', label: 'Didot', stack: "Didot, 'Bodoni 72', 'Playfair Display', Georgia, serif" },
-  { id: 'geo', label: 'Futura', stack: "Futura, 'Avenir Next', 'Century Gothic', sans-serif" },
-  { id: 'hand', label: 'Noteworthy', stack: "Noteworthy, 'Marker Felt', 'Bradley Hand', 'Comic Sans MS', cursive" },
-  { id: 'mono', label: 'SF Mono', stack: "'SF Mono', Menlo, Consolas, 'Courier New', monospace" },
-  // bundled open-source faces (self-hosted, offline)
-  { id: 'inter', label: 'Inter', stack: "'Inter', sans-serif" },
-  { id: 'poppins', label: 'Poppins', stack: "'Poppins', sans-serif" },
-  { id: 'montserrat', label: 'Montserrat', stack: "'Montserrat', sans-serif" },
-  { id: 'space-grotesk', label: 'Space Grotesk', stack: "'Space Grotesk', sans-serif" },
-  { id: 'playfair', label: 'Playfair Display', stack: "'Playfair Display', serif" },
-  { id: 'lora', label: 'Lora', stack: "'Lora', serif" },
-  { id: 'merriweather', label: 'Merriweather', stack: "'Merriweather', serif" },
-  { id: 'bebas', label: 'Bebas Neue', stack: "'Bebas Neue', sans-serif" },
-  { id: 'oswald', label: 'Oswald', stack: "'Oswald', sans-serif" },
-  { id: 'abril', label: 'Abril Fatface', stack: "'Abril Fatface', serif" },
-  { id: 'pacifico', label: 'Pacifico', stack: "'Pacifico', cursive" },
-  { id: 'caveat', label: 'Caveat', stack: "'Caveat', cursive" },
-  { id: 'dancing', label: 'Dancing Script', stack: "'Dancing Script', cursive" },
-  { id: 'marker', label: 'Permanent Marker', stack: "'Permanent Marker', cursive" },
-  { id: 'jetbrains', label: 'JetBrains Mono', stack: "'JetBrains Mono', monospace" },
+  { id: 'inter', label: 'Inter', stack: "'Inter', sans-serif", cat: 'Sans' },
+  { id: 'roboto', label: 'Roboto', stack: "'Roboto', sans-serif", cat: 'Sans' },
+  { id: 'open-sans', label: 'Open Sans', stack: "'Open Sans', sans-serif", cat: 'Sans' },
+  { id: 'lato', label: 'Lato', stack: "'Lato', sans-serif", cat: 'Sans' },
+  { id: 'poppins', label: 'Poppins', stack: "'Poppins', sans-serif", cat: 'Sans' },
+  { id: 'montserrat', label: 'Montserrat', stack: "'Montserrat', sans-serif", cat: 'Sans' },
+  { id: 'raleway', label: 'Raleway', stack: "'Raleway', sans-serif", cat: 'Sans' },
+  { id: 'work-sans', label: 'Work Sans', stack: "'Work Sans', sans-serif", cat: 'Sans' },
+  { id: 'dm-sans', label: 'DM Sans', stack: "'DM Sans', sans-serif", cat: 'Sans' },
+  { id: 'rubik', label: 'Rubik', stack: "'Rubik', sans-serif", cat: 'Sans' },
+  { id: 'nunito', label: 'Nunito', stack: "'Nunito', sans-serif", cat: 'Sans' },
+  { id: 'quicksand', label: 'Quicksand', stack: "'Quicksand', sans-serif", cat: 'Sans' },
+  { id: 'space-grotesk', label: 'Space Grotesk', stack: "'Space Grotesk', sans-serif", cat: 'Sans' },
+  { id: 'josefin', label: 'Josefin Sans', stack: "'Josefin Sans', sans-serif", cat: 'Sans' },
+  { id: 'geo', label: 'Futura', stack: "Futura, 'Avenir Next', 'Century Gothic', sans-serif", cat: 'Sans' },
+  // ---- serif ----
+  { id: 'serif', label: 'System Serif', stack: "Georgia, 'Iowan Old Style', 'Times New Roman', serif", cat: 'Serif' },
+  { id: 'playfair', label: 'Playfair Display', stack: "'Playfair Display', serif", cat: 'Serif' },
+  { id: 'lora', label: 'Lora', stack: "'Lora', serif", cat: 'Serif' },
+  { id: 'merriweather', label: 'Merriweather', stack: "'Merriweather', serif", cat: 'Serif' },
+  { id: 'garamond', label: 'EB Garamond', stack: "'EB Garamond', serif", cat: 'Serif' },
+  { id: 'baskerville', label: 'Libre Baskerville', stack: "'Libre Baskerville', serif", cat: 'Serif' },
+  { id: 'cormorant', label: 'Cormorant Garamond', stack: "'Cormorant Garamond', serif", cat: 'Serif' },
+  { id: 'bitter', label: 'Bitter', stack: "'Bitter', serif", cat: 'Serif' },
+  { id: 'roboto-slab', label: 'Roboto Slab', stack: "'Roboto Slab', serif", cat: 'Serif' },
+  { id: 'elegant', label: 'Didot', stack: "Didot, 'Bodoni 72', 'Playfair Display', Georgia, serif", cat: 'Serif' },
+  // ---- display ----
+  { id: 'bebas', label: 'Bebas Neue', stack: "'Bebas Neue', sans-serif", cat: 'Display' },
+  { id: 'oswald', label: 'Oswald', stack: "'Oswald', sans-serif", cat: 'Display' },
+  { id: 'anton', label: 'Anton', stack: "'Anton', sans-serif", cat: 'Display' },
+  { id: 'archivo-black', label: 'Archivo Black', stack: "'Archivo Black', sans-serif", cat: 'Display' },
+  { id: 'abril', label: 'Abril Fatface', stack: "'Abril Fatface', serif", cat: 'Display' },
+  { id: 'righteous', label: 'Righteous', stack: "'Righteous', sans-serif", cat: 'Display' },
+  { id: 'lobster', label: 'Lobster', stack: "'Lobster', cursive", cat: 'Display' },
+  { id: 'comfortaa', label: 'Comfortaa', stack: "'Comfortaa', sans-serif", cat: 'Display' },
+  { id: 'barlow-cond', label: 'Barlow Condensed', stack: "'Barlow Condensed', sans-serif", cat: 'Display' },
+  // ---- handwriting ----
+  { id: 'caveat', label: 'Caveat', stack: "'Caveat', cursive", cat: 'Handwriting' },
+  { id: 'pacifico', label: 'Pacifico', stack: "'Pacifico', cursive", cat: 'Handwriting' },
+  { id: 'dancing', label: 'Dancing Script', stack: "'Dancing Script', cursive", cat: 'Handwriting' },
+  { id: 'great-vibes', label: 'Great Vibes', stack: "'Great Vibes', cursive", cat: 'Handwriting' },
+  { id: 'shadows', label: 'Shadows Into Light', stack: "'Shadows Into Light', cursive", cat: 'Handwriting' },
+  { id: 'indie', label: 'Indie Flower', stack: "'Indie Flower', cursive", cat: 'Handwriting' },
+  { id: 'kalam', label: 'Kalam', stack: "'Kalam', cursive", cat: 'Handwriting' },
+  { id: 'patrick', label: 'Patrick Hand', stack: "'Patrick Hand', cursive", cat: 'Handwriting' },
+  { id: 'marker', label: 'Permanent Marker', stack: "'Permanent Marker', cursive", cat: 'Handwriting' },
+  { id: 'bangers', label: 'Bangers', stack: "'Bangers', cursive", cat: 'Handwriting' },
+  { id: 'hand', label: 'Noteworthy', stack: "Noteworthy, 'Marker Felt', 'Bradley Hand', 'Comic Sans MS', cursive", cat: 'Handwriting' },
+  // ---- mono ----
+  { id: 'mono', label: 'SF Mono', stack: "'SF Mono', Menlo, Consolas, 'Courier New', monospace", cat: 'Mono' },
+  { id: 'jetbrains', label: 'JetBrains Mono', stack: "'JetBrains Mono', monospace", cat: 'Mono' },
+  { id: 'fira-code', label: 'Fira Code', stack: "'Fira Code', monospace", cat: 'Mono' },
+  { id: 'space-mono', label: 'Space Mono', stack: "'Space Mono', monospace", cat: 'Mono' },
+  { id: 'courier-prime', label: 'Courier Prime', stack: "'Courier Prime', monospace", cat: 'Mono' },
+  // ---- retro ----
+  { id: 'press-start', label: 'Press Start 2P', stack: "'Press Start 2P', monospace", cat: 'Retro' },
+  { id: 'vt323', label: 'VT323', stack: "'VT323', monospace", cat: 'Retro' },
 ];
 
 export function fontStack(id?: string): string {

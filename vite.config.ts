@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import slatePersist from './vite-slate-persist';
 
 export default defineConfig({
+  // fixed port so the browser origin (and its IndexedDB) never changes
+  server: { port: 5180, strictPort: true },
   plugins: [
     react(),
+    slatePersist(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {

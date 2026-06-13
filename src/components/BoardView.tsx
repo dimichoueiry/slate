@@ -175,6 +175,11 @@ export default function BoardView({ boardId }: { boardId: string }) {
         useUI.getState().set({ paletteOpen: !useUI.getState().paletteOpen });
         return;
       }
+      if (mod && k === 'j') {
+        e.preventDefault();
+        useUI.getState().set({ notesOpen: true });
+        return;
+      }
 
       if (e.code === 'Space') {
         ctl.setSpaceDown(true);
@@ -390,7 +395,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
           <ZoomBar ctl={ctl} />
           <Minimap ctl={ctl} />
           {editingTextId && <TextEditor key={editingTextId} ctl={ctl} objectId={editingTextId} />}
-          <NotesPanel boardId={boardId} />
+          <NotesPanel boardId={boardId} ctl={ctl} />
           <IconTray ctl={ctl} />
           <CommandPalette ctl={ctl} boardId={boardId} />
           {ctl.doc.objects.size === 0 && (

@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { db, updateBoardMeta } from '../store/db';
 import { useUI } from '../store/ui';
+import type { Controller } from '../engine/controller';
+import LocalAiPanel from './LocalAiPanel';
 
 /**
  * Collapsible markdown notes for the current board (Eraser-style side panel).
  * Notes autosave to the board record, debounced.
  */
-export default function NotesPanel({ boardId }: { boardId: string }) {
+export default function NotesPanel({ boardId, ctl }: { boardId: string; ctl: Controller }) {
   const open = useUI((s) => s.notesOpen);
   const set = useUI((s) => s.set);
   const [text, setText] = useState<string | null>(null);
-  const [mode, setMode] = useState<'write' | 'preview'>('write');
+  const [mode, setMode] = useState<'write' | 'preview' | 'ai'>('write');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -54,6 +56,9 @@ export default function NotesPanel({ boardId }: { boardId: string }) {
           <button className={mode === 'preview' ? 'active' : ''} onClick={() => setMode('preview')}>
             Preview
           </button>
+          <button className={mode === 'ai' ? 'active' : ''} onClick={() => setMode('ai')}>
+            AI
+          </button>
         </div>
         <button className="chrome-btn" title="Close notes" onClick={() => set({ notesOpen: false })}>
           ✕
@@ -68,8 +73,17 @@ export default function NotesPanel({ boardId }: { boardId: string }) {
           onChange={(e) => save(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
         />
-      ) : (
+      ) : mode === 'preview' ? (
         <div className="notes-preview" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <LocalAiPanel
+          ctl={ctl}
+          onInsertIntoNote={(value) => {
+            const base = text?.trim() ? `${text}\n\n` : '';
+            save(base + value.trim());
+            setMode('write');
+          }}
+        />
       )}
     </div>
   );
