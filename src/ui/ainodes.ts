@@ -8,6 +8,7 @@ import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
 import { lineHeight, textBlockSize } from '../engine/text';
+import { getBasePrompt } from '../ai/basePrompts';
 
 type AnyObj = Record<string, any>;
 
@@ -385,9 +386,7 @@ async function execute(ctl: AnyObj, node: AnyObj) {
       [
         {
           role: 'system',
-          content:
-            'You are a function node on a visual whiteboard. Use the INPUTS (text and/or attached images) to produce what the INSTRUCTION asks for. Reply with plain text only (or the exact JSON shape when versions are requested) — no markdown, no preamble. Keep it concise enough to read on a sticky note unless asked otherwise.' +
-            brandTextAddon(),
+          content: getBasePrompt('ai') + brandTextAddon(),
         },
         imageInputs.length
           ? {
@@ -512,8 +511,7 @@ async function executeWeb(ctl: AnyObj, node: AnyObj) {
       [
         {
           role: 'system',
-          content:
-            'You are a research node on a whiteboard. You receive scraped web page content and an instruction. Produce the requested output as plain text — no markdown fences, no preamble. Be concise and concrete; base everything only on the provided content.',
+          content: getBasePrompt('web'),
         },
         { role: 'user', content: `SCRAPED CONTENT:\n${corpus}\n\nINSTRUCTION: ${instruction}` },
       ],
@@ -717,8 +715,7 @@ async function executeFix(ctl: AnyObj, node: AnyObj) {
       [
         {
           role: 'system',
-          content:
-            'You are a prompt engineer. Rewrite the user\'s prompt into a clearer, more specific, higher-quality prompt: add helpful structure, constraints, role, and desired output format where useful, but keep the original intent. Reply with ONLY the improved prompt — no commentary, no quotes.',
+          content: getBasePrompt('fix'),
         },
         { role: 'user', content: source },
       ],

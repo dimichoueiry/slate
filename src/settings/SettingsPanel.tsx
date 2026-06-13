@@ -18,6 +18,13 @@ import {
 import type { BrandKit } from '../types';
 import { listBrandKits, getDefaultKitId, setDefaultKitId } from '../store/db';
 import { BrandKitEditor, blankKit } from '../components/BrandKit';
+import {
+  BASE_PROMPT_LABELS,
+  DEFAULT_BASE_PROMPTS,
+  getAllBasePrompts,
+  setBasePrompt,
+  type PromptNode,
+} from '../ai/basePrompts';
 
 interface ModelInfo {
   id: string;
@@ -95,6 +102,8 @@ const CSS = `
 .settings-kit button:disabled{opacity:.4;cursor:default}
 .settings-newkit{border:1px dashed rgba(255,255,255,.2);background:transparent;color:#9a9aa2;border-radius:8px;padding:7px;font-size:12px;cursor:pointer}
 .settings-newkit:hover{border-color:#3c78ff;color:#fff}
+.slate-settings textarea{width:100%;box-sizing:border-box;background:rgba(255,255,255,.07);border:none;border-radius:8px;color:#e8e8ea;padding:8px 10px;font:12px/1.5 inherit;outline:none;resize:vertical}
+.slate-settings textarea:focus{box-shadow:0 0 0 1.5px #3c78ff}
 `;
 
 export default function SettingsPanel() {
@@ -112,6 +121,8 @@ export default function SettingsPanel() {
   const [kits, setKits] = useState<BrandKit[]>([]);
   const [defaultKit, setDefaultKit] = useState<string | null>(null);
   const [editingKit, setEditingKit] = useState<BrandKit | null>(null);
+  const [basePrompts, setBasePrompts] = useState<Record<PromptNode, string>>(DEFAULT_BASE_PROMPTS);
+  const [promptsOpen, setPromptsOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -125,6 +136,7 @@ export default function SettingsPanel() {
     setOllamaModelState(getOllamaModel());
     void listBrandKits().then(setKits);
     setDefaultKit(getDefaultKitId());
+    setBasePrompts(getAllBasePrompts());
     fetchModels()
       .then((m) => {
         setModels(m);
@@ -258,6 +270,44 @@ export default function SettingsPanel() {
               {kits.length === 0 && <div style={{ color: '#8d8d96', fontSize: 12 }}>No brand kits yet.</div>}
               <button className="settings-newkit" onClick={() => setEditingKit(blankKit())}>＋ New brand kit</button>
             </div>
+
+            <h3 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setPromptsOpen((o) => !o)}>
+              <span>{promptsOpen ? '▾' : '▸'} Node base prompts</span>
+            </h3>
+            {promptsOpen && (
+              <div className="settings-prompts">
+                <div style={{ color: '#8d8d96', fontSize: 11, marginBottom: 6 }}>
+                  Tune the base system prompt for each free-form node type. Brand voice is still appended on top.
+                </div>
+                {(Object.keys(BASE_PROMPT_LABELS) as PromptNode[]).map((n) => (
+                  <div key={n} style={{ marginBottom: 8 }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{BASE_PROMPT_LABELS[n]}</span>
+                      {basePrompts[n] !== DEFAULT_BASE_PROMPTS[n] && (
+                        <button
+                          style={{ border: 'none', background: 'transparent', color: '#7aa5ff', cursor: 'pointer', fontSize: 11 }}
+                          onClick={() => {
+                            setBasePrompt(n, null);
+                            setBasePrompts((p) => ({ ...p, [n]: DEFAULT_BASE_PROMPTS[n] }));
+                          }}
+                        >
+                          reset
+                        </button>
+                      )}
+                    </label>
+                    <textarea
+                      style={{ minHeight: 64 }}
+                      value={basePrompts[n]}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setBasePrompts((p) => ({ ...p, [n]: v }));
+                        setBasePrompt(n, v);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="row">
               {savedKey && (
