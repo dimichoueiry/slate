@@ -131,4 +131,133 @@ export const TEMPLATES: TemplateDef[] = [
       return [head, i1, i2, i3, node, connect(i1, node), connect(i2, node), connect(i3, node)];
     },
   },
+  {
+    id: 'linkedin-brand',
+    name: 'LinkedIn personal brand',
+    description: 'Angle → research → post draft → carousel cover (on-brand).',
+    build: () => {
+      const head = label(0, 0, 'LinkedIn personal brand');
+      const angle = sticky(0, 60, 'your angle or topic for this week', '#A8D8EA', 220, 110);
+      const research = sticky(COL, 60, 'research: what is resonating on LinkedIn about this topic right now — angles, data, contrarian takes', '#FFE066', 250, 170);
+      const mid = sticky(COL * 2, 60, '', '#F1F0EC', 240, 150);
+      const draft = sticky(COL * 3, 60, 'ai: write a first-person LinkedIn post — strong hook line, one idea, short lines, a little contrarian, end with a question. No hashtags.', '#FFE066', 250, 190);
+      const post = sticky(COL * 4, 60, '', '#B5EAD7', 250, 200);
+      const cover = sticky(COL * 4, 280, 'img: a clean, minimal LinkedIn carousel cover for this post', '#E2C2FF', 250, 130);
+      return [
+        head,
+        angle,
+        research,
+        mid,
+        draft,
+        post,
+        cover,
+        connect(angle, research),
+        connect(research, mid),
+        connect(mid, draft),
+        connect(draft, post),
+        connect(post, cover),
+      ];
+    },
+  },
+  {
+    id: 'instagram-growth',
+    name: 'Grow on Instagram',
+    description: 'Niche → trends → 5 post/Reel ideas → on-brand visual.',
+    build: () => {
+      const head = label(0, 0, 'Grow on Instagram');
+      const niche = sticky(0, 60, 'your niche / account theme', '#A8D8EA', 220, 110);
+      const trends = sticky(COL, 60, 'research: trending Instagram formats, hooks, and Reel ideas in this niche right now', '#FFE066', 250, 160);
+      const mid = sticky(COL * 2, 60, '', '#F1F0EC', 240, 150);
+      const ideas = sticky(COL * 3, 60, 'ai: give 5 post/Reel ideas — each with a scroll-stopping hook, a 1-line caption, and 8 relevant hashtags', '#FFE066', 250, 190);
+      const out = sticky(COL * 4, 60, '', '#B5EAD7', 250, 200);
+      const visual = sticky(COL * 4, 280, 'img: an on-brand Instagram post visual for the first idea', '#E2C2FF', 250, 130);
+      return [
+        head,
+        niche,
+        trends,
+        mid,
+        ideas,
+        out,
+        visual,
+        connect(niche, trends),
+        connect(trends, mid),
+        connect(mid, ideas),
+        connect(ideas, out),
+        connect(out, visual),
+      ];
+    },
+  },
+  {
+    id: 'blog-writer',
+    name: 'Blog post writer',
+    description: 'Topic → research → outline → full SEO-aware draft.',
+    build: () => {
+      const head = label(0, 0, 'Blog post writer');
+      const topic = sticky(0, 60, 'blog topic + target keyword', '#A8D8EA', 220, 110);
+      const research = sticky(COL, 60, 'research: key facts, stats, subtopics, and search intent for this topic', '#FFE066', 250, 160);
+      const mid = sticky(COL * 2, 60, '', '#F1F0EC', 240, 150);
+      const outline = sticky(COL * 3, 60, 'ai: build a blog outline — title options, H2 sections, and one-line notes per section, SEO-aware', '#FFE066', 250, 170);
+      const outlineOut = sticky(COL * 4, 60, '', '#F1F0EC', 240, 170);
+      const draft = sticky(COL * 5, 60, 'ai: write the full blog post from the outline — clear intro, the H2 sections, and a takeaways box', '#FFE066', 250, 190);
+      const final = sticky(COL * 6, 60, '', '#B5EAD7', 260, 220);
+      return [
+        head,
+        topic,
+        research,
+        mid,
+        outline,
+        outlineOut,
+        draft,
+        final,
+        connect(topic, research),
+        connect(research, mid),
+        connect(mid, outline),
+        connect(outline, outlineOut),
+        connect(outlineOut, draft),
+        connect(draft, final),
+      ];
+    },
+  },
+  {
+    id: 'twitter-thread',
+    name: 'X / Twitter thread',
+    description: 'Idea → research → a punchy 7-tweet thread.',
+    build: () => {
+      const head = label(0, 0, 'X / Twitter thread');
+      const idea = sticky(0, 60, 'your thread idea or claim', '#A8D8EA', 220, 110);
+      const research = sticky(COL, 60, 'research: supporting facts, examples, and counterpoints for this claim', '#FFE066', 250, 160);
+      const mid = sticky(COL * 2, 60, '', '#F1F0EC', 240, 150);
+      const thread = sticky(COL * 3, 60, 'ai: write a 7-tweet thread — tweet 1 is a bold hook, each tweet ≤270 chars, last tweet a CTA. Number them.', '#FFE066', 250, 190);
+      const out = sticky(COL * 4, 60, '', '#B5EAD7', 250, 220);
+      return [head, idea, research, mid, thread, out, connect(idea, research), connect(research, mid), connect(mid, thread), connect(thread, out)];
+    },
+  },
+  {
+    id: 'youtube-script',
+    name: 'YouTube video script',
+    description: 'Topic → research → title + hook + full script.',
+    build: () => {
+      const head = label(0, 0, 'YouTube video script');
+      const topic = sticky(0, 60, 'video topic / working title', '#A8D8EA', 220, 110);
+      const research = sticky(COL, 60, 'research: what viewers want to know about this topic — angles, common questions, examples', '#FFE066', 250, 160);
+      const mid = sticky(COL * 2, 60, '', '#F1F0EC', 240, 150);
+      const script = sticky(COL * 3, 60, 'ai: write a YouTube script — 3 clickable title options, a 15-second hook, then a structured script with sections', '#FFE066', 250, 190);
+      const out = sticky(COL * 4, 60, '', '#B5EAD7', 260, 220);
+      const thumb = sticky(COL * 4, 300, 'img: a bold, high-contrast YouTube thumbnail concept for this video', '#E2C2FF', 250, 130);
+      return [
+        head,
+        topic,
+        research,
+        mid,
+        script,
+        out,
+        thumb,
+        connect(topic, research),
+        connect(research, mid),
+        connect(mid, script),
+        connect(script, out),
+        connect(out, thumb),
+      ];
+    },
+  },
 ];
