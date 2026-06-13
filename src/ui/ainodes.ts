@@ -490,7 +490,7 @@ async function executeWeb(ctl: AnyObj, node: AnyObj) {
 
   const instruction =
     promptSource(node).replace(RUN, '').replace(URL_RE, '').trim() ||
-    'Summarize into a clear description of the business: what they do, who they serve, and their key offerings.';
+    'Summarize this page: what it is, the key points, and who it is for.';
 
   try {
     const res = await fetch('/api/scrape', {
