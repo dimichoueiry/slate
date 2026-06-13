@@ -10,8 +10,9 @@ import { lineHeight, textBlockSize } from '../engine/text';
 
 type AnyObj = Record<string, any>;
 
-const RUN = /^(▶ ?)?(ai|img):/i; // text nodes (ai:) and image nodes (img:)
+const RUN = /^(▶ ?)?(ai|img|web):/i; // ai: text · img: image · web: scrape + summarize
 const IMG = /^(▶ ?)?img:/i;
+const WEB = /^(▶ ?)?web:/i;
 const RAW = /^(\s*)ai:/i;
 const nid = () => Math.random().toString(36).slice(2, 10);
 const last = { id: '', t: 0 };
@@ -145,7 +146,9 @@ export function hiddenNodeAt(ctl: AnyObj, e: { clientX: number; clientY: number 
 
 /** Public runner used by the floating run buttons. */
 export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
-  if (IMG.test(promptSource(node).split('\n')[0])) return executeImage(ctl, node);
+  const head = promptSource(node).split('\n')[0];
+  if (IMG.test(head)) return executeImage(ctl, node);
+  if (WEB.test(head)) return executeWeb(ctl, node);
   return execute(ctl, node);
 }
 
@@ -264,6 +267,108 @@ async function execute(ctl: AnyObj, node: AnyObj) {
   }
 }
 
+
+const URL_RE = /https?:\/\/[^\s)<>"']+/gi;
+
+async function executeWeb(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const conns = doc.all().filter((c: AnyObj) => c.type === 'connector');
+
+  // collect URLs from wired text inputs + the node's own text
+  const sources = [...gatherInputs(ctl, node).map((o: AnyObj) => o.text), promptSource(node)];
+  const urls = Array.from(new Set(sources.join('\n').match(URL_RE) ?? [])).slice(0, 20);
+
+  let outIds: string[] = conns
+    .filter((c: AnyObj) => c.from?.objectId === node.id && c.to?.objectId && c.to.objectId !== node.id)
+    .map((c: AnyObj) => c.to.objectId)
+    .filter((id: string) => {
+      const t = doc.get(id);
+      return t && (t.type === 'sticky' || t.type === 'text' || t.type === 'shape');
+    });
+
+  doc.begin();
+  if (outIds.length === 0) {
+    const out: AnyObj = {
+      id: nid(),
+      type: 'sticky',
+      x: node.x + (node.w ?? 200) + 80,
+      y: node.y,
+      w: 260,
+      h: Math.max(160, node.h ?? 160),
+      rotation: 0,
+      z: doc.nextZ(),
+      color: '#A8D8EA',
+      text: '',
+      fontSize: 15,
+    };
+    doc.set(out);
+    doc.set({
+      id: nid(),
+      type: 'connector',
+      x: node.x,
+      y: node.y,
+      rotation: 0,
+      z: doc.nextZ(),
+      from: { objectId: node.id },
+      to: { objectId: out.id },
+      routing: 'curved',
+      stroke: '#868e96',
+      strokeWidth: 2,
+      dash: 'dashed',
+      startArrow: 'none',
+      endArrow: 'triangle',
+      opacity: 1,
+    });
+    outIds = [out.id];
+  }
+
+  if (urls.length === 0) {
+    for (const id of outIds) setText(ctl, id, '⚠ No links found — wire in a sticky/field containing a URL, or put the URL in this node.');
+    doc.commit();
+    return;
+  }
+  for (const id of outIds) setText(ctl, id, `⏳ scraping ${urls.length} link${urls.length === 1 ? '' : 's'}…`);
+  doc.commit();
+
+  const instruction =
+    promptSource(node).replace(RUN, '').replace(URL_RE, '').trim() ||
+    'Summarize into a clear description of the business: what they do, who they serve, and their key offerings.';
+
+  try {
+    const res = await fetch('/api/scrape', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `scrape failed (${res.status})`);
+    const pages: { url: string; raw_content?: string }[] = data?.results ?? [];
+    if (pages.length === 0) throw new Error('No content extracted from those links.');
+    // cap content per page so prompts stay sane
+    const corpus = pages
+      .map((p) => `### ${p.url}\n${(p.raw_content ?? '').slice(0, 6000)}`)
+      .join('\n\n');
+
+    const result = await chat(
+      [
+        {
+          role: 'system',
+          content:
+            'You are a research node on a whiteboard. You receive scraped web page content and an instruction. Produce the requested output as plain text — no markdown fences, no preamble. Be concise and concrete; base everything only on the provided content.',
+        },
+        { role: 'user', content: `SCRAPED CONTENT:\n${corpus}\n\nINSTRUCTION: ${instruction}` },
+      ],
+      { temperature: 0.4, maxTokens: 2000 }
+    );
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, result.trim() || '(empty result)');
+    doc.commit();
+  } catch (err) {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
+    doc.commit();
+  }
+}
 
 function inputObjects(ctl: AnyObj, node: AnyObj): AnyObj[] {
   return ctl.doc
