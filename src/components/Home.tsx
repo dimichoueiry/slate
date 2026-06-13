@@ -7,27 +7,78 @@ import {
   deleteProject,
   duplicateBoard,
   listBoards,
+  listBrandKits,
   listProjects,
   renameProject,
+  saveBrandKit,
+  setDefaultKitId,
+  setProjectKit,
   updateBoardMeta,
 } from '../store/db';
 import { importSlateFile } from '../export/export';
 import { openBoard } from '../App';
+import { BRAND_PRESETS } from '../engine/brandPresets';
+import { nanoid } from 'nanoid';
+import type { BrandKit } from '../types';
+
+const ONBOARD_KEY = 'slate-onboarded';
 
 export default function Home() {
   const [boards, setBoards] = useState<BoardMeta[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [kits, setKits] = useState<BrandKit[]>([]);
+  const [onboarded, setOnboarded] = useState(() => {
+    try {
+      return localStorage.getItem(ONBOARD_KEY) === '1';
+    } catch {
+      return true;
+    }
+  });
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = () => {
     void listBoards().then(setBoards);
     void listProjects().then(setProjects);
+    void listBrandKits().then(setKits);
   };
   useEffect(() => {
     refresh();
     const t = setTimeout(refresh, 1200); // catch async thumbnails
     return () => clearTimeout(t);
   }, []);
+
+  const dismissOnboard = () => {
+    try {
+      localStorage.setItem(ONBOARD_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setOnboarded(true);
+  };
+
+  const pickWorkspace = async (presetId: string | null) => {
+    if (presetId) {
+      const p = BRAND_PRESETS.find((x) => x.id === presetId);
+      if (p) {
+        const kit: BrandKit = {
+          id: nanoid(10),
+          name: p.name,
+          voice: p.voice,
+          audience: p.audience,
+          donts: p.donts,
+          palette: p.palette,
+          fontFamily: 'sans',
+          createdAt: Date.now(),
+        };
+        await saveBrandKit(kit);
+        setDefaultKitId(kit.id);
+      }
+    }
+    dismissOnboard();
+    refresh();
+  };
+
+  const showOnboarding = !onboarded && kits.length === 0;
 
   const onNew = async (projectId: string | null = null) => {
     const b = await createBoard('Untitled board', projectId);
@@ -77,6 +128,26 @@ export default function Home() {
         />
       </p>
 
+      {showOnboarding && (
+        <div className="onboard-card">
+          <div className="onboard-title">What will you use Slate for?</div>
+          <div className="onboard-sub">
+            We'll set a brand voice so AI nodes match your style. You can change or add more anytime in ⚙ Settings.
+          </div>
+          <div className="onboard-presets">
+            {BRAND_PRESETS.map((p) => (
+              <button key={p.id} className="onboard-preset" onClick={() => void pickWorkspace(p.id)}>
+                <span className="oemoji">{p.emoji}</span>
+                <span className="oname">{p.name}</span>
+              </button>
+            ))}
+          </div>
+          <button className="onboard-skip" onClick={() => void pickWorkspace(null)}>
+            Skip for now
+          </button>
+        </div>
+      )}
+
       {/* standalone / unfiled boards */}
       <div className="board-grid">
         <button className="new-board" onClick={() => onNew(null)}>
@@ -95,6 +166,22 @@ export default function Home() {
             <div className="project-header">
               <span className="project-name">📁 {p.name}</span>
               <span className="project-count">{inProject.length}</span>
+              <select
+                className="move-select"
+                title="Default brand kit for this project"
+                value={p.brandKitId ?? ''}
+                onChange={async (e) => {
+                  await setProjectKit(p.id, e.target.value || null);
+                  refresh();
+                }}
+              >
+                <option value="">⬡ Brand: default</option>
+                {kits.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    ⬡ {k.name}
+                  </option>
+                ))}
+              </select>
               <button
                 className="proj-act"
                 title="Rename project"

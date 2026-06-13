@@ -815,6 +815,44 @@ button { font-family: inherit; }
 .new-board .plus { font-size: 28px; }
 .new-board.small { min-height: 120px; }
 
+.onboard-card {
+  background: linear-gradient(135deg, #1a1a22, #16161c);
+  border: 1px solid #2a2a31;
+  border-radius: 16px;
+  padding: 22px 24px;
+  margin-bottom: 26px;
+}
+.onboard-title { font-size: 18px; font-weight: 700; color: #ececf0; }
+.onboard-sub { font-size: 13px; color: #8d8d96; margin: 6px 0 16px; max-width: 560px; }
+.onboard-presets { display: flex; flex-wrap: wrap; gap: 10px; }
+.onboard-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+  flex: 1 1 0;
+  border: 1px solid #2a2a31;
+  background: #1f1f26;
+  color: #ececf0;
+  border-radius: 12px;
+  padding: 16px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.onboard-preset:hover { border-color: var(--accent); background: #23232c; }
+.onboard-preset .oemoji { font-size: 24px; }
+.onboard-skip {
+  margin-top: 12px;
+  border: none;
+  background: transparent;
+  color: #8d8d96;
+  font-size: 12px;
+  cursor: pointer;
+}
+.onboard-skip:hover { color: #ececf0; }
+
 .project-section { margin-top: 30px; }
 .project-header {
   display: flex;

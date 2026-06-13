@@ -172,6 +172,7 @@ export interface Project {
   id: string;
   name: string;
   createdAt: number;
+  brandKitId?: string | null; // default brand kit for boards in this project
 }
 
 /** A reusable brand kit applied to AI nodes on a board. */

@@ -13,6 +13,7 @@ import {
   updateBoardMeta,
 } from '../store/db';
 import { nanoid } from 'nanoid';
+import { BRAND_PRESETS } from '../engine/brandPresets';
 
 const CSS = `
 .brand-pill{display:flex;align-items:center;gap:5px;border:none;background:rgba(255,255,255,.08);color:#e8e8ea;border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap}
@@ -99,6 +100,27 @@ export function BrandKitEditor({ kit, onClose, afterChange }: { kit: BrandKit; o
       <div className="brand-modal-bg" onPointerDown={onClose}>
         <div className="brand-modal" onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <h3>Brand kit</h3>
+          <label>Start from a preset</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {BRAND_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                style={{ flex: '1 1 40%' }}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    name: draft.name === 'New brand' || !draft.name ? p.name : draft.name,
+                    voice: p.voice,
+                    audience: p.audience,
+                    donts: p.donts,
+                    palette: p.palette.length ? p.palette : draft.palette,
+                  })
+                }
+              >
+                {p.emoji} {p.name}
+              </button>
+            ))}
+          </div>
           <label>Name</label>
           <input type="text" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           <label>Voice & tone</label>

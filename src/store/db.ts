@@ -182,6 +182,10 @@ export async function renameProject(id: string, name: string) {
   await db.projects.update(id, { name });
 }
 
+export async function setProjectKit(id: string, brandKitId: string | null) {
+  await db.projects.update(id, { brandKitId });
+}
+
 /** Delete a project; its boards become standalone (unfiled), not deleted. */
 export async function deleteProject(id: string) {
   await db.transaction('rw', db.projects, db.boards, async () => {
@@ -230,11 +234,21 @@ export function setDefaultKitId(id: string | null) {
   }
 }
 
-/** Resolve the active kit for a board: its own kit, else the default. */
+/**
+ * Resolve the active kit for a board with precedence:
+ * board override → project default → global default.
+ * (null at any level means "explicitly none" and stops the chain.)
+ */
 export async function resolveBoardKit(meta: BoardMeta | undefined): Promise<BrandKit | undefined> {
-  if (meta?.brandKitId === null) return undefined; // explicitly "None"
-  const id = meta?.brandKitId ?? getDefaultKitId();
-  return getBrandKit(id);
+  if (!meta) return undefined;
+  if (meta.brandKitId === null) return undefined; // board says: no brand
+  if (meta.brandKitId) return getBrandKit(meta.brandKitId); // board override
+  if (meta.projectId) {
+    const proj = await db.projects.get(meta.projectId);
+    if (proj?.brandKitId === null) return undefined; // project says: no brand
+    if (proj?.brandKitId) return getBrandKit(proj.brandKitId); // project default
+  }
+  return getBrandKit(getDefaultKitId());
 }
 
 export async function putBlob(blob: Blob): Promise<string> {
