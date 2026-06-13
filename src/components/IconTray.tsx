@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { ICON_CATEGORIES, type IconDef } from '../engine/icons';
+import { isAINode } from '../ui/ainodes';
 import { TEMPLATES } from '../engine/templates';
 import { deleteComponent, deletePrompt, listComponents, listPrompts, savePrompt, type ComponentDef, type PromptDef } from '../store/db';
 import { useUI } from '../store/ui';
@@ -51,31 +52,42 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
   const place = (id: string) => ctl.addIcon(id);
   const visibleComps = q ? comps.filter((c) => c.name.toLowerCase().includes(q)) : comps;
 
-  const componentsSection = visibleComps.length > 0 && (
-    <div>
-      <div className="icon-cat-label">My components</div>
-      <div className="comp-grid">
-        {visibleComps.map((c) => (
-          <button
-            key={c.id}
-            className="comp-cell"
-            title={`${c.name} — right-click to delete`}
-            onClick={() => ctl.placeComponent(c)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              if (confirm(`Delete component “${c.name}”?`)) {
-                void deleteComponent(c.id).then(() =>
-                  set({ componentsVersion: useUI.getState().componentsVersion + 1 })
-                );
-              }
-            }}
-          >
-            {c.thumb ? <img src={c.thumb} alt={c.name} /> : <span>{c.name}</span>}
-            <span className="comp-name">{c.name}</span>
-          </button>
-        ))}
-      </div>
-    </div>
+  const isFlow = (c: ComponentDef) => c.objects.some((o) => isAINode(o));
+  const compCell = (c: ComponentDef) => (
+    <button
+      key={c.id}
+      className="comp-cell"
+      title={`${c.name} — right-click to delete`}
+      onClick={() => ctl.placeComponent(c)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (confirm(`Delete “${c.name}”?`)) {
+          void deleteComponent(c.id).then(() => set({ componentsVersion: useUI.getState().componentsVersion + 1 }));
+        }
+      }}
+    >
+      {c.thumb ? <img src={c.thumb} alt={c.name} /> : <span>{c.name}</span>}
+      <span className="comp-name">{c.name}</span>
+    </button>
+  );
+  const myFlows = visibleComps.filter(isFlow);
+  const myComponents = visibleComps.filter((c) => !isFlow(c));
+
+  const componentsSection = (
+    <>
+      {myFlows.length > 0 && (
+        <div>
+          <div className="icon-cat-label">My flows</div>
+          <div className="comp-grid">{myFlows.map(compCell)}</div>
+        </div>
+      )}
+      {myComponents.length > 0 && (
+        <div>
+          <div className="icon-cat-label">My components</div>
+          <div className="comp-grid">{myComponents.map(compCell)}</div>
+        </div>
+      )}
+    </>
   );
 
   const visiblePrompts = q ? prompts.filter((p) => p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)) : prompts;
