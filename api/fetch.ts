@@ -14,6 +14,7 @@ const BLOCKED_HOST =
 
 const ALLOWED_METHODS = /^(GET|POST|PUT|PATCH|DELETE)$/;
 const MAX_BYTES = 200_000;
+const MAX_IMG_BYTES = 6_000_000;
 const TIMEOUT_MS = 12_000;
 
 /** Framework-agnostic core: proxy one HTTP request and return its (capped) body. */
@@ -64,9 +65,18 @@ export async function proxyFetch(input: {
       redirect: 'follow',
     });
     const ct = r.headers.get('content-type') || '';
-    const raw = await r.text();
-    const capped = raw.length > MAX_BYTES ? raw.slice(0, MAX_BYTES) : raw;
+    const ab = await r.arrayBuffer();
 
+    // images (and other binary) come back base64 so the canvas can render them
+    if (/^image\//i.test(ct)) {
+      if (ab.byteLength > MAX_IMG_BYTES) {
+        return { status: 200, body: { status: r.status, contentType: ct, error: 'Image is too large to render (over 6 MB).' } };
+      }
+      return { status: 200, body: { status: r.status, contentType: ct, image: true, base64: Buffer.from(ab).toString('base64') } };
+    }
+
+    const raw = new TextDecoder('utf-8').decode(ab);
+    const capped = raw.length > MAX_BYTES ? raw.slice(0, MAX_BYTES) : raw;
     let json: unknown;
     let isJson = false;
     if (ct.includes('json') || /^\s*[[{]/.test(capped)) {

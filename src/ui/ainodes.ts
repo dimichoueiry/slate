@@ -1013,6 +1013,20 @@ async function executeData(ctl: AnyObj, node: AnyObj) {
     doc.begin();
     for (const id of outIds) setText(ctl, id, out);
     doc.commit();
+    // if the response *is* an image, or *contains* an image URL, render it on the canvas
+    try {
+      if (data.image && data.base64) {
+        await renderDataImage(ctl, node, `data:${data.contentType || 'image/png'};base64,${data.base64}`);
+      } else {
+        const imgUrl = findImageUrl(data);
+        if (imgUrl) {
+          const dataUrl = await fetchImageDataUrl(imgUrl);
+          if (dataUrl) await renderDataImage(ctl, node, dataUrl);
+        }
+      }
+    } catch {
+      // image rendering is best-effort — the JSON output already landed
+    }
   } catch (err) {
     doc.begin();
     for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
@@ -1027,6 +1041,82 @@ function formatFetchResult(d: AnyObj): string {
   if (body.length > 8000) body = body.slice(0, 8000) + `\n… (truncated, ${body.length} chars)`;
   else if (d.truncated) body += '\n… (response truncated by server)';
   return `${head}\n${body}`.trim();
+}
+
+const IMG_URL_RE = /https?:\/\/[^\s"'<>)]+\.(?:png|jpe?g|gif|webp|avif|bmp|svg)(?:\?[^\s"'<>)]*)?/i;
+
+/** Find the first image URL in a fetch result (deep-scans JSON, or matches raw text). */
+function findImageUrl(d: AnyObj): string | null {
+  if (typeof d.text === 'string') {
+    const m = d.text.match(IMG_URL_RE);
+    return m ? m[0] : null;
+  }
+  if (d.json !== undefined) {
+    let found: string | null = null;
+    const walk = (v: unknown) => {
+      if (found) return;
+      if (typeof v === 'string') {
+        const m = v.match(IMG_URL_RE);
+        if (m) found = m[0];
+      } else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+    };
+    walk(d.json);
+    return found;
+  }
+  return null;
+}
+
+/** Fetch an image URL through the proxy and return it as a data URL (avoids CORS). */
+async function fetchImageDataUrl(url: string): Promise<string | null> {
+  const res = await fetch('/api/fetch', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const d = await res.json();
+  if (res.ok && d.image && d.base64) return `data:${d.contentType || 'image/png'};base64,${d.base64}`;
+  return null;
+}
+
+/** Render a data URL into the data node's wired image output (reuses or spawns one). */
+async function renderDataImage(ctl: AnyObj, node: AnyObj, dataUrl: string) {
+  const doc = ctl.doc;
+  const blob = await (await fetch(dataUrl)).blob();
+  const bmp = await createImageBitmap(blob);
+  const blobId = await putBlob(blob);
+  const scale = Math.min(1, 360 / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+
+  let outId: string | null =
+    doc
+      .all()
+      .filter((c: AnyObj) => c.type === 'connector' && c.from?.objectId === node.id && c.to?.objectId)
+      .map((c: AnyObj) => c.to.objectId)
+      .find((id: string) => doc.get(id)?.type === 'image') ?? null;
+
+  doc.begin();
+  if (outId) {
+    doc.update(outId, { blobId, w, h });
+  } else {
+    const out: AnyObj = {
+      id: nid(),
+      type: 'image',
+      x: node.x + (node.w ?? 200) + 80,
+      y: node.y + (node.h ?? 160) + 24,
+      w,
+      h,
+      rotation: 0,
+      z: doc.nextZ(),
+      blobId,
+      opacity: 1,
+      radius: 6,
+    };
+    wireOutput(ctl, node, out);
+    outId = out.id;
+  }
+  doc.commit();
 }
 
 // ---------- condition: yes/no branch — routes the flow down a labeled arrow ----------
