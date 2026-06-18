@@ -178,9 +178,16 @@ export default async function handler(req: any, res: any) {
     res.end(JSON.stringify({ error: 'Method not allowed' }));
     return;
   }
-  const body = await readJson(req);
-  const { status, body: out } = await runResearch(body?.query, body?.apiKey, body?.model);
-  res.statusCode = status;
   res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify(out));
+  try {
+    const body = await readJson(req);
+    const { status, body: out } = await runResearch(body?.query, body?.apiKey, body?.model);
+    res.statusCode = status;
+    res.end(JSON.stringify(out));
+  } catch (e) {
+    // Anything that escapes runResearch's own try/catch (e.g. makeLLM or the
+    // StateGraph build) lands here — return JSON instead of a platform 500 page.
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: `Research crashed: ${e instanceof Error ? e.stack || e.message : String(e)}` }));
+  }
 }

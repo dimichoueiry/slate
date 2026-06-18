@@ -1282,7 +1282,15 @@ async function executeResearch(ctl: AnyObj, node: AnyObj) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query, apiKey, model: getOpenRouterModel() }),
     });
-    const data = await res.json();
+    // Don't assume JSON: a platform-level 500 (timeout, crashed function) returns
+    // a plaintext error page, which would otherwise blow up as "Unexpected token".
+    const raw = await res.text();
+    let data: any = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      throw new Error(`research failed (${res.status}): ${raw.slice(0, 200) || 'no response body'}`);
+    }
     if (!res.ok) throw new Error(data?.error || `research failed (${res.status})`);
     doc.begin();
     for (const id of outIds) setText(ctl, id, String(data?.report || '(no report)').trim());
