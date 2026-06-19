@@ -242,6 +242,23 @@ export interface ToolChatResult {
   text: string;
   /** one line per tool call: "name(args) → result", for transparency/debug */
   trace: string[];
+  /** OpenRouter finish_reason of the final turn ('length' = hit token cap, etc.),
+   *  or 'tool_rounds_exhausted' when the loop ended without a final answer. */
+  finishReason?: string;
+}
+
+/** Human-readable reason a tool run came back with no answer, so the UI can say
+ *  WHY instead of an opaque "(no answer)". */
+export function explainEmptyToolResult(r: ToolChatResult): string {
+  const calls = r.trace.length;
+  const model = getOpenRouterModel();
+  if (r.finishReason === 'tool_rounds_exhausted')
+    return `the agent ran out of tool rounds after ${calls} tool call${calls === 1 ? '' : 's'} without finishing — try a more specific question.`;
+  if (r.finishReason === 'length')
+    return `the model hit its response-length limit before answering${calls ? ` (after ${calls} tool call${calls === 1 ? '' : 's'})` : ''} — raise “Max response length” in ⚙ Settings, or ask something shorter.`;
+  if (calls === 0)
+    return `the model (${model}) returned nothing and called no tools — it may not support tool calling well. Try a different model in ⚙ Settings.`;
+  return `the model returned an empty answer after ${calls} tool call${calls === 1 ? '' : 's'} (finished: ${r.finishReason ?? 'unknown'}).`;
 }
 
 /**
@@ -288,7 +305,7 @@ export async function chatWithTools(
     msgs.push(msg);
 
     const calls = msg.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }> | undefined;
-    if (!calls?.length) return { text: msg.content ?? '', trace };
+    if (!calls?.length) return { text: msg.content ?? '', trace, finishReason: data?.choices?.[0]?.finish_reason };
 
     for (const tc of calls) {
       let args: any = {};
@@ -309,7 +326,7 @@ export async function chatWithTools(
     }
   }
   // exhausted rounds without a final assistant message
-  return { text: '', trace };
+  return { text: '', trace, finishReason: 'tool_rounds_exhausted' };
 }
 
 // ---------- Ollama (local fallback) ----------

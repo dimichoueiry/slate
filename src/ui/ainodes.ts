@@ -3,7 +3,7 @@
 // wired INTO it with connectors; outputs = objects it points AT. Clicking the
 // glyph gathers input texts, runs the instruction through the LLM, and writes
 // the result into the output objects (creating one if none is wired).
-import { chat, chatWithTools, generateImage, hasOpenRouter } from '../ai/llm';
+import { chat, chatWithTools, explainEmptyToolResult, generateImage, hasOpenRouter } from '../ai/llm';
 import { makeBusinessTools, pickTable, tableSummary } from '../ai/tools';
 import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
@@ -1414,7 +1414,7 @@ async function executeBusiness(ctl: AnyObj, node: AnyObj) {
 
   try {
     const { defs, run } = makeBusinessTools(table);
-    const { text, trace } = await chatWithTools(
+    const result = await chatWithTools(
       [
         { role: 'system', content: BUSINESS_SYSTEM },
         { role: 'user', content: `Table summary:\n${tableSummary(table)}${truncNote}\n\nTask: ${instruction}` },
@@ -1423,7 +1423,8 @@ async function executeBusiness(ctl: AnyObj, node: AnyObj) {
       run,
       { temperature: 0.1 }
     );
-    const report = text.trim() || '(no answer — the agent ran out of tool rounds)';
+    const { text, trace } = result;
+    const report = text.trim() || `⚠ No answer — ${explainEmptyToolResult(result)}`;
     const footer = trace.length ? `\n\n— computed with ${trace.length} tool call${trace.length === 1 ? '' : 's'} —` : '';
     doc.begin();
     for (const id of outIds) setText(ctl, id, report + footer);

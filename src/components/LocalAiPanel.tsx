@@ -5,6 +5,7 @@ import {
   activeProvider,
   chatStream,
   chatWithTools,
+  explainEmptyToolResult,
   generateImage,
   hasOpenRouter,
   type ChatMessage,
@@ -334,7 +335,7 @@ export default function LocalAiPanel({
     const table = pickTable(texts);
     if (!table) throw new Error('Reference a CSV with @, or select an upload node — /business needs a table.');
     const { defs, run } = makeBusinessTools(table);
-    const { text, trace } = await chatWithTools(
+    const result = await chatWithTools(
       [
         {
           role: 'system',
@@ -347,7 +348,8 @@ export default function LocalAiPanel({
       run,
       { temperature: 0.1 }
     );
-    return { text: text.trim() || '(no answer)', trace };
+    const { text, trace } = result;
+    return { text: text.trim() || `⚠ No answer — ${explainEmptyToolResult(result)}`, trace };
   };
 
   // ---------- send ----------
