@@ -12,6 +12,9 @@ import {
   getOpenRouterModel,
   getMaxTokens,
   setMaxTokens,
+  getMaxRounds,
+  setMaxRounds,
+  DEFAULT_MAX_ROUNDS,
   setOllamaModel,
   setOllamaUrl,
   setOpenRouterKey,
@@ -128,6 +131,7 @@ export default function SettingsPanel() {
   const [ollamaUrl, setOllamaUrlState] = useState('');
   const [ollamaModel, setOllamaModelState] = useState('');
   const [maxTokens, setMaxTokensState] = useState('');
+  const [maxRounds, setMaxRoundsState] = useState('');
   const [kits, setKits] = useState<BrandKit[]>([]);
   const [defaultKit, setDefaultKit] = useState<string | null>(null);
   const [editingKit, setEditingKit] = useState<BrandKit | null>(null);
@@ -147,6 +151,7 @@ export default function SettingsPanel() {
     setOllamaUrlState(getOllamaUrl());
     setOllamaModelState(getOllamaModel());
     setMaxTokensState(getMaxTokens() != null ? String(getMaxTokens()) : '');
+    setMaxRoundsState(String(getMaxRounds()));
     void listBrandKits().then(setKits);
     setDefaultKit(getDefaultKitId());
     setBasePrompts(getAllBasePrompts());
@@ -192,6 +197,7 @@ export default function SettingsPanel() {
     setOllamaUrl(ollamaUrl.trim() === DEFAULT_OLLAMA_URL ? null : ollamaUrl.trim() || null);
     setOllamaModel(ollamaModel.trim() === DEFAULT_OLLAMA_MODEL ? null : ollamaModel.trim() || null);
     setMaxTokens(maxTokens.trim() ? Number(maxTokens) : null);
+    setMaxRounds(maxRounds.trim() && Number(maxRounds) !== DEFAULT_MAX_ROUNDS ? Number(maxRounds) : null);
     setOpen(false);
   };
 
@@ -308,6 +314,19 @@ export default function SettingsPanel() {
             <div className="slate-model-count">
               Caps how long any single AI response can be. Leave blank for no limit. Higher = longer, more complete
               answers (and higher cost); too low can cut answers off — that's what was breaking /business.
+            </div>
+
+            <label>Max agent steps (tool rounds)</label>
+            <input
+              type="number"
+              min={1}
+              placeholder={String(DEFAULT_MAX_ROUNDS)}
+              value={maxRounds}
+              onChange={(e) => setMaxRoundsState(e.target.value)}
+            />
+            <div className="slate-model-count">
+              How many tool calls a tool-using agent (e.g. /business) may make before it must stop and answer.
+              Raise this for complex multi-step analysis; lower it to bound cost. Default {DEFAULT_MAX_ROUNDS}.
             </div>
 
             <h3>Local Ollama (fallback)</h3>

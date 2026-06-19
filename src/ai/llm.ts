@@ -101,6 +101,17 @@ export const getMaxTokens = (): number | undefined => {
 };
 export const setMaxTokens = (n: number | null) => set(MAX_TOKENS, n && n > 0 ? String(Math.round(n)) : null);
 
+// How many tool-call rounds an agent (chatWithTools) may take before it must
+// stop. Unlike token budget this has a finite default — an unbounded agent loop
+// could run (and bill) forever — but it's generous and user-tunable.
+const MAX_ROUNDS = 'slate-max-rounds';
+export const DEFAULT_MAX_ROUNDS = 25;
+export const getMaxRounds = (): number => {
+  const v = Number(get(MAX_ROUNDS));
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : DEFAULT_MAX_ROUNDS;
+};
+export const setMaxRounds = (n: number | null) => set(MAX_ROUNDS, n && n > 0 ? String(Math.round(n)) : null);
+
 /** true when an OpenRouter key is configured — the router prefers it over Ollama */
 export const hasOpenRouter = () => !!getOpenRouterKey();
 
@@ -253,7 +264,7 @@ export function explainEmptyToolResult(r: ToolChatResult): string {
   const calls = r.trace.length;
   const model = getOpenRouterModel();
   if (r.finishReason === 'tool_rounds_exhausted')
-    return `the agent ran out of tool rounds after ${calls} tool call${calls === 1 ? '' : 's'} without finishing — try a more specific question.`;
+    return `the agent used all its tool rounds (${calls} call${calls === 1 ? '' : 's'}) without finishing — raise “Max agent steps” in ⚙ Settings, or ask something more specific.`;
   if (r.finishReason === 'length')
     return `the model hit its response-length limit before answering${calls ? ` (after ${calls} tool call${calls === 1 ? '' : 's'})` : ''} — raise “Max response length” in ⚙ Settings, or ask something shorter.`;
   if (calls === 0)
@@ -274,7 +285,7 @@ export async function chatWithTools(
 ): Promise<ToolChatResult> {
   const key = getOpenRouterKey();
   if (!key) throw new Error('Tool-using agents need an OpenRouter API key (add one in ⚙ Settings).');
-  const maxRounds = opts.maxRounds ?? 8;
+  const maxRounds = opts.maxRounds ?? getMaxRounds();
   const msgs: any[] = [...messages];
   const trace: string[] = [];
 

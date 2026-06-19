@@ -340,7 +340,7 @@ export default function LocalAiPanel({
         {
           role: 'system',
           content:
-            'You are a data analyst. NEVER do arithmetic yourself — always call a tool for any number. For rates/shares use value_counts. Use exact column names. Then answer concisely.',
+            'You are a data analyst. NEVER do arithmetic yourself — always call a tool for any number. For rates/shares use value_counts. To LIST or RANK individual customers (top N, which customers churned, biggest spenders) use list_customers — customer_recency only gives the rate, not the list. Use exact column names. Then answer concisely.',
         },
         { role: 'user', content: `Table summary:\n${tableSummary(table)}\n\nTask: ${question}` },
       ],

@@ -336,6 +336,73 @@ export function makeBusinessTools(table: Table): { defs: ToolDef[]; run: (name: 
       const r = dx && dy ? num / Math.sqrt(dx * dy) : 0;
       return { r: round(r), n: pairs.length };
     },
+    list_customers: ({ customer_column, date_column, value_column, window_days, status, sort_by, top }) => {
+      const ci = colIndex(table, customer_column);
+      const di = date_column ? colIndex(table, date_column) : -1;
+      const vi = value_column ? colIndex(table, value_column) : -1;
+      // Roll the table up to one record per customer.
+      const agg = new Map<string, { name: string; last: number | null; value: number; rows: number }>();
+      for (const r of table.rows) {
+        const raw = (r[ci] ?? '').trim();
+        if (raw === '') continue;
+        const key = raw.toLowerCase();
+        const cur = agg.get(key) ?? { name: raw, last: null, value: 0, rows: 0 };
+        cur.rows++;
+        if (di >= 0) {
+          const ms = toDate(r[di] ?? '');
+          if (ms != null && (cur.last == null || ms > cur.last)) cur.last = ms;
+        }
+        if (vi >= 0) {
+          const v = toNum(r[vi]);
+          if (v != null) cur.value += v;
+        }
+        agg.set(key, cur);
+      }
+      if (agg.size === 0) throw new Error(`No customers found in "${customer_column}"`);
+
+      const wantStatus = (status as string) || 'all';
+      if (wantStatus !== 'all' && di < 0)
+        throw new Error(`status="${wantStatus}" needs date_column to tell lapsed from active customers`);
+
+      // "today" = newest date across the file (matches customer_recency).
+      let refDate = -Infinity;
+      if (di >= 0) for (const c of agg.values()) if (c.last != null && c.last > refDate) refDate = c.last;
+      const win = Number(window_days) > 0 ? Number(window_days) : 180;
+      const iso = (ms: number | null) => (ms == null ? null : new Date(ms).toISOString().slice(0, 10));
+
+      let rows = [...agg.values()].map((c) => {
+        const daysSince = c.last != null && refDate > -Infinity ? Math.round((refDate - c.last) / DAY_MS) : null;
+        const lapsed = daysSince != null ? daysSince > win : null;
+        const rec: Record<string, any> = { customer: c.name, bookings: c.rows };
+        if (di >= 0) {
+          rec.last_visit = iso(c.last);
+          rec.days_since_last = daysSince;
+          rec.lapsed = lapsed;
+        }
+        if (vi >= 0) rec.value = round(c.value);
+        return rec;
+      });
+
+      if (wantStatus === 'lapsed') rows = rows.filter((r) => r.lapsed === true);
+      else if (wantStatus === 'active') rows = rows.filter((r) => r.lapsed === false);
+
+      const by = (sort_by as string) || (vi >= 0 ? 'value' : 'recency');
+      rows.sort((a, b) => {
+        if (by === 'value') return (b.value ?? 0) - (a.value ?? 0);
+        if (by === 'bookings') return (b.bookings ?? 0) - (a.bookings ?? 0);
+        // 'recency' / default: longest since last visit first
+        return (b.days_since_last ?? -1) - (a.days_since_last ?? -1);
+      });
+
+      const n = Math.min(Number(top) > 0 ? Number(top) : 20, 200);
+      return {
+        total_customers: agg.size,
+        matched: rows.length,
+        ...(di >= 0 ? { reference_date: iso(refDate === -Infinity ? null : refDate), window_days: win } : {}),
+        sorted_by: by,
+        customers: rows.slice(0, n),
+      };
+    },
   };
 
   const run = (name: string, args: Args) => {
@@ -425,5 +492,19 @@ const TOOL_DEFS: ToolDef[] = [
     'Pearson correlation coefficient (r, from -1 to 1) between two numeric columns.',
     { column_a: colProp(), column_b: colProp() },
     ['column_a', 'column_b']
+  ),
+  fn(
+    'list_customers',
+    'Return an actual ranked LIST of individual customers (one row per customer), not just counts. Rolls the table up per customer: most recent visit, days since, lapsed/active flag (vs window_days), and the summed value_column (e.g. lifetime spend). Use this for any "top N customers" / "which customers…" / "list the churned customers" question — e.g. top 20 churned customers by lifetime value = status="lapsed", value_column=<spend>, sort_by="value", top=20.',
+    {
+      customer_column: colProp('Column identifying the customer (name, email, phone, client id)'),
+      date_column: colProp('Visit/booking date column — required to compute lapsed/active and recency'),
+      value_column: colProp('Numeric column to sum per customer (e.g. price/amount → lifetime value)'),
+      window_days: { type: 'number', description: 'days of inactivity after which a customer is lapsed (default 180)' },
+      status: { type: 'string', enum: ['all', 'lapsed', 'active'], description: 'filter customers (default all; lapsed/active need date_column)' },
+      sort_by: { type: 'string', enum: ['value', 'recency', 'bookings'], description: 'ranking: value=highest summed value, recency=longest since last visit, bookings=most visits' },
+      top: { type: 'number', description: 'how many customers to return (default 20, max 200)' },
+    },
+    ['customer_column']
   ),
 ];
