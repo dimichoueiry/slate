@@ -330,28 +330,46 @@ export default function LocalAiPanel({
 
   const runBusinessCmd = async (question: string, refObjs: any[]) => {
     if (!hasOpenRouter()) throw new Error('/business needs an OpenRouter API key (⚙ Settings).');
-    // prefer @-referenced objects, then the current selection. Pull the FULL CSV
-    // from the blob store (the in-doc text is only a capped preview) so pandas
-    // and the deterministic tools both see every row.
-    const sources = [...refObjs, ...selectedObjs];
-    const texts: string[] = [];
-    for (const o of sources as any[]) {
-      const f = o.file;
-      if (f?.kind === 'csv' && f.blobId) {
-        try {
-          const blob = await getBlob(f.blobId);
-          if (blob) {
-            texts.push(await blob.text());
-            continue;
+    // Pull the FULL CSV from the blob store (the in-doc text is only a capped
+    // preview) so pandas and the deterministic tools both see every row.
+    const collectCsvTexts = async (objs: any[]): Promise<string[]> => {
+      const out: string[] = [];
+      for (const o of objs) {
+        const f = o.file;
+        if (f?.kind === 'csv' && f.blobId) {
+          try {
+            const blob = await getBlob(f.blobId);
+            if (blob) {
+              out.push(await blob.text());
+              continue;
+            }
+          } catch {
+            /* fall back to the preview below */
           }
-        } catch {
-          /* fall back to the preview below */
         }
+        out.push(String(f?.text ?? o.text ?? ''));
       }
-      texts.push(String(f?.text ?? o.text ?? ''));
+      return out;
+    };
+
+    // prefer @-referenced objects, then the current selection.
+    const sources = [...refObjs, ...selectedObjs];
+    let texts = await collectCsvTexts(sources);
+    let table = pickTable(texts);
+
+    // Fallback: an @-mention can land on the upload's LABEL (a sticky) rather than
+    // the file itself, which has no table. If so, use the CSV upload(s) on the
+    // board directly. One upload → unambiguous; several → ask the user to pick.
+    if (!table) {
+      const uploads = ctl.doc.all().filter((o: any) => o.file && typeof o.file.text === 'string');
+      if (uploads.length === 1) {
+        texts = await collectCsvTexts(uploads);
+        table = pickTable(texts);
+      } else if (uploads.length > 1) {
+        throw new Error(`Found ${uploads.length} uploads — type @ and pick the specific CSV you mean.`);
+      }
     }
-    const table = pickTable(texts);
-    if (!table) throw new Error('Reference a CSV with @, or select an upload node — /business needs a table.');
+    if (!table) throw new Error('No table found — add a 📎 CSV upload (or paste CSV into a sticky) and @-reference it.');
     // Hybrid: deterministic JS stats + a Python (pandas) sandbox over the full file.
     const csv = pickTableText(texts) ?? texts.join('\n');
     const { defs, run } = withPython(makeBusinessTools(table), csv);
