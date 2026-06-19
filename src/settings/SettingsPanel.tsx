@@ -10,6 +10,8 @@ import {
   getOllamaUrl,
   getOpenRouterKey,
   getOpenRouterModel,
+  getMaxTokens,
+  setMaxTokens,
   setOllamaModel,
   setOllamaUrl,
   setOpenRouterKey,
@@ -125,6 +127,7 @@ export default function SettingsPanel() {
   const [imgFilter, setImgFilter] = useState('');
   const [ollamaUrl, setOllamaUrlState] = useState('');
   const [ollamaModel, setOllamaModelState] = useState('');
+  const [maxTokens, setMaxTokensState] = useState('');
   const [kits, setKits] = useState<BrandKit[]>([]);
   const [defaultKit, setDefaultKit] = useState<string | null>(null);
   const [editingKit, setEditingKit] = useState<BrandKit | null>(null);
@@ -143,6 +146,7 @@ export default function SettingsPanel() {
     setImgFilter('');
     setOllamaUrlState(getOllamaUrl());
     setOllamaModelState(getOllamaModel());
+    setMaxTokensState(getMaxTokens() != null ? String(getMaxTokens()) : '');
     void listBrandKits().then(setKits);
     setDefaultKit(getDefaultKitId());
     setBasePrompts(getAllBasePrompts());
@@ -187,6 +191,7 @@ export default function SettingsPanel() {
     setImageModel(imageModel.trim() === DEFAULT_IMAGE_MODEL ? null : imageModel.trim() || null);
     setOllamaUrl(ollamaUrl.trim() === DEFAULT_OLLAMA_URL ? null : ollamaUrl.trim() || null);
     setOllamaModel(ollamaModel.trim() === DEFAULT_OLLAMA_MODEL ? null : ollamaModel.trim() || null);
+    setMaxTokens(maxTokens.trim() ? Number(maxTokens) : null);
     setOpen(false);
   };
 
@@ -291,6 +296,19 @@ export default function SettingsPanel() {
                 </div>
               </>
             )}
+
+            <label>Max response length (tokens)</label>
+            <input
+              type="number"
+              min={1}
+              placeholder="No limit — use the model's full budget"
+              value={maxTokens}
+              onChange={(e) => setMaxTokensState(e.target.value)}
+            />
+            <div className="slate-model-count">
+              Caps how long any single AI response can be. Leave blank for no limit. Higher = longer, more complete
+              answers (and higher cost); too low can cut answers off — that's what was breaking /business.
+            </div>
 
             <h3>Local Ollama (fallback)</h3>
             <label>Server URL</label>

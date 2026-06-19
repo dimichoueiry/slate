@@ -740,7 +740,7 @@ async function execute(ctl: AnyObj, node: AnyObj) {
             }
           : { role: 'user', content: userText },
       ],
-      { temperature: wantVersions ? 0.9 : 0.5, maxTokens: 4000, json: wantVersions }
+      { temperature: wantVersions ? 0.9 : 0.5, json: wantVersions }
     );
     let versions: string[] | null = null;
     if (wantVersions) {
@@ -857,7 +857,7 @@ async function executeWeb(ctl: AnyObj, node: AnyObj) {
         },
         { role: 'user', content: `SCRAPED CONTENT:\n${corpus}\n\nINSTRUCTION: ${instruction}` },
       ],
-      { temperature: 0.4, maxTokens: 2000 }
+      { temperature: 0.4 }
     );
     doc.begin();
     for (const id of outIds) setText(ctl, id, result.trim() || '(empty result)');
@@ -1000,7 +1000,7 @@ async function executeAsk(ctl: AnyObj, node: AnyObj) {
         },
         { role: 'user', content: `QUESTION: ${question}\n\nWEB RESULTS:\n${context || data?.answer || '(none)'}` },
       ],
-      { temperature: 0.3, maxTokens: 1200 }
+      { temperature: 0.3 }
     );
 
     const sources = results.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.url}`).join('\n');
@@ -1230,7 +1230,7 @@ async function executeCondition(ctl: AnyObj, node: AnyObj) {
             content: `Question: ${question}` + (context ? `\n\nContext:\n${context}` : '\n\n(No context provided — answer from the question alone.)'),
           },
         ],
-        { temperature: 0, maxTokens: 5 }
+        { temperature: 0, maxTokens: 5 } // structural: a one-word yes/no — not a budget the user should tune
       );
       const a = ans.trim().toLowerCase();
       verdict = a.startsWith('yes') || (/\byes\b/.test(a) && !/\bno\b/.test(a)) ? 'yes' : 'no';
@@ -1334,7 +1334,7 @@ async function executeExtract(ctl: AnyObj, node: AnyObj) {
         },
         { role: 'user', content: `CONTENT:\n${corpus.slice(0, 12000)}\n\nEXTRACT: ${instruction}` },
       ],
-      { temperature: 0.2, maxTokens: 2000 }
+      { temperature: 0.2 }
     );
     doc.begin();
     for (const id of outIds) setText(ctl, id, result.replace(/```/g, '').trim() || '(nothing extracted)');
@@ -1421,7 +1421,7 @@ async function executeBusiness(ctl: AnyObj, node: AnyObj) {
       ],
       defs,
       run,
-      { temperature: 0.1, maxTokens: 1600 }
+      { temperature: 0.1 }
     );
     const report = text.trim() || '(no answer — the agent ran out of tool rounds)';
     const footer = trace.length ? `\n\n— computed with ${trace.length} tool call${trace.length === 1 ? '' : 's'} —` : '';
@@ -1459,7 +1459,7 @@ async function executeFix(ctl: AnyObj, node: AnyObj) {
         },
         { role: 'user', content: source },
       ],
-      { temperature: 0.5, maxTokens: 1500 }
+      { temperature: 0.5 }
     );
     doc.begin();
     for (const id of outIds) setText(ctl, id, result.trim() || '(no output)');
@@ -1637,7 +1637,7 @@ async function executeChart(ctl: AnyObj, node: AnyObj) {
         },
         { role: 'user', content: corpus.slice(0, 8000) },
       ],
-      { temperature: 0.2, maxTokens: 1000, json: true }
+      { temperature: 0.2, json: true }
     );
     const cleaned = reply.replace(/```(?:json)?/gi, '').trim();
     const spec = JSON.parse(cleaned.slice(cleaned.indexOf('{'), cleaned.lastIndexOf('}') + 1)) as ChartSpec;

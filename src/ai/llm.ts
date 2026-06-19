@@ -57,6 +57,7 @@ const OR_KEY = 'slate-openrouter-key';
 const OR_MODEL = 'slate-openrouter-model';
 const OLLAMA_URL = 'slate-ollama-url';
 const OLLAMA_MODEL = 'slate-ollama-model';
+const MAX_TOKENS = 'slate-max-tokens';
 
 export const DEFAULT_OPENROUTER_MODEL = 'openrouter/auto';
 export const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image';
@@ -91,6 +92,15 @@ export const setOllamaUrl = (u: string | null) => set(OLLAMA_URL, u);
 export const getOllamaModel = () => get(OLLAMA_MODEL) ?? DEFAULT_OLLAMA_MODEL;
 export const setOllamaModel = (m: string | null) => set(OLLAMA_MODEL, m);
 
+/** User-configured response-length budget (max output tokens). `undefined` means
+ *  no limit — let the model use its full output budget. Per-call `opts.maxTokens`
+ *  still overrides this where a specific size is structurally required. */
+export const getMaxTokens = (): number | undefined => {
+  const v = Number(get(MAX_TOKENS));
+  return Number.isFinite(v) && v > 0 ? v : undefined;
+};
+export const setMaxTokens = (n: number | null) => set(MAX_TOKENS, n && n > 0 ? String(Math.round(n)) : null);
+
 /** true when an OpenRouter key is configured — the router prefers it over Ollama */
 export const hasOpenRouter = () => !!getOpenRouterKey();
 
@@ -122,7 +132,7 @@ async function openRouterChat(messages: ChatMessage[], opts: LLMOptions): Promis
         model: opts.model ?? getOpenRouterModel(),
         messages,
         temperature: opts.temperature,
-        max_tokens: opts.maxTokens,
+        max_tokens: opts.maxTokens ?? getMaxTokens(),
         usage: { include: true }, // ask OpenRouter to report token usage + cost
         ...(withJsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
@@ -152,7 +162,7 @@ async function* openRouterStream(messages: ChatMessage[], opts: LLMOptions): Asy
       model: opts.model ?? getOpenRouterModel(),
       messages,
       temperature: opts.temperature,
-      max_tokens: opts.maxTokens,
+      max_tokens: opts.maxTokens ?? getMaxTokens(),
       stream: true,
     }),
   });
@@ -261,7 +271,7 @@ export async function chatWithTools(
         model: opts.model ?? getOpenRouterModel(),
         messages: msgs,
         temperature: opts.temperature,
-        max_tokens: opts.maxTokens,
+        max_tokens: opts.maxTokens ?? getMaxTokens(),
         usage: { include: true },
         // on the final allowed round, stop offering tools so it must answer
         ...(lastRound ? {} : { tools, tool_choice: 'auto' }),
@@ -314,7 +324,7 @@ async function ollamaChat(messages: ChatMessage[], opts: LLMOptions): Promise<st
       messages: messages.map(toOllamaMessage),
       stream: false,
       ...(opts.json ? { format: 'json' } : {}),
-      options: { temperature: opts.temperature, num_predict: opts.maxTokens },
+      options: { temperature: opts.temperature, num_predict: opts.maxTokens ?? getMaxTokens() },
     }),
   });
   if (!res.ok) {
@@ -335,7 +345,7 @@ async function* ollamaStream(messages: ChatMessage[], opts: LLMOptions): AsyncGe
       model: opts.model ?? getOllamaModel(),
       messages: messages.map(toOllamaMessage),
       stream: true,
-      options: { temperature: opts.temperature, num_predict: opts.maxTokens },
+      options: { temperature: opts.temperature, num_predict: opts.maxTokens ?? getMaxTokens() },
     }),
   });
   if (!res.ok || !res.body) {

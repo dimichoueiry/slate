@@ -67,7 +67,7 @@ export async function askWeb(question: string): Promise<string> {
       },
       { role: 'user', content: `QUESTION: ${question}\n\nWEB RESULTS:\n${context || data?.answer || '(none)'}` },
     ],
-    { temperature: 0.3, maxTokens: 1200 }
+    { temperature: 0.3 }
   );
   const sources = results.map((r, i) => `[${i + 1}] ${r.title || r.url}\n${r.url}`).join('\n');
   return [answer.trim() || '(no answer)', sources && `\nSources:\n${sources}`].filter(Boolean).join('\n');
@@ -92,7 +92,7 @@ export async function scrapeAndSummarize(message: string): Promise<string> {
       { role: 'system', content: getBasePrompt('web') },
       { role: 'user', content: `SCRAPED CONTENT:\n${corpus}\n\nINSTRUCTION: ${instruction}` },
     ],
-    { temperature: 0.4, maxTokens: 2000 }
+    { temperature: 0.4 }
   );
   return out.trim() || '(empty result)';
 }
@@ -110,7 +110,7 @@ export async function extractTable(instruction: string, corpus: string): Promise
       },
       { role: 'user', content: `CONTENT:\n${corpus.slice(0, 12000)}\n\nEXTRACT: ${instruction || 'the key structured fields'}` },
     ],
-    { temperature: 0.2, maxTokens: 2000 }
+    { temperature: 0.2 }
   );
   return out.replace(/```/g, '').trim() || '(nothing extracted)';
 }
@@ -125,7 +125,7 @@ export async function chartSpec(instruction: string, corpus: string): Promise<st
       },
       { role: 'user', content: `DATA:\n${corpus.slice(0, 8000)}\n\nREQUEST: ${instruction || 'chart this data'}` },
     ],
-    { temperature: 0.2, maxTokens: 900 }
+    { temperature: 0.2 }
   );
   return out.trim() || '(could not build a chart spec)';
 }
@@ -137,7 +137,7 @@ export async function fixPrompt(source: string): Promise<string> {
       { role: 'system', content: getBasePrompt('fix') },
       { role: 'user', content: source },
     ],
-    { temperature: 0.4, maxTokens: 1200 }
+    { temperature: 0.4 }
   );
   return out.trim() || '(no output)';
 }

@@ -345,7 +345,7 @@ export default function LocalAiPanel({
       ],
       defs,
       run,
-      { temperature: 0.1, maxTokens: 1400 }
+      { temperature: 0.1 }
     );
     return { text: text.trim() || '(no answer)', trace };
   };
@@ -428,7 +428,7 @@ export default function LocalAiPanel({
       } else if (provider === 'openrouter') {
         // agentic chat: can call canvas tools
         const msgs = buildMessages(verb === 'ai' ? [...messages, { ...userMsg, content: promptText }] : history, refContext);
-        const { text, trace } = await chatWithTools(msgs, CANVAS_TOOLS, canvasRunner, { temperature: 0.3, maxTokens: 1200 });
+        const { text, trace } = await chatWithTools(msgs, CANVAS_TOOLS, canvasRunner, { temperature: 0.3 });
         pushAssistant(text || '(done)', trace.length ? trace : undefined);
       } else {
         // ollama: stream a plain reply (no canvas tools)
