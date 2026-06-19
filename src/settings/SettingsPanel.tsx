@@ -86,6 +86,11 @@ const CSS = `
 .slate-settings button.danger{background:rgba(224,49,49,.25)}
 .slate-settings .badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;background:rgba(47,158,68,.25);color:#7ce29a}
 .slate-settings .badge.local{background:rgba(255,212,59,.18);color:#ffd43b}
+.slate-model-trigger{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;background:rgba(255,255,255,.08);border:none;border-radius:8px;color:#e8e8ea;padding:8px 10px;font-size:13px;cursor:pointer;text-align:left}
+.slate-model-trigger:hover{background:rgba(255,255,255,.14)}
+.slate-model-trigger>span:first-child{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slate-model-trigger .mid{color:#9a9aa2;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.slate-model-trigger .chev{color:#9a9aa2;font-size:9px;flex-shrink:0}
 .slate-model-list{margin-top:6px;max-height:180px;overflow-y:auto;border-radius:8px;background:rgba(255,255,255,.04)}
 .slate-model-list button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;border-radius:0;background:transparent;padding:6px 10px;font-size:12px}
 .slate-model-list button:hover{background:rgba(60,120,255,.25)}
@@ -110,6 +115,8 @@ export default function SettingsPanel() {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState('');
   const [savedKey, setSavedKey] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [imgOpen, setImgOpen] = useState(false);
   const [model, setModel] = useState('');
   const [filter, setFilter] = useState('');
   const [models, setModels] = useState<ModelInfo[] | null>(null);
@@ -129,6 +136,8 @@ export default function SettingsPanel() {
     setKey(getOpenRouterKey() ?? '');
     setSavedKey(!!getOpenRouterKey());
     setModel(getOpenRouterModel());
+    setModelOpen(false);
+    setImgOpen(false);
     setFilter('');
     setImageModelState(getImageModel());
     setImgFilter('');
@@ -166,6 +175,11 @@ export default function SettingsPanel() {
       : source;
     return filtered.slice(0, 60);
   }, [models, filter]);
+
+  const nameOf = (id: string, fallbacks: ModelInfo[]) =>
+    (models ?? fallbacks).find((m) => m.id === id)?.name ?? id;
+  const selModelName = model ? nameOf(model, FALLBACK_MODELS) : 'Select a model';
+  const selImgName = nameOf(imageModel || DEFAULT_IMAGE_MODEL, FALLBACK_IMAGE_MODELS);
 
   const save = () => {
     setOpenRouterKey(key.trim() || null);
@@ -207,46 +221,76 @@ export default function SettingsPanel() {
             <label>API key {savedKey ? '(saved)' : ''}</label>
             <input type="password" placeholder="sk-or-v1-…" value={key} autoFocus onChange={(e) => setKey(e.target.value)} />
 
-            <label>
-              Model — selected: <b style={{ color: '#e8e8ea' }}>{model || 'none'}</b>
-            </label>
-            <input
-              placeholder="Search models… (e.g. claude, gpt, llama)"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-            <div className="slate-model-list">
-              {list.map((m) => (
-                <button key={m.id} className={m.id === model ? 'sel' : ''} onClick={() => setModel(m.id)}>
-                  <span>{m.name}</span>
-                  <span className="mid">{m.id}</span>
-                </button>
-              ))}
-              {list.length === 0 && <button disabled>No models match</button>}
-            </div>
-            <div className="slate-model-count">
-              {models ? `${models.length} models from openrouter.ai` : 'loading model list…'}
-              {loadErr ? ' (offline — showing common models)' : ''}
-              {filter && ` · showing ${list.length}`}
-            </div>
+            <label>Model</label>
+            <button type="button" className="slate-model-trigger" onClick={() => setModelOpen((o) => !o)}>
+              <span>{selModelName}</span>
+              <span className="mid">{model || 'none'}</span>
+              <span className="chev">{modelOpen ? '▲' : '▼'}</span>
+            </button>
+            {modelOpen && (
+              <>
+                <input
+                  placeholder="Search models… (e.g. claude, gpt, llama)"
+                  value={filter}
+                  autoFocus
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+                <div className="slate-model-list">
+                  {list.map((m) => (
+                    <button
+                      key={m.id}
+                      className={m.id === model ? 'sel' : ''}
+                      onClick={() => {
+                        setModel(m.id);
+                        setModelOpen(false);
+                      }}
+                    >
+                      <span>{m.name}</span>
+                      <span className="mid">{m.id}</span>
+                    </button>
+                  ))}
+                  {list.length === 0 && <button disabled>No models match</button>}
+                </div>
+                <div className="slate-model-count">
+                  {models ? `${models.length} models from openrouter.ai` : 'loading model list…'}
+                  {loadErr ? ' (offline — showing common models)' : ''}
+                  {filter && ` · showing ${list.length}`}
+                </div>
+              </>
+            )}
 
-            <label>
-              Image model (for img: nodes) — selected: <b style={{ color: '#e8e8ea' }}>{imageModel || DEFAULT_IMAGE_MODEL}</b>
-            </label>
-            <input
-              placeholder="Search image-capable models…"
-              value={imgFilter}
-              onChange={(e) => setImgFilter(e.target.value)}
-            />
-            <div className="slate-model-list">
-              {imgList.map((m) => (
-                <button key={m.id} className={m.id === imageModel ? 'sel' : ''} onClick={() => setImageModelState(m.id)}>
-                  <span>{m.name}</span>
-                  <span className="mid">{m.id}</span>
-                </button>
-              ))}
-              {imgList.length === 0 && <button disabled>No image models match</button>}
-            </div>
+            <label>Image model (for img: nodes)</label>
+            <button type="button" className="slate-model-trigger" onClick={() => setImgOpen((o) => !o)}>
+              <span>{selImgName}</span>
+              <span className="mid">{imageModel || DEFAULT_IMAGE_MODEL}</span>
+              <span className="chev">{imgOpen ? '▲' : '▼'}</span>
+            </button>
+            {imgOpen && (
+              <>
+                <input
+                  placeholder="Search image-capable models…"
+                  value={imgFilter}
+                  autoFocus
+                  onChange={(e) => setImgFilter(e.target.value)}
+                />
+                <div className="slate-model-list">
+                  {imgList.map((m) => (
+                    <button
+                      key={m.id}
+                      className={m.id === imageModel ? 'sel' : ''}
+                      onClick={() => {
+                        setImageModelState(m.id);
+                        setImgOpen(false);
+                      }}
+                    >
+                      <span>{m.name}</span>
+                      <span className="mid">{m.id}</span>
+                    </button>
+                  ))}
+                  {imgList.length === 0 && <button disabled>No image models match</button>}
+                </div>
+              </>
+            )}
 
             <h3>Local Ollama (fallback)</h3>
             <label>Server URL</label>
