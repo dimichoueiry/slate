@@ -12,7 +12,8 @@ import {
   type ToolDef,
   type ToolRunner,
 } from '../ai/llm';
-import { makeBusinessTools, pickTable, tableSummary } from '../ai/tools';
+import { makeBusinessTools, pickTable, pickTableText, tableSummary } from '../ai/tools';
+import { withPython } from '../ai/pythonTool';
 import {
   CHAT_COMMANDS,
   askWeb,
@@ -24,7 +25,7 @@ import {
   quickSearch,
   scrapeAndSummarize,
 } from '../ai/chatCommands';
-import { putBlob } from '../store/db';
+import { getBlob, putBlob } from '../store/db';
 
 type OllamaModel = { name: string };
 interface ChatMsg {
@@ -329,18 +330,37 @@ export default function LocalAiPanel({
 
   const runBusinessCmd = async (question: string, refObjs: any[]) => {
     if (!hasOpenRouter()) throw new Error('/business needs an OpenRouter API key (⚙ Settings).');
-    // prefer @-referenced objects, then the current selection
+    // prefer @-referenced objects, then the current selection. Pull the FULL CSV
+    // from the blob store (the in-doc text is only a capped preview) so pandas
+    // and the deterministic tools both see every row.
     const sources = [...refObjs, ...selectedObjs];
-    const texts = sources.map((o) => String((o as any).file?.text ?? (o as any).text ?? ''));
+    const texts: string[] = [];
+    for (const o of sources as any[]) {
+      const f = o.file;
+      if (f?.kind === 'csv' && f.blobId) {
+        try {
+          const blob = await getBlob(f.blobId);
+          if (blob) {
+            texts.push(await blob.text());
+            continue;
+          }
+        } catch {
+          /* fall back to the preview below */
+        }
+      }
+      texts.push(String(f?.text ?? o.text ?? ''));
+    }
     const table = pickTable(texts);
     if (!table) throw new Error('Reference a CSV with @, or select an upload node — /business needs a table.');
-    const { defs, run } = makeBusinessTools(table);
+    // Hybrid: deterministic JS stats + a Python (pandas) sandbox over the full file.
+    const csv = pickTableText(texts) ?? texts.join('\n');
+    const { defs, run } = withPython(makeBusinessTools(table), csv);
     const result = await chatWithTools(
       [
         {
           role: 'system',
           content:
-            'You are a data analyst. NEVER do arithmetic yourself — always call a tool for any number. For rates/shares use value_counts. To LIST or RANK individual customers (top N, which customers churned, biggest spenders) use list_customers — customer_recency only gives the rate, not the list. Use exact column names. Then answer concisely.',
+            'You are a data analyst with a Python sandbox (pandas) — the full file is preloaded as DataFrame `df`. COMPUTE, never guess: for any count/sum/rate/filter/list call run_python and print the result. First print(len(df)) and state the row count. NEVER invent names or numbers — only output values you computed from df. Define terms before computing (e.g. churn = no future booking AND last visit > N days; state any exclusions and show how many rows). Show your work (print key counts, reconcile totals). Simple one-shot stats may use the quick tools, but use run_python for cleaning, custom logic and listing specific rows. Then answer concisely in markdown.',
         },
         { role: 'user', content: `Table summary:\n${tableSummary(table)}\n\nTask: ${question}` },
       ],

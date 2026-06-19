@@ -79,6 +79,22 @@ export function pickTable(texts: string[]): Table | null {
   return best;
 }
 
+/** The raw text of the richest parseable table — i.e. the CSV to hand to pandas. */
+export function pickTableText(texts: string[]): string | null {
+  let best: string | null = null;
+  let bestScore = 0;
+  for (const t of texts) {
+    const table = parseTable(t);
+    if (!table) continue;
+    const score = table.rows.length * table.columns.length;
+    if (score > bestScore) {
+      best = t;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 // ---------- numeric helpers ----------
 
 function toNum(s: string): number | null {

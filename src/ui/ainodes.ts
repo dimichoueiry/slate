@@ -4,7 +4,8 @@
 // glyph gathers input texts, runs the instruction through the LLM, and writes
 // the result into the output objects (creating one if none is wired).
 import { chat, chatWithTools, explainEmptyToolResult, generateImage, hasOpenRouter } from '../ai/llm';
-import { makeBusinessTools, pickTable, tableSummary } from '../ai/tools';
+import { makeBusinessTools, pickTable, pickTableText, tableSummary } from '../ai/tools';
+import { withPython } from '../ai/pythonTool';
 import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
@@ -1348,15 +1349,18 @@ async function executeExtract(ctl: AnyObj, node: AnyObj) {
 
 // ---------- business: tool-using analytics agent ----------
 
-const BUSINESS_SYSTEM = `You are a meticulous business data analyst working over a single table.
+const BUSINESS_SYSTEM = `You are a meticulous business data analyst. You have a Python sandbox (pandas/numpy) with the user's COMPLETE dataset preloaded as a DataFrame \`df\` — every row, not a sample. You answer by WRITING AND RUNNING PYTHON via the run_python tool.
 
-You have deterministic tools that compute EXACT statistics. Rules:
-- NEVER do arithmetic in your head. To get any number — an average, total, count, rate, percentile, correlation — you MUST call a tool. Do not estimate or eyeball values.
-- For rates and shares (e.g. % active, cancellation rate), use value_counts: it returns each value's count AND percentage, so you never divide yourself.
-- Use exact column names from the table summary. If a tool reports the column doesn't exist, re-read the summary and retry with the right name.
-- ANSWER THE QUESTION ACTUALLY ASKED, using its standard business meaning — do not silently substitute an easier metric. In particular "churn" means CUSTOMER churn: the share of customers who stopped coming back. When the table has a customer-id column (name/email/phone/client) and a date column, you MUST use the customer_recency tool to compute it — that is true customer churn. Only fall back to a booking-level cancellation/no-show rate if there is genuinely no customer id or no date column, and if you do, say plainly that it is booking churn, not customer churn. When the data makes the real metric computable, attempt it rather than excusing it away.
-- When asked to LIST or RANK individual customers ("top N customers", "which customers churned", "biggest spenders"), use the list_customers tool — it returns the actual per-customer rows. customer_recency only gives the churn RATE/counts, not the list. For "top N churned customers by value" call list_customers with status="lapsed", a value_column, and sort_by="value".
-- Call tools as many times as needed, then write a clear, concise briefing that answers the question. State each number you cite and, briefly, how it was derived. Use short markdown headings/bullets. No code fences.`;
+RULES — non-negotiable:
+1. COMPUTE, DON'T GUESS. For any count, sum, average, rate, filter, ranking or list of rows, call run_python. NEVER state a number or a name by reading rows yourself — only by computing it.
+2. USE THE FULL DATA. \`df\` already holds the entire file. FIRST run \`print(len(df)); print(df.columns.tolist())\` and state the total row count in your answer.
+3. NEVER invent names or values. Every name and number you output must come from \`df\` and be something you printed. If it isn't in the data, say so — never fabricate or fill gaps.
+4. DEFINE TERMS before computing, and state them plainly. e.g. churn = a customer with NO future booking AND whose last visit is more than N days ago. State and apply exclusions explicitly (canceled bookings, walk-ins, obvious test rows like "Jane/John Doe") and SHOW what you excluded and how many rows — never drop data silently.
+5. SHOW YOUR WORK. print() the key intermediate counts and reconcile totals (e.g. total = churned + active + excluded). If the numbers don't add up, fix the code before answering.
+6. STATE ASSUMPTIONS AND CAVEATS — the date window used, what was excluded, any data-quality issues you noticed.
+7. If asked to fix or recompute, ACTUALLY re-run run_python and show the new output. Never claim a fix you did not compute.
+
+You also have quick deterministic tools (aggregate, value_counts, customer_recency, list_customers) for simple one-shot stats — fine to use those for a single rate or average — but for anything involving cleaning, custom definitions, multi-step filtering or listing specific rows, use run_python. Finish with a clear, concise briefing in markdown (short headings/bullets, no code fences) that states each number and how it was derived.`;
 
 async function executeBusiness(ctl: AnyObj, node: AnyObj) {
   const doc = ctl.doc;
@@ -1414,7 +1418,10 @@ async function executeBusiness(ctl: AnyObj, node: AnyObj) {
   doc.commit();
 
   try {
-    const { defs, run } = makeBusinessTools(table);
+    // Hybrid tool set: deterministic JS stats + a Python (pandas) sandbox over
+    // the FULL file for anything the fixed tools can't express.
+    const csv = pickTableText(texts) ?? texts.join('\n');
+    const { defs, run } = withPython(makeBusinessTools(table), csv);
     const result = await chatWithTools(
       [
         { role: 'system', content: BUSINESS_SYSTEM },
