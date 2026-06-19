@@ -17,6 +17,7 @@ const SLASH_COMMANDS: { cmd: string; label: string; desc: string }[] = [
   { cmd: 'chart', label: 'chart:', desc: 'Draw a bar / line / pie chart' },
   { cmd: 'fix', label: 'fix:', desc: 'Improve a prompt' },
   { cmd: 'data', label: 'data:', desc: 'Fetch JSON from any API endpoint' },
+  { cmd: 'business', label: 'business:', desc: 'Analyze a CSV / upload with exact stats tools' },
   { cmd: 'condition', label: 'condition:', desc: 'Yes/No branch — label arrows "yes" / "no"' },
   { cmd: 'interval', label: 'interval:', desc: 'Re-run the flow on a clock, e.g. 60s / 1h' },
   { cmd: 'timer', label: 'timer:', desc: 'Run the flow once after a countdown' },
