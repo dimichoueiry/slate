@@ -3,8 +3,11 @@
 // JSON/Markdown are read directly; PDF goes through pdfjs-dist in the browser.
 import type { UploadFile } from '../types';
 
-/** Cap extracted text so a big file can't bloat the doc or blow token limits. */
+// Cap extracted text so a big file can't bloat the doc or blow token limits.
+// CSV/TSV rows are consumed by local deterministic tools (not the LLM prompt),
+// so they get a far larger budget than free text that goes straight into a prompt.
 const MAX_TEXT = 200_000;
+const MAX_TABLE_TEXT = 4_000_000;
 
 const TEXT_EXT: Record<string, UploadFile['kind']> = {
   csv: 'csv',
@@ -69,8 +72,18 @@ export async function readUpload(file: File): Promise<UploadFile> {
   const kind = classify(file);
   let text = kind === 'pdf' ? await extractPdf(file) : await file.text();
 
-  const truncated = text.length > MAX_TEXT;
-  if (truncated) text = text.slice(0, MAX_TEXT);
+  // CSV/TSV get a much larger budget and, if they still overflow, are cut on a
+  // ROW boundary — never mid-row — so a partial read stays a valid, parseable
+  // table instead of silently dropping a quarter of the rows with a half-row tail.
+  const cap = kind === 'csv' ? MAX_TABLE_TEXT : MAX_TEXT;
+  const truncated = text.length > cap;
+  if (truncated) {
+    text = text.slice(0, cap);
+    if (kind === 'csv') {
+      const lastNL = text.lastIndexOf('\n');
+      if (lastNL > 0) text = text.slice(0, lastNL);
+    }
+  }
 
   const out: UploadFile = { name: file.name, mime: file.type || kind, size: file.size, kind, text, truncated };
   if (kind === 'csv') out.rows = countRows(text);

@@ -3,7 +3,8 @@
 // wired INTO it with connectors; outputs = objects it points AT. Clicking the
 // glyph gathers input texts, runs the instruction through the LLM, and writes
 // the result into the output objects (creating one if none is wired).
-import { chat, generateImage } from '../ai/llm';
+import { chat, chatWithTools, generateImage, hasOpenRouter } from '../ai/llm';
+import { makeBusinessTools, pickTable, tableSummary } from '../ai/tools';
 import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
@@ -49,7 +50,7 @@ async function brandLogoDataUrl(): Promise<string | null> {
 }
 
 // ai: text · img: image · web: scrape · search: links · ask: answered web search · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch · interval/timer: schedule
-const RUN = /^(▶ ?)?(ai|img|web|search|ask|research|extract|chart|fix|data|condition|if|interval|timer|every):/i;
+const RUN = /^(▶ ?)?(ai|img|web|search|ask|research|extract|chart|fix|data|business|condition|if|interval|timer|every):/i;
 const IMG = /^(▶ ?)?img:/i;
 const WEB = /^(▶ ?)?web:/i;
 const ASK = /^(▶ ?)?ask:/i;
@@ -61,6 +62,7 @@ const RESEARCH = /^(▶ ?)?research:/i;
 const EXTRACT = /^(▶ ?)?extract:/i;
 const CHART = /^(▶ ?)?chart:/i;
 const FIX = /^(▶ ?)?fix:/i;
+const BUSINESS = /^(▶ ?)?business:/i;
 const RAW = /^(\s*)ai:/i;
 const nid = () => Math.random().toString(36).slice(2, 10);
 const last = { id: '', t: 0 };
@@ -203,6 +205,7 @@ export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (EXTRACT.test(head)) return executeExtract(ctl, node);
   if (CHART.test(head)) return executeChart(ctl, node);
   if (FIX.test(head)) return executeFix(ctl, node);
+  if (BUSINESS.test(head)) return executeBusiness(ctl, node);
   if (DATA.test(head)) return executeData(ctl, node);
   if (COND.test(head)) return executeCondition(ctl, node);
   if (TICK.test(head)) return executeTick(ctl, node);
@@ -1340,6 +1343,70 @@ async function executeExtract(ctl: AnyObj, node: AnyObj) {
     doc.begin();
     for (const id of outIds) setText(ctl, id, '⚠ ' + (err instanceof Error ? err.message : String(err)));
     doc.commit();
+  }
+}
+
+// ---------- business: tool-using analytics agent ----------
+
+const BUSINESS_SYSTEM = `You are a meticulous business data analyst working over a single table.
+
+You have deterministic tools that compute EXACT statistics. Rules:
+- NEVER do arithmetic in your head. To get any number — an average, total, count, rate, percentile, correlation — you MUST call a tool. Do not estimate or eyeball values.
+- For rates and shares (e.g. % active, cancellation rate), use value_counts: it returns each value's count AND percentage, so you never divide yourself.
+- Use exact column names from the table summary. If a tool reports the column doesn't exist, re-read the summary and retry with the right name.
+- ANSWER THE QUESTION ACTUALLY ASKED, using its standard business meaning — do not silently substitute an easier metric. In particular "churn" means CUSTOMER churn: the share of customers who stopped coming back. When the table has a customer-id column (name/email/phone/client) and a date column, you MUST use the customer_recency tool to compute it — that is true customer churn. Only fall back to a booking-level cancellation/no-show rate if there is genuinely no customer id or no date column, and if you do, say plainly that it is booking churn, not customer churn. When the data makes the real metric computable, attempt it rather than excusing it away.
+- Call tools as many times as needed, then write a clear, concise briefing that answers the question. State each number you cite and, briefly, how it was derived. Use short markdown headings/bullets. No code fences.`;
+
+async function executeBusiness(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const instruction = promptSource(node).replace(RUN, '').trim() || 'Summarize the key metrics in this data.';
+  const inputs = gatherInputs(ctl, node);
+
+  doc.begin();
+  const outIds = prepTextOutputs(ctl, node, { w: 460 });
+  const fail = (msg: string) => {
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, msg);
+    doc.commit();
+  };
+
+  if (!hasOpenRouter()) {
+    fail('⚠ business: needs an OpenRouter API key (set one in ⚙ Settings).');
+    return;
+  }
+  const table = pickTable(inputs.map((o: AnyObj) => String(o.text ?? '')));
+  if (!table) {
+    fail('⚠ No table found — wire in an upload: node (CSV) or pasted CSV/TSV with a header row.');
+    doc.commit();
+    return;
+  }
+  // If the source file was capped on read, the tools see only part of the data —
+  // tell the agent so it caveats counts/totals instead of reporting them as complete.
+  const truncatedUpload = inputs.some((o: AnyObj) => o.file?.truncated);
+  const truncNote = truncatedUpload
+    ? `\n\nDATA NOTICE: the uploaded file was too large and was truncated, so the table below holds only the first ${table.rows.length.toLocaleString()} rows of the original file. Absolute counts, sums and revenue totals are UNDERSTATED — state this caveat and prefer rates/percentages over raw totals.`
+    : '';
+  for (const id of outIds) setText(ctl, id, '⏳ analyzing…');
+  doc.commit();
+
+  try {
+    const { defs, run } = makeBusinessTools(table);
+    const { text, trace } = await chatWithTools(
+      [
+        { role: 'system', content: BUSINESS_SYSTEM },
+        { role: 'user', content: `Table summary:\n${tableSummary(table)}${truncNote}\n\nTask: ${instruction}` },
+      ],
+      defs,
+      run,
+      { temperature: 0.1, maxTokens: 1600 }
+    );
+    const report = text.trim() || '(no answer — the agent ran out of tool rounds)';
+    const footer = trace.length ? `\n\n— computed with ${trace.length} tool call${trace.length === 1 ? '' : 's'} —` : '';
+    doc.begin();
+    for (const id of outIds) setText(ctl, id, report + footer);
+    doc.commit();
+  } catch (err) {
+    fail('⚠ ' + (err instanceof Error ? err.message : String(err)));
   }
 }
 

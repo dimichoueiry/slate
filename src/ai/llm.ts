@@ -220,6 +220,88 @@ export async function generateImage(
   return await (await fetch(url)).blob();
 }
 
+// ---------- tool calling (agent loop) ----------
+
+export interface ToolDef {
+  type: 'function';
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+export type ToolRunner = (name: string, args: any) => unknown | Promise<unknown>;
+
+export interface ToolChatResult {
+  text: string;
+  /** one line per tool call: "name(args) → result", for transparency/debug */
+  trace: string[];
+}
+
+/**
+ * Run an OpenRouter chat with tools, executing tool calls locally and looping
+ * until the model returns a final answer (or `maxRounds` is hit). Tool calling
+ * needs OpenRouter — it throws if only the local Ollama fallback is available.
+ */
+export async function chatWithTools(
+  messages: ChatMessage[],
+  tools: ToolDef[],
+  run: ToolRunner,
+  opts: LLMOptions & { maxRounds?: number } = {}
+): Promise<ToolChatResult> {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('Tool-using agents need an OpenRouter API key (add one in ⚙ Settings).');
+  const maxRounds = opts.maxRounds ?? 8;
+  const msgs: any[] = [...messages];
+  const trace: string[] = [];
+
+  for (let round = 0; round < maxRounds; round++) {
+    const lastRound = round === maxRounds - 1;
+    const res = await fetch(OPENROUTER_API, {
+      method: 'POST',
+      headers: openRouterHeaders(key),
+      signal: opts.signal,
+      body: JSON.stringify({
+        model: opts.model ?? getOpenRouterModel(),
+        messages: msgs,
+        temperature: opts.temperature,
+        max_tokens: opts.maxTokens,
+        usage: { include: true },
+        // on the final allowed round, stop offering tools so it must answer
+        ...(lastRound ? {} : { tools, tool_choice: 'auto' }),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`);
+    }
+    const data = await res.json();
+    recordUsage(data?.usage);
+    const msg = data?.choices?.[0]?.message;
+    if (!msg) throw new Error('OpenRouter returned no message');
+    msgs.push(msg);
+
+    const calls = msg.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }> | undefined;
+    if (!calls?.length) return { text: msg.content ?? '', trace };
+
+    for (const tc of calls) {
+      let args: any = {};
+      try {
+        args = JSON.parse(tc.function.arguments || '{}');
+      } catch {
+        /* leave args empty — the tool will likely error, which guides the model */
+      }
+      let result: unknown;
+      try {
+        result = await run(tc.function.name, args);
+      } catch (e) {
+        result = { error: e instanceof Error ? e.message : String(e) };
+      }
+      const json = JSON.stringify(result);
+      trace.push(`${tc.function.name}(${tc.function.arguments}) → ${json.slice(0, 240)}`);
+      msgs.push({ role: 'tool', tool_call_id: tc.id, content: json });
+    }
+  }
+  // exhausted rounds without a final assistant message
+  return { text: '', trace };
+}
+
 // ---------- Ollama (local fallback) ----------
 
 async function ollamaChat(messages: ChatMessage[], opts: LLMOptions): Promise<string> {

@@ -78,6 +78,7 @@ export default function NotesPanel({ boardId, ctl }: { boardId: string; ctl: Con
       ) : (
         <LocalAiPanel
           ctl={ctl}
+          boardId={boardId}
           onInsertIntoNote={(value) => {
             const base = text?.trim() ? `${text}\n\n` : '';
             save(base + value.trim());
