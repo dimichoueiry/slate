@@ -1374,17 +1374,40 @@ async function executeBusiness(ctl: AnyObj, node: AnyObj) {
     fail('⚠ business: needs an OpenRouter API key (set one in ⚙ Settings).');
     return;
   }
-  const table = pickTable(inputs.map((o: AnyObj) => String(o.text ?? '')));
+  // Read the FULL file for each input. Large CSVs keep their complete contents in
+  // the blob store (the in-doc text is only a capped preview), so analytics runs
+  // over every row instead of silently understating counts/sums/revenue.
+  const texts: string[] = [];
+  let incomplete = false; // a capped file whose full data we could NOT recover
+  for (const o of inputs as AnyObj[]) {
+    const f = o.file;
+    if (f?.kind === 'csv' && f.blobId) {
+      try {
+        const blob = await getBlob(f.blobId);
+        if (blob) {
+          texts.push(await blob.text());
+          continue;
+        }
+      } catch {
+        /* fall through to the preview below */
+      }
+      incomplete = true; // blob missing/unreadable — preview is all we have
+    } else if (f?.truncated) {
+      incomplete = true; // truncated and no blob (e.g. a non-CSV) — genuinely partial
+    }
+    texts.push(String(o.text ?? ''));
+  }
+
+  const table = pickTable(texts);
   if (!table) {
     fail('⚠ No table found — wire in an upload: node (CSV) or pasted CSV/TSV with a header row.');
     doc.commit();
     return;
   }
-  // If the source file was capped on read, the tools see only part of the data —
-  // tell the agent so it caveats counts/totals instead of reporting them as complete.
-  const truncatedUpload = inputs.some((o: AnyObj) => o.file?.truncated);
-  const truncNote = truncatedUpload
-    ? `\n\nDATA NOTICE: the uploaded file was too large and was truncated, so the table below holds only the first ${table.rows.length.toLocaleString()} rows of the original file. Absolute counts, sums and revenue totals are UNDERSTATED — state this caveat and prefer rates/percentages over raw totals.`
+  // Only caveat when data is genuinely missing. With full data (the normal case)
+  // the agent reports exact numbers, not hedged understatements.
+  const truncNote = incomplete
+    ? `\n\nDATA NOTICE: the full file could not be loaded, so the table below holds only the first ${table.rows.length.toLocaleString()} rows. Absolute counts, sums and revenue totals are UNDERSTATED — state this caveat and prefer rates/percentages over raw totals.`
     : '';
   for (const id of outIds) setText(ctl, id, '⏳ analyzing…');
   doc.commit();

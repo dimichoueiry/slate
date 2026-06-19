@@ -2,10 +2,12 @@
 // (extracted to text) that any AI node can read via gatherInputs. CSV/TSV/TXT/
 // JSON/Markdown are read directly; PDF goes through pdfjs-dist in the browser.
 import type { UploadFile } from '../types';
+import { putBlob } from '../store/db';
 
-// Cap extracted text so a big file can't bloat the doc or blow token limits.
-// CSV/TSV rows are consumed by local deterministic tools (not the LLM prompt),
-// so they get a far larger budget than free text that goes straight into a prompt.
+// Cap the text we INLINE into the doc so a big file can't bloat the persisted
+// board or blow token limits. This cap is for the in-doc preview only — for CSVs
+// the FULL file is also stashed in the blob store (see readUpload) so the
+// deterministic business tools compute over every row, never the preview.
 const MAX_TEXT = 200_000;
 const MAX_TABLE_TEXT = 4_000_000;
 
@@ -70,15 +72,15 @@ async function extractPdf(file: File): Promise<string> {
 /** Read a File into an UploadFile payload (extracted to text). Throws on parse failure. */
 export async function readUpload(file: File): Promise<UploadFile> {
   const kind = classify(file);
-  let text = kind === 'pdf' ? await extractPdf(file) : await file.text();
+  const fullText = kind === 'pdf' ? await extractPdf(file) : await file.text();
 
-  // CSV/TSV get a much larger budget and, if they still overflow, are cut on a
-  // ROW boundary — never mid-row — so a partial read stays a valid, parseable
-  // table instead of silently dropping a quarter of the rows with a half-row tail.
+  // The in-doc preview is capped; if it overflows it's cut on a ROW boundary
+  // (never mid-row) so it stays a valid, parseable table.
   const cap = kind === 'csv' ? MAX_TABLE_TEXT : MAX_TEXT;
-  const truncated = text.length > cap;
+  const truncated = fullText.length > cap;
+  let text = fullText;
   if (truncated) {
-    text = text.slice(0, cap);
+    text = fullText.slice(0, cap);
     if (kind === 'csv') {
       const lastNL = text.lastIndexOf('\n');
       if (lastNL > 0) text = text.slice(0, lastNL);
@@ -86,7 +88,16 @@ export async function readUpload(file: File): Promise<UploadFile> {
   }
 
   const out: UploadFile = { name: file.name, mime: file.type || kind, size: file.size, kind, text, truncated };
-  if (kind === 'csv') out.rows = countRows(text);
+  if (kind === 'csv') {
+    // Count rows from the FULL file so the label/summary never under-reports.
+    out.rows = countRows(fullText);
+    // When the preview is capped, persist the WHOLE file in the blob store so
+    // the business analytics agent reads every row, not just the preview. The
+    // numbers it computes are then exact, not silently understated.
+    if (truncated) {
+      out.blobId = await putBlob(new Blob([fullText], { type: 'text/csv' }));
+    }
+  }
   return out;
 }
 
@@ -102,5 +113,8 @@ export function uploadLabel(f: UploadFile): string {
     f.kind === 'csv' && f.rows != null
       ? `${f.rows.toLocaleString()} rows · ${fmtBytes(f.size)}`
       : `${f.kind.toUpperCase()} · ${fmtBytes(f.size)}`;
-  return `📎 upload: ${f.name}\n${meta}${f.truncated ? ' · truncated' : ''}`;
+  // Only flag "truncated" when data is genuinely lost. A capped CSV whose full
+  // file is in the blob store (blobId) is complete for analytics — don't alarm.
+  const lossy = f.truncated && !f.blobId;
+  return `📎 upload: ${f.name}\n${meta}${lossy ? ' · truncated' : ''}`;
 }

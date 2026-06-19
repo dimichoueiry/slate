@@ -78,13 +78,16 @@ export interface UploadFile {
   mime: string;
   size: number; // bytes
   kind: 'csv' | 'text' | 'json' | 'markdown' | 'pdf';
-  /** extracted text content (capped — see `truncated`) */
+  /** in-doc preview of the content (capped — see `truncated`). For a capped CSV
+   *  the COMPLETE file lives in the blob store under `blobId`. */
   text: string;
-  /** csv only: data row count (excludes header) for the summary label */
+  /** csv only: TRUE data row count of the whole file (excludes header) */
   rows?: number;
-  /** text was capped to keep token/doc size sane */
+  /** the inline `text` preview was capped. Data is only lost when `blobId` is
+   *  absent — a capped CSV with a `blobId` is still complete for analytics. */
   truncated?: boolean;
-  /** original file kept in the blob store (e.g. to re-extract a PDF) */
+  /** blob-store id of the full original file. Set for capped CSVs (so analytics
+   *  reads every row) and PDFs (to re-extract). */
   blobId?: string;
 }
 
