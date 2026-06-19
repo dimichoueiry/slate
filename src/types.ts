@@ -72,6 +72,22 @@ export interface ShapeObj extends BaseObj {
   seed?: number;
 }
 
+/** An uploaded file attached to a node, extracted to text so AI nodes can read it. */
+export interface UploadFile {
+  name: string;
+  mime: string;
+  size: number; // bytes
+  kind: 'csv' | 'text' | 'json' | 'markdown' | 'pdf';
+  /** extracted text content (capped — see `truncated`) */
+  text: string;
+  /** csv only: data row count (excludes header) for the summary label */
+  rows?: number;
+  /** text was capped to keep token/doc size sane */
+  truncated?: boolean;
+  /** original file kept in the blob store (e.g. to re-extract a PDF) */
+  blobId?: string;
+}
+
 export interface StickyObj extends BaseObj {
   type: 'sticky';
   w: number;
@@ -80,6 +96,8 @@ export interface StickyObj extends BaseObj {
   text: string;
   fontSize: number;
   fontFamily?: string; // FONTS id
+  /** present on "upload:" nodes — the uploaded file's extracted content */
+  file?: UploadFile;
 }
 
 export interface TextObj extends BaseObj {

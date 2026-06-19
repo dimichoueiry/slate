@@ -65,6 +65,7 @@
     "dexie": "^4.0.11",
     "marked": "^18.0.5",
     "nanoid": "^5.1.5",
+    "pdfjs-dist": "^4.10.38",
     "perfect-freehand": "^1.2.2",
     "rbush": "^4.0.1",
     "react": "^18.3.1",

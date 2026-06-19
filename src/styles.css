@@ -51,6 +51,27 @@ button { font-family: inherit; }
   z-index: 20;
 }
 
+.toolbar.horizontal {
+  left: 50%;
+  top: 12px;
+  bottom: auto;
+  transform: translateX(-50%);
+  flex-direction: row;
+  align-items: center;
+}
+.toolbar.horizontal .toolbar-grip {
+  height: auto;
+  width: 16px;
+  align-self: stretch;
+}
+.toolbar-rotate {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+  color: var(--chrome-dim);
+}
+.toolbar-rotate:hover { color: var(--chrome-fg); }
+
 .panel-grip {
   display: flex;
   align-items: center;
@@ -272,13 +293,50 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 
-.minimap {
+.minimap-wrap {
   left: 12px;
   bottom: 12px;
   z-index: 20;
   overflow: hidden;
-  cursor: pointer;
+  padding: 0;
 }
+.minimap-canvas {
+  display: block;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.minimap-min {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(28, 28, 32, 0.78);
+  color: #e8e8ea;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.minimap-min:hover { background: #3c78ff; }
+.minimap-chip {
+  left: 12px;
+  bottom: 12px;
+  z-index: 20;
+  width: 36px;
+  height: 36px;
+  border: none;
+  font-size: 17px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.minimap-chip:hover { color: #fff; }
 
 .hint {
   position: absolute;

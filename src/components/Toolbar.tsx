@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUI } from '../store/ui';
 import type { ToolId } from '../types';
+import { readUpload, uploadLabel } from '../ui/upload';
+import { UPLOAD_ACCEPT } from '../ui/aiNodeButtons';
 
 const POS_KEY = 'slate-toolbar-pos';
+const ORIENT_KEY = 'slate-toolbar-horizontal';
 
 function loadPos(): { x: number; y: number } | null {
   try {
@@ -33,8 +36,35 @@ export default function Toolbar() {
   const iconTrayOpen = useUI((s) => s.iconTrayOpen);
   const set = useUI((s) => s.set);
   const [pos, setPos] = useState(loadPos);
+  const [horizontal, setHorizontal] = useState(() => localStorage.getItem(ORIENT_KEY) === '1');
   const drag = useRef<{ dx: number; dy: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const toggleOrient = () => {
+    setHorizontal((h) => {
+      const next = !h;
+      try {
+        localStorage.setItem(ORIENT_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const onUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const ctl = (window as any).__slateCtl;
+    if (!file || !ctl) return;
+    try {
+      const payload = await readUpload(file);
+      ctl.addUploadNode(payload, uploadLabel(payload));
+    } catch (err) {
+      ctl.addTextAtCenter?.(`⚠ Couldn't read ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   useEffect(() => {
     if (pos) localStorage.setItem(POS_KEY, JSON.stringify(pos));
@@ -60,7 +90,7 @@ export default function Toolbar() {
   return (
     <div
       ref={ref}
-      className="panel toolbar"
+      className={`panel toolbar${horizontal ? ' horizontal' : ''}`}
       style={pos ? { left: pos.x, top: pos.y, transform: 'none' } : undefined}
     >
       <div
@@ -76,6 +106,13 @@ export default function Toolbar() {
       >
         ⋮⋮
       </div>
+      <button
+        className="tool-btn toolbar-rotate"
+        title={horizontal ? 'Make toolbar vertical' : 'Make toolbar horizontal'}
+        onClick={toggleOrient}
+      >
+        {horizontal ? '↕' : '↔'}
+      </button>
       {TOOLS.map((t) => (
         <button
           key={t.id}
@@ -94,6 +131,14 @@ export default function Toolbar() {
       >
         ✦<span className="kbd">I</span>
       </button>
+      <button
+        className="tool-btn"
+        title="Upload a file (CSV, PDF, text…) as a node AI can read"
+        onClick={() => fileRef.current?.click()}
+      >
+        📎<span className="kbd">U</span>
+      </button>
+      <input ref={fileRef} type="file" accept={UPLOAD_ACCEPT} hidden onChange={(e) => void onUploadFile(e)} />
     </div>
   );
 }

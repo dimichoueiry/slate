@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 
 const W = 192;
 const H = 128;
+const COLLAPSE_KEY = 'slate-minimap-collapsed';
 
 const TYPE_COLORS: Record<string, string> = {
   stroke: 'rgba(40,40,50,0.75)',
@@ -19,9 +20,19 @@ const TYPE_COLORS: Record<string, string> = {
 export default function Minimap({ ctl }: { ctl: Controller }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const visible = useUI((s) => s.minimapVisible);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1');
+
+  const toggle = (next: boolean) => {
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+    } catch {
+      /* storage unavailable — fine */
+    }
+  };
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || collapsed) return;
     const canvas = ref.current!;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = W * dpr;
@@ -70,9 +81,17 @@ export default function Minimap({ ctl }: { ctl: Controller }) {
       unsubDoc();
       unsubCam();
     };
-  }, [ctl, visible]);
+  }, [ctl, visible, collapsed]);
 
   if (!visible) return null;
+
+  if (collapsed) {
+    return (
+      <button className="panel minimap-chip" title="Show minimap" onClick={() => toggle(false)}>
+        🗺
+      </button>
+    );
+  }
 
   const navigate = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = ref.current!;
@@ -89,15 +108,20 @@ export default function Minimap({ ctl }: { ctl: Controller }) {
   };
 
   return (
-    <canvas
-      ref={ref}
-      className="panel minimap"
-      style={{ width: W, height: H }}
-      onPointerDown={(e) => {
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        navigate(e);
-      }}
-      onPointerMove={(e) => e.buttons === 1 && navigate(e)}
-    />
+    <div className="panel minimap-wrap">
+      <canvas
+        ref={ref}
+        className="minimap-canvas"
+        style={{ width: W, height: H }}
+        onPointerDown={(e) => {
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          navigate(e);
+        }}
+        onPointerMove={(e) => e.buttons === 1 && navigate(e)}
+      />
+      <button className="minimap-min" title="Minimize minimap" onClick={() => toggle(true)}>
+        –
+      </button>
+    </div>
   );
 }

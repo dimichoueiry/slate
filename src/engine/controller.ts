@@ -11,6 +11,7 @@ import type {
   StrokeObj,
   TextObj,
   ToolId,
+  UploadFile,
   Vec,
 } from '../types';
 import { STICKY_COLORS } from '../types';
@@ -818,6 +819,33 @@ export class Controller {
       blobId,
       opacity: 1,
       radius: 0,
+    };
+    this.doc.set(obj);
+    this.selection = new Set([obj.id]);
+    this.syncSelection();
+    useUI.getState().set({ tool: 'select' });
+  }
+
+  /** Drop an "upload:" node carrying a file's extracted text. Wire it into an AI
+   *  node and its content flows in as input (see gatherInputs). */
+  addUploadNode(file: UploadFile, label: string, atWorld?: Vec) {
+    const w = 240;
+    const h = 96;
+    const center = atWorld ?? screenToWorld(this.camera, { x: this.viewW / 2, y: this.viewH / 2 });
+    const obj: StickyObj = {
+      id: nanoid(8),
+      type: 'sticky',
+      x: center.x - w / 2,
+      y: center.y - h / 2,
+      w,
+      h,
+      rotation: 0,
+      z: this.doc.nextZ(),
+      color: '#D7E3FC',
+      text: label,
+      fontSize: 14,
+      fontFamily: useUI.getState().fontFamily,
+      file,
     };
     this.doc.set(obj);
     this.selection = new Set([obj.id]);

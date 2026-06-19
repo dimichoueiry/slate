@@ -9,6 +9,8 @@ import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
 import { lineHeight, textBlockSize } from '../engine/text';
 import { getBasePrompt } from '../ai/basePrompts';
+import { uploadLabel } from './upload';
+import type { UploadFile } from '../types';
 
 type AnyObj = Record<string, any>;
 
@@ -1604,9 +1606,41 @@ function nodeOutputText(ctl: AnyObj, node: AnyObj): string {
   return '';
 }
 
+const UPLOAD = /^(▶ ?)?(📎 ?)?upload:/i;
+
+/** An "upload:" node carrying a file's extracted text (used to feed AI nodes). */
+export function isUploadNode(o: AnyObj): boolean {
+  return o?.type === 'sticky' && o.file && typeof o.file.text === 'string';
+}
+
+/** A node that IS or WANTS TO BE an upload node — has a file, or the user typed
+ *  "upload:" into it. These get a 📎 file-picker button instead of ▶ run. */
+export function isUploadIntent(o: AnyObj | undefined): boolean {
+  return (
+    !!o &&
+    (o.type === 'sticky' || o.type === 'text') &&
+    (isUploadNode(o) || (typeof o.text === 'string' && UPLOAD.test(o.text.split('\n')[0])))
+  );
+}
+
+/** Attach a freshly-read file to an existing node: store the payload and swap the
+ *  text to the human summary, in one undo step. */
+export function applyUploadToNode(ctl: AnyObj, id: string, file: UploadFile) {
+  if (!ctl.doc.get(id)) return;
+  ctl.doc.begin();
+  ctl.doc.update(id, { file });
+  setText(ctl, id, uploadLabel(file));
+  ctl.doc.commit();
+}
+
 function gatherInputs(ctl: AnyObj, node: AnyObj): AnyObj[] {
   return inputObjects(ctl, node)
     .map((o: AnyObj) => {
+      // upload nodes feed their file's CONTENT, not the "📎 upload: …" label
+      if (isUploadNode(o)) {
+        const t = String(o.file.text ?? '').trim();
+        return t ? { ...o, text: t } : null;
+      }
       // when an AI node is wired straight into another node, feed its RESULT,
       // not its prompt — this is what makes node→node chains and loops work
       if (isAINode(o)) {

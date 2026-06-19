@@ -13,6 +13,8 @@ import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
 import { stopAllSchedules } from '../ui/ainodes';
+import { isUploadable, readUpload, uploadLabel } from '../ui/upload';
+import { UPLOAD_ACCEPT } from '../ui/aiNodeButtons';
 import CommandPalette from './CommandPalette';
 import AIPanel from '../ai/AIPanel';
 import RunButtons from '../ui/aiNodeButtons';
@@ -309,6 +311,23 @@ export default function BoardView({ boardId }: { boardId: string }) {
         useUI.getState().set({ iconTrayOpen: !useUI.getState().iconTrayOpen });
         return;
       }
+      if (k === 'u' && !e.shiftKey) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = UPLOAD_ACCEPT;
+        input.onchange = async () => {
+          const file = input.files?.[0];
+          if (!file) return;
+          try {
+            const payload = await readUpload(file);
+            ctl.addUploadNode(payload, uploadLabel(payload));
+          } catch (err) {
+            ctl.addTextAtCenter(`⚠ Couldn't read ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        };
+        input.click();
+        return;
+      }
       if (TOOL_KEYS[k] && !e.shiftKey) {
         useUI.getState().set({ tool: TOOL_KEYS[k] });
       }
@@ -331,6 +350,14 @@ export default function BoardView({ boardId }: { boardId: string }) {
       const blobId = await putBlob(file);
       const bmp = await createImageBitmap(file);
       ctl.addImage(blobId, { w: bmp.width, h: bmp.height }, at);
+    };
+    const addUploadFile = async (file: File, at?: { x: number; y: number }) => {
+      try {
+        const payload = await readUpload(file);
+        ctl.addUploadNode(payload, uploadLabel(payload), at);
+      } catch (err) {
+        ctl.addTextAtCenter(`⚠ Couldn't read ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     };
     const onPaste = (e: ClipboardEvent) => {
       const ui = useUI.getState();
@@ -368,6 +395,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       const at = ctl.toWorld(e);
       for (const file of files) {
         if (file.type.startsWith('image/')) void addImageFile(file, at);
+        else if (isUploadable(file)) void addUploadFile(file, at);
       }
     };
     const onDragOver = (e: DragEvent) => e.preventDefault();
