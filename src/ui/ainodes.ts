@@ -995,10 +995,7 @@ async function executeAsk(ctl: AnyObj, node: AnyObj) {
       [
         {
           role: 'system',
-          content:
-            "You are a precise research assistant. Answer the user's question using ONLY the web results provided. " +
-            'Be specific, accurate, and complete but concise. Cite sources inline as [1], [2]… matching the result numbers. ' +
-            "If the results don't contain the answer, say so plainly. Never invent facts, numbers, or URLs.",
+          content: getBasePrompt('search'),
         },
         { role: 'user', content: `QUESTION: ${question}\n\nWEB RESULTS:\n${context || data?.answer || '(none)'}` },
       ],
@@ -1287,7 +1284,7 @@ async function executeResearch(ctl: AnyObj, node: AnyObj) {
     const res = await fetch('/api/research', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query, apiKey, model: getOpenRouterModel() }),
+      body: JSON.stringify({ query, apiKey, model: getOpenRouterModel(), synthesisPrompt: getBasePrompt('research') }),
     });
     // Don't assume JSON: a platform-level 500 (timeout, crashed function) returns
     // a plaintext error page, which would otherwise blow up as "Unexpected token".

@@ -55,7 +55,15 @@ function parseList(raw: string): string[] {
     .slice(0, 5);
 }
 
-export async function runResearch(query: unknown, apiKey: unknown, model: unknown): Promise<ResearchResult> {
+const DEFAULT_SYNTHESIS =
+  'You are a research analyst. Write a clear, well-structured briefing that answers the original question using the findings. Use short sections and concrete points. Plain text (light markdown headings ok), no preamble.';
+
+export async function runResearch(
+  query: unknown,
+  apiKey: unknown,
+  model: unknown,
+  synthesisPrompt?: unknown
+): Promise<ResearchResult> {
   const key = (typeof apiKey === 'string' && apiKey) || process.env.OPENROUTER_API_KEY || '';
   if (!key) return { status: 400, body: { error: 'Research needs an OpenRouter API key (set one in ⚙ Settings).' } };
   if (typeof query !== 'string' || !query.trim()) return { status: 400, body: { error: 'Provide a research question.' } };
@@ -109,11 +117,9 @@ export async function runResearch(query: unknown, apiKey: unknown, model: unknow
     const digest = s.findings
       .map((f) => `### ${f.q}\n${f.answer}\nSources: ${f.sources.map((x) => x.url).join(', ')}`)
       .join('\n\n');
-    const report = await ask(
-      llm,
-      'You are a research analyst. Write a clear, well-structured briefing that answers the original question using the findings. Use short sections and concrete points. Plain text (light markdown headings ok), no preamble.',
-      `Question: ${s.query}\n\nFindings:\n${digest}`
-    );
+    const sys =
+      typeof synthesisPrompt === 'string' && synthesisPrompt.trim() ? synthesisPrompt : DEFAULT_SYNTHESIS;
+    const report = await ask(llm, sys, `Question: ${s.query}\n\nFindings:\n${digest}`);
     return { report };
   };
 
@@ -181,7 +187,7 @@ export default async function handler(req: any, res: any) {
   res.setHeader('content-type', 'application/json');
   try {
     const body = await readJson(req);
-    const { status, body: out } = await runResearch(body?.query, body?.apiKey, body?.model);
+    const { status, body: out } = await runResearch(body?.query, body?.apiKey, body?.model, body?.synthesisPrompt);
     res.statusCode = status;
     res.end(JSON.stringify(out));
   } catch (e) {

@@ -107,7 +107,7 @@ export default function slatePersist(): Plugin {
           }
           // lazy-load so LangGraph isn't pulled in at dev-server startup
           const { runResearch } = await import('./api/research');
-          const { status, body: out } = await runResearch(parsed.query, parsed.apiKey, parsed.model);
+          const { status, body: out } = await runResearch(parsed.query, parsed.apiKey, parsed.model, parsed.synthesisPrompt);
           res.statusCode = status;
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify(out));
