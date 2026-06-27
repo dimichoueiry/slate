@@ -111,7 +111,7 @@ const CSS = `
 .settings-kit button:hover:not(:disabled){background:var(--accent)}
 .settings-kit button:disabled{opacity:.4;cursor:default}
 .settings-newkit{border:1px dashed rgba(255,255,255,.2);background:transparent;color:var(--text-dim);border-radius:8px;padding:7px;font-size:12px;cursor:pointer}
-.settings-newkit:hover{border-color:var(--accent);color:#fff}
+.settings-newkit:hover{border-color:var(--accent);color:var(--accent)}
 .slate-settings textarea{width:100%;box-sizing:border-box;background:var(--border);border:none;border-radius:8px;color:var(--text);padding:8px 10px;font:12px/1.5 inherit;outline:none;resize:vertical}
 .slate-settings textarea:focus{box-shadow:0 0 0 1.5px var(--accent)}
 `;

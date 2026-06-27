@@ -6,9 +6,10 @@ import { activeProvider, getOpenRouterModel } from './llm';
 import { aiEditSelection } from './aiEdit';
 
 const CSS = `
-.slate-ai-pill{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;border:none;border-radius:50%;width:40px;height:40px;background:var(--surface);color:#fff;font-size:17px;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px)}
-.slate-ai-pill:hover{background:var(--accent)}
-.slate-ai-pill.input{margin-left:52px;font-size:13px}
+.slate-ai-pill{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;border:none;border-radius:50%;width:40px;height:40px;background:var(--accent);color:var(--on-accent);font-size:17px;cursor:pointer;box-shadow:var(--shadow);backdrop-filter:blur(14px);transition:background var(--dur) var(--ease-out)}
+.slate-ai-pill:hover{background:var(--violet-2)}
+.slate-ai-pill.input{margin-left:52px;font-size:15px;background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.slate-ai-pill.input:hover{background:var(--surface-hover)}
 .slate-ai-bar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px);padding:8px 10px;width:min(560px,92vw)}
 .slate-ai-bar .spark{font-size:15px;flex-shrink:0}
 .slate-ai-bar input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:13px}
