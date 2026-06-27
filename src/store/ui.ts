@@ -45,6 +45,8 @@ interface UIState {
 
   selection: string[];
   editingTextId: string | null;
+  /** sticky or text object whose full content is open in the reader modal, or null */
+  readerObjectId: string | null;
   zoomPct: number;
   canUndo: boolean;
   canRedo: boolean;
@@ -155,6 +157,7 @@ export const useUI = create<UIState>((setState) => ({
 
   selection: [],
   editingTextId: null,
+  readerObjectId: null,
   zoomPct: 100,
   canUndo: false,
   canRedo: false,

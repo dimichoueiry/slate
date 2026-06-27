@@ -9,6 +9,7 @@ import StyleBar from './StyleBar';
 import ZoomBar from './ZoomBar';
 import Minimap from './Minimap';
 import TextEditor from './TextEditor';
+import { StickyReader } from './StickyReader';
 import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
@@ -46,6 +47,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
   const [ctl, setCtl] = useState<Controller | null>(null);
   const [loaded, setLoaded] = useState(false);
   const editingTextId = useUI((s) => s.editingTextId);
+  const readerObjectId = useUI((s) => s.readerObjectId);
   const tool = useUI((s) => s.tool);
 
   // ---------- controller lifecycle ----------
@@ -432,6 +434,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
           <ZoomBar ctl={ctl} />
           <Minimap ctl={ctl} />
           {editingTextId && <TextEditor key={editingTextId} ctl={ctl} objectId={editingTextId} />}
+          {readerObjectId && <StickyReader key={readerObjectId} ctl={ctl} objectId={readerObjectId} />}
           <NotesPanel boardId={boardId} ctl={ctl} />
           <IconTray ctl={ctl} />
           <CommandPalette ctl={ctl} boardId={boardId} />

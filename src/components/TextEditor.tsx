@@ -4,6 +4,7 @@ import type { ConnectorObj, ShapeObj, StickyObj, TextObj } from '../types';
 import { fontStack } from '../types';
 import { useUI } from '../store/ui';
 import { lineHeight, textBlockSize } from '../engine/text';
+import { clampGrowHeight } from '../engine/sticky';
 import { polylineMidpoint, routeConnector } from '../engine/geometry';
 
 const SLASH_COMMANDS: { cmd: string; label: string; desc: string }[] = [
@@ -56,11 +57,11 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
           ctl.doc.delete(o.id);
         } else {
           const m = textBlockSize(text, o.fontSize, o.fixedWidth ? o.w : undefined, 400, o.fontFamily);
-          ctl.doc.update<TextObj>(o.id, { text, w: o.fixedWidth ? o.w : m.w, h: m.h });
+          ctl.doc.update<TextObj>(o.id, { text, w: o.fixedWidth ? o.w : m.w, h: clampGrowHeight(o.h, m.h) });
         }
       } else if (o.type === 'sticky') {
         const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, o.fontFamily);
-        ctl.doc.update<StickyObj>(o.id, { text, h: Math.max(o.h, m.h + 24) });
+        ctl.doc.update<StickyObj>(o.id, { text, h: clampGrowHeight(o.h, Math.max(o.h, m.h + 24)) });
       } else {
         ctl.doc.update<ShapeObj>(o.id, { text });
       }

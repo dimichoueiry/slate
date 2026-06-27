@@ -18,6 +18,7 @@ import type { Doc } from './doc';
 import { boundsOf, polylineMidpoint, routeConnector, shapePolygon } from './geometry';
 import { PEN_CONFIGS, strokePath } from './ink';
 import { fontString, lineHeight, wrapText } from './text';
+import { clampLayout, type ClampLayout, type ClampObj } from './sticky';
 import { fontStack } from '../types';
 import rough from 'roughjs';
 
@@ -433,20 +434,67 @@ export function drawSticky(ctx: CanvasRenderingContext2D, o: StickyObj) {
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
   if (o.text) {
-    const maxW = Math.max(8, o.w - 24);
-    const lines = wrapText(o.text, o.fontSize, maxW, 500, o.fontFamily);
+    const layout = clampLayout(o);
     const lh = lineHeight(o.fontSize);
     ctx.fillStyle = 'rgba(20,20,20,0.92)';
     ctx.font = fontString(o.fontSize, 500, fontStack(o.fontFamily));
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     let y = o.y + 12;
-    for (const line of lines) {
+    for (const line of layout.lines) {
       ctx.fillText(line, o.x + 12, y);
       y += lh;
     }
+    // fade clamped overflow into the paper (the sticky's own color)
+    drawClampOverlay(ctx, o, layout, o.color);
   }
   ctx.restore();
+}
+
+/** Canvas background — clamped text fades into this where there's no paper behind it. */
+const SCENE_BG = '#f3f2ef';
+
+/** Same color at zero alpha, so a fade reads as "dissolving" rather than greying out. */
+function transparentVariant(color: string): string {
+  const h = color.trim();
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(h);
+  if (m) {
+    const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},0)`;
+  }
+  return 'rgba(0,0,0,0)';
+}
+
+/** Draw the fade + "Show more · N words" pill over a clamped object's overflow. */
+function drawClampOverlay(
+  ctx: CanvasRenderingContext2D,
+  o: ClampObj,
+  layout: ClampLayout,
+  fadeColor: string
+) {
+  if (!layout.clamped || !layout.chip) return;
+  const chip = layout.chip;
+  const lh = lineHeight(o.fontSize);
+  const fadeTop = chip.y - lh;
+  const grad = ctx.createLinearGradient(0, fadeTop, 0, chip.y + chip.h);
+  grad.addColorStop(0, transparentVariant(fadeColor));
+  grad.addColorStop(1, fadeColor);
+  ctx.fillStyle = grad;
+  ctx.fillRect(o.x - 2, fadeTop, o.w + 4, o.y + o.h - fadeTop);
+
+  const label = `Show more · ${layout.wordCount} words`;
+  const pill = new Path2D();
+  pill.roundRect(chip.x, chip.y, chip.w, chip.h, chip.h / 2);
+  ctx.fillStyle = 'rgba(20,20,20,0.08)';
+  ctx.fill(pill);
+  ctx.fillStyle = 'rgba(20,20,20,0.66)';
+  ctx.font = fontString(Math.max(11, o.fontSize - 4), 600, fontStack(o.fontFamily));
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, chip.x + chip.w / 2, chip.y + chip.h / 2);
 }
 
 export function drawText(ctx: CanvasRenderingContext2D, o: TextObj) {
@@ -455,13 +503,14 @@ export function drawText(ctx: CanvasRenderingContext2D, o: TextObj) {
   ctx.font = fontString(o.fontSize, 400, fontStack(o.fontFamily));
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  const lines = o.fixedWidth ? wrapText(o.text, o.fontSize, o.w, 400, o.fontFamily) : o.text.split('\n');
+  const layout = clampLayout(o);
   const lh = lineHeight(o.fontSize);
   let y = o.y;
-  for (const line of lines) {
+  for (const line of layout.lines) {
     ctx.fillText(line, o.x, y);
     y += lh;
   }
+  drawClampOverlay(ctx, o, layout, SCENE_BG);
   ctx.restore();
 }
 

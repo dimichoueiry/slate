@@ -2,6 +2,7 @@
 // (edits + creations + deletions) → applied as a single undoable transaction.
 import { chat, type ChatMessage } from './llm';
 import { textBlockSize } from '../engine/text';
+import { clampHeight } from '../engine/sticky';
 
 type AnyObj = Record<string, any>;
 
@@ -142,7 +143,8 @@ function buildCreated(item: AnyObj, refs: Map<string, string>, doc: AnyObj): Any
       const fontSize = num(item.fontSize, 18, 8, 96);
       const text = str(item.text);
       const m = textBlockSize(text || ' ', fontSize, w - 24, 500);
-      return { ...base, type: 'sticky', w, h: Math.max(num(item.h, 180, 40, 4000), m.h + 24), color: color(item.color, '#FFE066'), text, fontSize };
+      const h = clampHeight(Math.max(num(item.h, 180, 40, 4000), m.h + 24));
+      return { ...base, type: 'sticky', w, h, color: color(item.color, '#FFE066'), text, fontSize };
     }
     case 'shape':
       return {
@@ -165,7 +167,7 @@ function buildCreated(item: AnyObj, refs: Map<string, string>, doc: AnyObj): Any
       const fontSize = num(item.fontSize, 20, 6, 200);
       const text = str(item.text, ' ');
       const m = textBlockSize(text, fontSize);
-      return { ...base, type: 'text', text, color: color(item.color, '#1a1a1a'), fontSize, w: m.w, h: m.h, fixedWidth: false };
+      return { ...base, type: 'text', text, color: color(item.color, '#1a1a1a'), fontSize, w: m.w, h: clampHeight(m.h), fixedWidth: false };
     }
     case 'frame':
       return { ...base, z: -doc.nextZ(), type: 'frame', name: str(item.name, 'Frame'), w: num(item.w, 800, 40, 20000), h: num(item.h, 500, 40, 20000) };

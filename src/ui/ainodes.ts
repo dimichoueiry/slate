@@ -10,6 +10,7 @@ import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
 import { lineHeight, textBlockSize } from '../engine/text';
+import { clampGrowHeight } from '../engine/sticky';
 import { getBasePrompt } from '../ai/basePrompts';
 import { uploadLabel } from './upload';
 import type { UploadFile } from '../types';
@@ -147,11 +148,11 @@ function setText(ctl: AnyObj, id: string, text: string) {
   const patch: AnyObj = { text };
   if (o.type === 'sticky') {
     const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, o.fontFamily);
-    patch.h = Math.max(o.h, m.h + 24);
+    patch.h = clampGrowHeight(o.h, Math.max(o.h, m.h + 24));
   } else if (o.type === 'text') {
     const m = textBlockSize(text || ' ', o.fontSize, o.fixedWidth ? o.w : undefined, 400, o.fontFamily);
     patch.w = o.fixedWidth ? o.w : m.w;
-    patch.h = m.h;
+    patch.h = clampGrowHeight(o.h, m.h);
   }
   ctl.doc.update(id, patch);
 }

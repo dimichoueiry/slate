@@ -43,6 +43,7 @@ import { drawScene, type GridSettings } from './renderer';
 import { snapBox, snapToGrid, type SnapResult } from './snap';
 import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
+import { clampHeight, clampLayout, pointInClampChip, stickyWidthFor } from './sticky';
 import { useUI } from '../store/ui';
 import { saveComponent, type ComponentDef } from '../store/db';
 import { exportPng } from '../export/export';
@@ -490,15 +491,16 @@ export class Controller {
   addPromptSticky(text: string) {
     const center = screenToWorld(this.camera, { x: this.viewW / 2, y: this.viewH / 2 });
     const fontSize = 16;
-    const w = 220;
+    const w = stickyWidthFor(text);
     const m = textBlockSize(text || ' ', fontSize, w - 24, 500, useUI.getState().fontFamily);
+    const h = clampHeight(Math.max(120, m.h + 24));
     const obj: StickyObj = {
       id: nanoid(8),
       type: 'sticky',
       x: center.x - w / 2,
-      y: center.y - Math.max(120, m.h + 24) / 2,
+      y: center.y - h / 2,
       w,
-      h: Math.max(120, m.h + 24),
+      h,
       rotation: 0,
       z: this.doc.nextZ(),
       color: '#FFE066',
@@ -885,6 +887,7 @@ export class Controller {
     if (ui.tool === 'select') {
       if (tryToggleCheckbox(this, e)) return; // [] checkbox toggle
       if (tryRunAINode(this, e)) return; // ai:/img: run-glyph (legacy text glyph)
+      if (this.tryOpenStickyReader(screenToWorld(this.camera, screen))) return; // "Show more" chip on a clamped note
       // resizing a frame selection resizes ONLY the frame, never its contents
       if (this.selection.size > 1) {
         const objs = [...this.selection].map((id) => this.doc.get(id)).filter(Boolean) as SlateObj[];
@@ -1519,6 +1522,20 @@ export class Controller {
     this.overlayDirty = true;
   }
 
+  /** Open the reader modal if a world point lands on a clamped object's "Show more" chip. */
+  tryOpenStickyReader(world: Vec): boolean {
+    const hit = hitTest(this.doc, world, 6 / this.camera.zoom);
+    if (!hit) return false;
+    const o = this.doc.get(hit.id);
+    if (o && (o.type === 'sticky' || o.type === 'text') && pointInClampChip(o, world)) {
+      this.selection = new Set([o.id]);
+      this.syncSelection();
+      useUI.getState().set({ readerObjectId: o.id });
+      return true;
+    }
+    return false;
+  }
+
   handleDoubleClick(e: MouseEvent) {
     const world = this.toWorld(e);
     const ui = useUI.getState();
@@ -1530,6 +1547,12 @@ export class Controller {
       this.selection = new Set([hit.id]);
       this.syncSelection();
       if (isDataNode(this.doc.get(hit.id))) return; // data: nodes are edited via the structured popover, not free text
+      // long content that's clamped on the canvas opens the reader instead of the cramped inline editor
+      const hitObj = this.doc.get(hit.id);
+      if (hitObj && (hitObj.type === 'sticky' || hitObj.type === 'text') && clampLayout(hitObj).clamped) {
+        useUI.getState().set({ readerObjectId: hit.id });
+        return;
+      }
       this.startEditingText(hit.id);
       return;
     }
