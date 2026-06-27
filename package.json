@@ -63,6 +63,7 @@
     "@langchain/langgraph": "^1.4.2",
     "@langchain/openai": "^1.4.7",
     "dexie": "^4.0.11",
+    "framer-motion": "^12.42.0",
     "marked": "^18.0.5",
     "nanoid": "^5.1.5",
     "pdfjs-dist": "^4.10.38",

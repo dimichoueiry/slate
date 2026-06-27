@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { BrandKit, DashStyle, PenTool, Routing, ToolId } from '../types';
 import { applyTheme, INK_ON_DARK, INK_ON_LIGHT, loadTheme, type Theme } from './theme';
 
-export type Route = { view: 'home' } | { view: 'board'; boardId: string };
+export type Route = { view: 'home' } | { view: 'welcome' } | { view: 'board'; boardId: string };
 
 interface UIState {
   route: Route;
