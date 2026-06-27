@@ -983,6 +983,24 @@ button { font-family: inherit; }
   position: fixed;
   inset: 0;
 }
+.home-theme-toggle {
+  position: absolute;
+  top: clamp(24px, 4vh, 40px);
+  right: clamp(24px, 6vw, 64px);
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.home-theme-toggle:hover { background: var(--surface-hover); }
+.home-theme-toggle:active { transform: scale(0.94); }
+.home-theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+
 .home h1 {
   font-size: clamp(2.6rem, 6vw, 5rem);
   font-weight: 800;

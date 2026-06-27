@@ -186,6 +186,7 @@ export interface BoardMeta {
   notes?: string; // markdown side-panel content
   brandKitId?: string | null; // active brand kit for this board
   projectId?: string | null; // folder/project this board belongs to
+  canvasDark?: boolean; // per-board dark canvas surface (default = light paper)
 }
 
 /** A folder/project grouping boards on the home screen. */

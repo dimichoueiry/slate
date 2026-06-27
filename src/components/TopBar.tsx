@@ -5,6 +5,7 @@ import { db, updateBoardMeta } from '../store/db';
 import { goHome } from '../App';
 import { downloadBlob, exportBounds, exportPng, exportSlateFile, exportSvg } from '../export/export';
 import { getFlows, runFlow, type Flow } from '../ui/ainodes';
+import { setCanvasDark } from '../store/theme';
 import BrandKitControl from './BrandKit';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
@@ -112,6 +113,20 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
           onClick={() => ui.toggleTheme()}
         >
           {ui.theme === 'dark' ? '☀' : '☾'}
+        </button>
+        <button
+          className="chrome-btn"
+          title={ui.canvasDark ? 'Light canvas for this board' : 'Dark canvas for this board'}
+          style={{ background: ui.canvasDark ? 'var(--accent)' : undefined }}
+          onClick={() => {
+            const next = !ui.canvasDark;
+            ui.set({ canvasDark: next });
+            setCanvasDark(next);
+            ctl.markSceneDirty();
+            void updateBoardMeta(boardId, { canvasDark: next });
+          }}
+        >
+          ◐
         </button>
         {flows.length > 0 && (
           <button

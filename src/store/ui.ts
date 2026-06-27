@@ -8,9 +8,11 @@ interface UIState {
   route: Route;
   boardName: string;
 
-  /** active color theme; toggled via toggleTheme(), persisted */
+  /** active global chrome theme; toggled via toggleTheme(), persisted */
   theme: Theme;
   toggleTheme: () => void;
+  /** whether the currently-open board uses a dark canvas surface (per-board) */
+  canvasDark: boolean;
 
   tool: ToolId;
   // pen
@@ -214,6 +216,7 @@ export const useUI = create<UIState>((setState) => ({
       applyTheme(next);
       return { theme: next };
     }),
+  canvasDark: false,
 
   set: (patch) => setState(patch),
 }));

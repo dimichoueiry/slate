@@ -19,12 +19,7 @@ export function loadTheme(): Theme {
   return 'dark';
 }
 
-function readVar(name: string, fallback: string): string {
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
-}
-
-/** Apply a theme: set data-theme, sync the canvas colors from the resolved tokens, repaint. */
+/** Apply the global chrome theme (panels/dashboard). The canvas surface is per-board. */
 export function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme;
   try {
@@ -32,11 +27,14 @@ export function applyTheme(theme: Theme) {
   } catch {
     /* ignore */
   }
-  // data-theme is set first so getComputedStyle reflects the active token values
-  setSceneColors({
-    bg: readVar('--canvas-bg', '#15151a'),
-    gridDot: readVar('--grid-dot', 'rgba(255,255,255,0.10)'),
-    gridLine: readVar('--grid-line', 'rgba(255,255,255,0.05)'),
-  });
+}
+
+// Canvas surface is a per-board choice, independent of the chrome theme.
+const CANVAS_LIGHT = { bg: '#f3f2ef', gridDot: 'rgba(60,60,70,0.18)', gridLine: 'rgba(60,60,70,0.08)' };
+const CANVAS_DARK = { bg: '#15151a', gridDot: 'rgba(255,255,255,0.09)', gridLine: 'rgba(255,255,255,0.05)' };
+
+/** Set the drawing canvas surface light/dark for the open board, and repaint. */
+export function setCanvasDark(dark: boolean) {
+  setSceneColors(dark ? CANVAS_DARK : CANVAS_LIGHT);
   (window as { __slateCtl?: { markSceneDirty?: () => void } }).__slateCtl?.markSceneDirty?.();
 }

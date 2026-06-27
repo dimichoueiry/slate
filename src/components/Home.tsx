@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useUI } from '../store/ui';
 import type { BoardMeta, Project } from '../types';
 import {
   createBoard,
@@ -106,8 +107,18 @@ export default function Home() {
   const all = boards ?? [];
   const unfiled = all.filter((b) => !b.projectId);
 
+  const theme = useUI((s) => s.theme);
+  const toggleTheme = useUI((s) => s.toggleTheme);
+
   return (
     <div className="home">
+      <button
+        className="home-theme-toggle"
+        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        onClick={() => toggleTheme()}
+      >
+        {theme === 'dark' ? '☀' : '☾'}
+      </button>
       <h1>
         <span className="logo">▱</span> Slate
       </h1>

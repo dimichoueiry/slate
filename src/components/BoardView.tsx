@@ -3,6 +3,7 @@ import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
 import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit } from '../store/db';
 import { useUI } from '../store/ui';
+import { setCanvasDark } from '../store/theme';
 import type { ToolId } from '../types';
 import Toolbar from './Toolbar';
 import StyleBar from './StyleBar';
@@ -48,6 +49,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
   const [loaded, setLoaded] = useState(false);
   const editingTextId = useUI((s) => s.editingTextId);
   const readerObjectId = useUI((s) => s.readerObjectId);
+  const canvasDark = useUI((s) => s.canvasDark);
   const tool = useUI((s) => s.tool);
 
   // ---------- controller lifecycle ----------
@@ -79,7 +81,8 @@ export default function BoardView({ boardId }: { boardId: string }) {
       controller.doc.dirty.clear(); // loading isn't an edit
       controller.setCamera(meta.viewport);
       const kit = await resolveBoardKit(meta);
-      useUI.getState().set({ boardName: meta.name, selection: [], editingTextId: null, activeBrandKit: kit ?? null });
+      setCanvasDark(!!meta.canvasDark);
+      useUI.getState().set({ boardName: meta.name, selection: [], editingTextId: null, activeBrandKit: kit ?? null, canvasDark: !!meta.canvasDark });
       autosave = startAutosave(controller.doc, boardId);
       setLoaded(true);
     })();
@@ -423,7 +426,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
             : 'crosshair';
 
   return (
-    <div className="board-root" ref={rootRef}>
+    <div className="board-root" ref={rootRef} style={{ background: canvasDark ? '#15151a' : '#f3f2ef' }}>
       <canvas ref={sceneRef} className="layer" />
       <canvas ref={overlayRef} className="layer overlay-canvas" style={{ cursor }} />
       {ctl && loaded && (
