@@ -264,8 +264,12 @@ export default function BoardShowcase() {
     timers.current.push(t);
   };
 
+  // the demo funnels to one specific idea (the tiered-referral one the post is about)
+  const targetIdea = () => createdRef.current.find((o) => o.parentId === 'ideate' && o.text === IDEAS[2]);
   const pickIdea = (id: string) => () => {
-    if (step === 'pick') {
+    if (step !== 'pick') return;
+    const t = targetIdea();
+    if (t && id === t.id) {
       setSelected(id);
       setStep('wire');
     }
@@ -306,7 +310,7 @@ export default function BoardShowcase() {
     const s = sizes[id] ?? { w: nodeById(id)?.w ?? 200, h: 70 };
     return { x: view.x + p.x * view.scale, y: view.y + p.y * view.scale, w: s.w * view.scale, h: s.h * view.scale };
   };
-  const ideaScreenRects = () => created.filter((o) => o.parentId === 'ideate').map((o) => sRect(o.id)).filter(Boolean) as Rect[];
+  const targetIdeaId = created.find((o) => o.parentId === 'ideate' && o.text === IDEAS[2])?.id ?? null;
   let spot: (Rect & { round?: boolean }) | null = null;
   let coachText = '';
   let coachCount: string | null = null;
@@ -319,15 +323,10 @@ export default function BoardShowcase() {
     spot = { x: nr.x + nr.w - 18, y: nr.y - 18, w: 32, h: 32, round: true };
     coachText = 'Hit <b>▶</b> to run';
   } else if (step === 'pick') {
-    const rs = ideaScreenRects();
-    if (rs.length) {
-      const minX = Math.min(...rs.map((q) => q.x));
-      const minY = Math.min(...rs.map((q) => q.y));
-      const maxX = Math.max(...rs.map((q) => q.x + q.w));
-      const maxY = Math.max(...rs.map((q) => q.y + q.h));
-      spot = { x: minX - 6, y: minY - 6, w: maxX - minX + 12, h: maxY - minY + 12 };
-    }
-    coachText = '<b>Click</b> an idea to pick it';
+    const tid = targetIdeaId;
+    const t = tid ? sRect(tid) : null;
+    if (t) spot = { x: t.x - 6, y: t.y - 6, w: t.w + 12, h: t.h + 12 };
+    coachText = '<b>Click</b> this idea';
   } else if (step === 'wire') {
     const lr = sRect('linkedin');
     if (lr) spot = { x: lr.x - 6, y: lr.y - 6, w: lr.w + 12, h: lr.h + 12 };
@@ -374,8 +373,10 @@ export default function BoardShowcase() {
         </div>
       );
     }
+    const isTarget = o.id === targetIdeaId;
+    const dimIdea = step === 'pick' && !isTarget;
     return (
-      <div key={o.id} {...base} className={`lp-sticky${o.status === 'empty' ? ' empty' : ''}${sel ? ' sel' : ''}${step === 'pick' ? ' pick' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 210, background: o.status === 'empty' ? undefined : '#FFE066', cursor: step === 'pick' ? 'pointer' : undefined }}>
+      <div key={o.id} {...base} className={`lp-sticky${o.status === 'empty' ? ' empty' : ''}${sel ? ' sel' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 210, background: o.status === 'empty' ? undefined : '#FFE066', cursor: step === 'pick' && isTarget ? 'pointer' : undefined, opacity: dimIdea ? 0.45 : 1, transition: 'opacity .3s' }}>
         {o.status === 'done' ? <div className="lp-sk-body">{o.text}</div> : <div className="lp-think">{o.status === 'thinking' ? '⏳ thinking…' : ''}</div>}
         {port}
       </div>
