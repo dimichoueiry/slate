@@ -68,6 +68,9 @@ const BUSINESS = /^(▶ ?)?business:/i;
 const RAW = /^(\s*)ai:/i;
 const nid = () => Math.random().toString(36).slice(2, 10);
 const last = { id: '', t: 0 };
+/** Nodes with an LLM call in flight — shared by ALL run triggers (glyph, button,
+ * flow) so the same node can never run twice concurrently and double-bill. */
+const inflight = new Set<string>();
 
 export function normalizeAINodeText(_text: string): string | null {
   // glyph injection retired — ai-nodes now get a real DOM run button
@@ -135,7 +138,8 @@ export function tryRunAINode(ctl: AnyObj, e: { clientX: number; clientY: number 
     if (last.id === node.id && now - last.t < 600) return true;
     last.id = node.id;
     last.t = now;
-    void execute(ctl, node);
+    if (inflight.has(node.id)) return true; // already running via another trigger — swallow the click
+    void runAINode(ctl, node);
     return true;
   } catch {
     return false;
@@ -198,20 +202,26 @@ export function hiddenNodeAt(ctl: AnyObj, e: { clientX: number; clientY: number 
 
 /** Public runner used by the floating run buttons. */
 export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
-  const head = promptSource(node).split('\n')[0];
-  if (IMG.test(head)) return executeImage(ctl, node);
-  if (WEB.test(head)) return executeWeb(ctl, node);
-  if (SEARCH.test(head)) return executeSearch(ctl, node);
-  if (ASK.test(head)) return executeAsk(ctl, node);
-  if (RESEARCH.test(head)) return executeResearch(ctl, node);
-  if (EXTRACT.test(head)) return executeExtract(ctl, node);
-  if (CHART.test(head)) return executeChart(ctl, node);
-  if (FIX.test(head)) return executeFix(ctl, node);
-  if (BUSINESS.test(head)) return executeBusiness(ctl, node);
-  if (DATA.test(head)) return executeData(ctl, node);
-  if (COND.test(head)) return executeCondition(ctl, node);
-  if (TICK.test(head)) return executeTick(ctl, node);
-  return execute(ctl, node);
+  if (inflight.has(node.id)) return; // already running — don't fire a second LLM call (double-bill)
+  inflight.add(node.id);
+  try {
+    const head = promptSource(node).split('\n')[0];
+    if (IMG.test(head)) return await executeImage(ctl, node);
+    if (WEB.test(head)) return await executeWeb(ctl, node);
+    if (SEARCH.test(head)) return await executeSearch(ctl, node);
+    if (ASK.test(head)) return await executeAsk(ctl, node);
+    if (RESEARCH.test(head)) return await executeResearch(ctl, node);
+    if (EXTRACT.test(head)) return await executeExtract(ctl, node);
+    if (CHART.test(head)) return await executeChart(ctl, node);
+    if (FIX.test(head)) return await executeFix(ctl, node);
+    if (BUSINESS.test(head)) return await executeBusiness(ctl, node);
+    if (DATA.test(head)) return await executeData(ctl, node);
+    if (COND.test(head)) return await executeCondition(ctl, node);
+    if (TICK.test(head)) return await executeTick(ctl, node);
+    return await execute(ctl, node);
+  } finally {
+    inflight.delete(node.id);
+  }
 }
 
 /** First line marks an AI node? */
