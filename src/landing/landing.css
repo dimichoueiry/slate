@@ -470,6 +470,75 @@
   color: #fff;
   font-weight: 600;
 }
+
+/* drag-out port on a node (pull a connector to a new output) */
+.lp-port {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--ac);
+  color: var(--ac);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  cursor: crosshair;
+  z-index: 12;
+}
+.lp-port.pulse {
+  animation: lp-pulse 1.5s ease-out infinite;
+}
+@keyframes lp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(124, 58, 237, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+  }
+}
+
+/* empty (not-yet-generated) output sticky */
+.lp-sticky.empty {
+  background: rgba(255, 224, 102, 0.45);
+  border: 2px dashed rgba(150, 120, 0, 0.5);
+  box-shadow: none;
+  min-height: 90px;
+}
+
+/* coach-mark callout (screen space) */
+.lp-coach {
+  position: absolute;
+  z-index: 33;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--ac);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 13px;
+  border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: left 0.4s var(--ease), top 0.4s var(--ease), opacity 0.3s;
+}
+.lp-coach .lp-step {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+}
 .lp-world .lp-sticky,
 .lp-world .lp-postcard,
 .lp-world .lp-imgout {
