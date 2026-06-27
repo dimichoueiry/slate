@@ -313,11 +313,11 @@ export default function BoardShowcase() {
   const nr = sRect('ideate');
   if (step === 'pull' && nr) {
     spot = { x: nr.x + nr.w - 13, y: nr.y + nr.h / 2 - 13, w: 26, h: 26, round: true };
-    coachText = 'Drag from the <b>+</b> to pull an output out of the node — do it <b>3×</b>.';
+    coachText = 'Drag the <b>+</b> out';
     coachCount = `${ideaCount()} / 3`;
   } else if (step === 'run' && nr) {
     spot = { x: nr.x + nr.w - 18, y: nr.y - 18, w: 32, h: 32, round: true };
-    coachText = 'Hit <b>▶</b> — Slate runs the node and writes an idea into each output.';
+    coachText = 'Hit <b>▶</b> to run';
   } else if (step === 'pick') {
     const rs = ideaScreenRects();
     if (rs.length) {
@@ -327,19 +327,19 @@ export default function BoardShowcase() {
       const maxY = Math.max(...rs.map((q) => q.y + q.h));
       spot = { x: minX - 6, y: minY - 6, w: maxX - minX + 12, h: maxY - minY + 12 };
     }
-    coachText = '<b>Click</b> the idea you want to build on.';
+    coachText = '<b>Click</b> an idea to pick it';
   } else if (step === 'wire') {
     const lr = sRect('linkedin');
     if (lr) spot = { x: lr.x - 6, y: lr.y - 6, w: lr.w + 12, h: lr.h + 12 };
-    coachText = "Drag from your idea's <b>+</b> into this node to wire it in as input.";
+    coachText = 'Drag it into this node';
   } else if (step === 'post') {
     const lr = sRect('linkedin');
     if (lr) spot = { x: lr.x + lr.w - 18, y: lr.y - 18, w: 32, h: 32, round: true };
-    coachText = 'Run it to <b>draft the LinkedIn post</b> from your idea.';
+    coachText = 'Hit <b>▶</b> to draft the post';
   } else if (step === 'image') {
     const gr = sRect('img');
     if (gr) spot = { x: gr.x + gr.w - 18, y: gr.y - 18, w: 32, h: 32, round: true };
-    coachText = 'Run the image node for <b>matching art</b>.';
+    coachText = 'Hit <b>▶</b> for matching art';
   }
 
   const stepIdx = STEPS.indexOf(step);
