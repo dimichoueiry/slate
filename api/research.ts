@@ -5,7 +5,7 @@
 // LLM and the server's TAVILY_API_KEY for search.
 import { StateGraph, Annotation, START, END } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
-import { searchWeb } from './search';
+import { searchWeb } from './search.js';
 
 interface Finding {
   q: string;
