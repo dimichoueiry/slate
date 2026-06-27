@@ -3,15 +3,15 @@ import { useUI } from '../store/ui';
 
 const CSS = `
 .slate-usage{position:fixed;right:12px;bottom:56px;z-index:30}
-.slate-usage-pill{display:flex;align-items:center;gap:6px;background:rgba(28,28,32,.92);color:#e8e8ea;border:none;border-radius:9px;box-shadow:0 4px 18px rgba(0,0,0,.22);backdrop-filter:blur(12px);padding:6px 10px;font-size:11.5px;cursor:pointer}
+.slate-usage-pill{display:flex;align-items:center;gap:6px;background:var(--surface);color:var(--text);border:none;border-radius:9px;box-shadow:0 4px 18px rgba(0,0,0,.22);backdrop-filter:blur(12px);padding:6px 10px;font-size:11.5px;cursor:pointer}
 .slate-usage-pill:hover{background:rgba(40,40,48,.95)}
 .slate-usage-pill .dot{width:6px;height:6px;border-radius:50%;background:#37b24d}
-.slate-usage-pop{position:absolute;right:0;bottom:38px;width:230px;background:rgba(28,28,32,.97);color:#e8e8ea;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35);backdrop-filter:blur(16px);padding:12px 14px;font-size:12px}
+.slate-usage-pop{position:absolute;right:0;bottom:38px;width:230px;background:var(--surface);color:var(--text);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35);backdrop-filter:blur(16px);padding:12px 14px;font-size:12px}
 .slate-usage-pop h4{margin:0 0 8px;font-size:12px}
 .slate-usage-row{display:flex;justify-content:space-between;padding:3px 0;color:#c7c7cf}
 .slate-usage-row b{color:#fff;font-weight:600}
-.slate-usage-pop .sep{height:1px;background:rgba(255,255,255,.1);margin:8px 0}
-.slate-usage-pop button{width:100%;border:none;background:rgba(255,255,255,.08);color:#e8e8ea;border-radius:7px;padding:6px;font-size:11.5px;cursor:pointer;margin-top:4px}
+.slate-usage-pop .sep{height:1px;background:var(--surface-hover);margin:8px 0}
+.slate-usage-pop button{width:100%;border:none;background:var(--surface-2);color:var(--text);border-radius:7px;padding:6px;font-size:11.5px;cursor:pointer;margin-top:4px}
 .slate-usage-pop button:hover{background:rgba(224,49,49,.25)}
 .slate-usage-pop .muted{color:#8d8d96;font-size:10.5px;margin-top:8px;line-height:1.4}
 `;

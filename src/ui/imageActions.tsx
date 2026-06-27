@@ -6,9 +6,9 @@ import type { Controller } from '../engine/controller';
 import { getBlob } from '../store/db';
 
 const CSS = `
-.slate-img-actions{position:fixed;z-index:46;display:flex;gap:4px;background:rgba(28,28,32,.94);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(12px);padding:5px;pointer-events:auto}
-.slate-img-actions button{border:none;background:rgba(255,255,255,.08);color:#e8e8ea;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
-.slate-img-actions button:hover{background:#3c78ff}
+.slate-img-actions{position:fixed;z-index:46;display:flex;gap:4px;background:var(--surface);border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.28);backdrop-filter:blur(12px);padding:5px;pointer-events:auto}
+.slate-img-actions button{border:none;background:var(--surface-2);color:var(--text);border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
+.slate-img-actions button:hover{background:var(--accent)}
 .slate-img-actions .ok{background:#2f9e44}
 `;
 

@@ -4,9 +4,9 @@ import { useUI } from '../store/ui';
 import type { Controller } from '../engine/controller';
 
 const CSS = `
-.slate-frame-title{position:fixed;top:60px;right:12px;z-index:40;display:flex;align-items:center;gap:7px;background:rgba(28,28,32,.94);border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.25);backdrop-filter:blur(12px);padding:7px 10px;font-size:12px;color:#9a9aa2}
-.slate-frame-title input{background:rgba(255,255,255,.08);border:none;border-radius:7px;color:#e8e8ea;padding:6px 9px;font-size:12.5px;outline:none;width:160px}
-.slate-frame-title input:focus{box-shadow:0 0 0 1.5px #3c78ff}
+.slate-frame-title{position:fixed;top:60px;right:12px;z-index:40;display:flex;align-items:center;gap:7px;background:var(--surface);border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.25);backdrop-filter:blur(12px);padding:7px 10px;font-size:12px;color:var(--text-dim)}
+.slate-frame-title input{background:var(--surface-2);border:none;border-radius:7px;color:var(--text);padding:6px 9px;font-size:12.5px;outline:none;width:160px}
+.slate-frame-title input:focus{box-shadow:0 0 0 1.5px var(--accent)}
 `;
 
 export default function FrameTitle({ ctl }: { ctl: Controller }) {

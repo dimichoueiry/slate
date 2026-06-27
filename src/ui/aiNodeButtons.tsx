@@ -23,7 +23,7 @@ export const UPLOAD_ACCEPT = '.csv,.tsv,.txt,.log,.json,.md,.markdown,.pdf,appli
 
 const CSS = `
 .slate-run-layer{position:fixed;inset:0;z-index:16;pointer-events:none;overflow:hidden}
-.slate-run-btn{--f:1;position:absolute;pointer-events:auto;width:30px;height:30px;border:none;border-radius:50%;cursor:pointer;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#3c78ff,#6741d9);box-shadow:0 3px 10px rgba(40,60,160,.45);transition:transform .12s ease, box-shadow .12s ease;transform:scale(var(--f));transform-origin:center}
+.slate-run-btn{--f:1;position:absolute;pointer-events:auto;width:30px;height:30px;border:none;border-radius:50%;cursor:pointer;color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent),#6741d9);box-shadow:0 3px 10px rgba(40,60,160,.45);transition:transform .12s ease, box-shadow .12s ease;transform:scale(var(--f));transform-origin:center}
 .slate-run-btn:hover{transform:scale(calc(var(--f)*1.15));box-shadow:0 5px 16px rgba(40,60,160,.6)}
 .slate-run-btn:active{transform:scale(calc(var(--f)*.95))}
 .slate-run-btn.running{cursor:default;background:linear-gradient(135deg,#5a5a64,#3a3a44)}
@@ -32,8 +32,8 @@ const CSS = `
 @keyframes slate-pulse{0%,100%{box-shadow:0 3px 10px rgba(12,166,120,.45)}50%{box-shadow:0 3px 18px rgba(12,166,120,.9)}}
 .slate-run-btn .spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:slate-spin .7s linear infinite}
 @keyframes slate-spin{to{transform:rotate(360deg)}}
-.slate-lock-btn{position:absolute;pointer-events:auto;width:22px;height:22px;border:none;border-radius:50%;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;background:rgba(28,28,32,.92);color:#9a9aa2;box-shadow:0 2px 8px rgba(0,0,0,.3);transform:scale(var(--f));transform-origin:center}
-.slate-lock-btn:hover{color:#fff;background:#3c78ff}
+.slate-lock-btn{position:absolute;pointer-events:auto;width:22px;height:22px;border:none;border-radius:50%;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;background:var(--surface);color:var(--text-dim);box-shadow:0 2px 8px rgba(0,0,0,.3);transform:scale(var(--f));transform-origin:center}
+.slate-lock-btn:hover{color:#fff;background:var(--accent)}
 .slate-lock-btn.locked{background:#6741d9;color:#fff}
 .slate-upload-btn{--f:1;position:absolute;pointer-events:auto;height:30px;padding:0 11px;border:none;border-radius:15px;cursor:pointer;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;white-space:nowrap;background:linear-gradient(135deg,#1f6feb,#2f81f7);box-shadow:0 3px 10px rgba(31,111,235,.45);transition:transform .12s ease, box-shadow .12s ease;transform:scale(var(--f));transform-origin:center}
 .slate-upload-btn:hover{transform:scale(calc(var(--f)*1.08));box-shadow:0 5px 16px rgba(31,111,235,.6)}

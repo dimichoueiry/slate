@@ -6,16 +6,16 @@ import { activeProvider, getOpenRouterModel } from './llm';
 import { aiEditSelection } from './aiEdit';
 
 const CSS = `
-.slate-ai-pill{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;border:none;border-radius:50%;width:40px;height:40px;background:rgba(28,28,32,.94);color:#fff;font-size:17px;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px)}
-.slate-ai-pill:hover{background:#3c78ff}
+.slate-ai-pill{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;border:none;border-radius:50%;width:40px;height:40px;background:var(--surface);color:#fff;font-size:17px;cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px)}
+.slate-ai-pill:hover{background:var(--accent)}
 .slate-ai-pill.input{margin-left:52px;font-size:13px}
-.slate-ai-bar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:8px;background:rgba(28,28,32,.94);border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px);padding:8px 10px;width:min(560px,92vw)}
+.slate-ai-bar{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:45;display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.28);backdrop-filter:blur(14px);padding:8px 10px;width:min(560px,92vw)}
 .slate-ai-bar .spark{font-size:15px;flex-shrink:0}
-.slate-ai-bar input{flex:1;background:transparent;border:none;outline:none;color:#e8e8ea;font-size:13px}
-.slate-ai-bar button{border:none;border-radius:8px;background:#3c78ff;color:#fff;font-size:12.5px;padding:6px 12px;cursor:pointer;flex-shrink:0}
+.slate-ai-bar input{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:13px}
+.slate-ai-bar button{border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:12.5px;padding:6px 12px;cursor:pointer;flex-shrink:0}
 .slate-ai-bar button:disabled{opacity:.5;cursor:default}
-.slate-ai-bar .who{font-size:10px;color:#9a9aa2;flex-shrink:0}
-.slate-ai-note{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);z-index:45;font-size:11.5px;color:#9a9aa2;background:rgba(28,28,32,.85);padding:3px 10px;border-radius:8px}
+.slate-ai-bar .who{font-size:10px;color:var(--text-dim);flex-shrink:0}
+.slate-ai-note{position:fixed;bottom:36px;left:50%;transform:translateX(-50%);z-index:45;font-size:11.5px;color:var(--text-dim);background:var(--surface);padding:3px 10px;border-radius:8px}
 .slate-ai-note.err{color:#ff8787}
 `;
 
@@ -120,7 +120,7 @@ export default function AIPanel({ ctl }: { ctl: Controller }) {
         />
         <span className="who">{activeProvider() === 'openrouter' ? getOpenRouterModel().split('/').pop() : 'Ollama'}</span>
         {selCount === 0 && (
-          <button style={{ background: 'rgba(255,255,255,.1)' }} onClick={() => setExpanded(false)}>
+          <button style={{ background: 'var(--surface-hover)' }} onClick={() => setExpanded(false)}>
             ✕
           </button>
         )}

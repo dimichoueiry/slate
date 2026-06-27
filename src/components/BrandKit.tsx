@@ -16,28 +16,28 @@ import { nanoid } from 'nanoid';
 import { BRAND_PRESETS } from '../engine/brandPresets';
 
 const CSS = `
-.brand-pill{display:flex;align-items:center;gap:5px;border:none;background:rgba(255,255,255,.08);color:#e8e8ea;border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap}
-.brand-pill:hover{background:rgba(255,255,255,.16)}
+.brand-pill{display:flex;align-items:center;gap:5px;border:none;background:var(--surface-2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.brand-pill:hover{background:var(--surface-hover)}
 .brand-pill .hex{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .brand-modal-bg{position:fixed;inset:0;z-index:140;background:rgba(10,10,14,.4);display:flex;align-items:flex-start;justify-content:center;padding-top:8vh}
-.brand-modal{width:min(480px,94vw);max-height:84vh;overflow-y:auto;background:rgba(28,28,32,.97);color:#e8e8ea;border-radius:14px;padding:18px;box-shadow:0 8px 40px rgba(0,0,0,.4);font-size:13px}
+.brand-modal{width:min(480px,94vw);max-height:84vh;overflow-y:auto;background:var(--surface);color:var(--text);border-radius:14px;padding:18px;box-shadow:0 8px 40px rgba(0,0,0,.4);font-size:13px}
 .brand-modal h3{margin:0 0 12px;font-size:15px}
-.brand-modal label{display:block;font-size:11.5px;color:#9a9aa2;margin:10px 0 3px}
-.brand-modal input[type=text],.brand-modal textarea{width:100%;box-sizing:border-box;background:rgba(255,255,255,.07);border:none;border-radius:8px;color:#e8e8ea;padding:8px 10px;font-size:13px;outline:none;font-family:inherit}
+.brand-modal label{display:block;font-size:11.5px;color:var(--text-dim);margin:10px 0 3px}
+.brand-modal input[type=text],.brand-modal textarea{width:100%;box-sizing:border-box;background:var(--border);border:none;border-radius:8px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;font-family:inherit}
 .brand-modal textarea{resize:vertical;min-height:52px}
 .brand-modal .swatches{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
 .brand-modal .sw{width:24px;height:24px;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0;position:relative}
 .brand-modal .sw.on{border-color:#fff;box-shadow:0 0 0 1.5px var(--accent)}
 .brand-modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-.brand-modal button{border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;cursor:pointer;background:rgba(255,255,255,.08);color:#e8e8ea}
-.brand-modal button.primary{background:#3c78ff;color:#fff}
+.brand-modal button{border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;cursor:pointer;background:var(--surface-2);color:var(--text)}
+.brand-modal button.primary{background:var(--accent);color:#fff}
 .brand-modal button.danger{background:rgba(224,49,49,.25)}
 .brand-logo{display:flex;align-items:center;gap:10px;margin-top:4px}
 .brand-logo img{width:44px;height:44px;object-fit:contain;border-radius:8px;background:#fff}
-.brand-menu{position:absolute;top:42px;background:rgba(28,28,32,.97);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.35);padding:5px;z-index:50;min-width:200px}
-.brand-menu button{display:flex;justify-content:space-between;width:100%;border:none;background:transparent;color:#e8e8ea;padding:7px 10px;font-size:12.5px;border-radius:7px;cursor:pointer;text-align:left}
-.brand-menu button:hover{background:rgba(255,255,255,.1)}
-.brand-menu .sep{height:1px;background:rgba(255,255,255,.1);margin:4px 6px}
+.brand-menu{position:absolute;top:42px;background:var(--surface);border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.35);padding:5px;z-index:50;min-width:200px}
+.brand-menu button{display:flex;justify-content:space-between;width:100%;border:none;background:transparent;color:var(--text);padding:7px 10px;font-size:12.5px;border-radius:7px;cursor:pointer;text-align:left}
+.brand-menu button:hover{background:var(--surface-hover)}
+.brand-menu .sep{height:1px;background:var(--surface-hover);margin:4px 6px}
 .brand-menu .check{color:#7ce29a}
 `;
 

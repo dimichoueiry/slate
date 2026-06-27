@@ -11,25 +11,25 @@ type AnyObj = Record<string, any>;
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
 const CSS = `
-.data-editor{position:fixed;z-index:17;width:330px;background:rgba(28,28,32,.98);color:#e8e8ea;border-radius:12px;
-  box-shadow:0 10px 40px rgba(0,0,0,.45);padding:12px;font-size:12.5px;border:1px solid rgba(255,255,255,.08)}
+.data-editor{position:fixed;z-index:17;width:330px;background:var(--surface);color:var(--text);border-radius:12px;
+  box-shadow:0 10px 40px rgba(0,0,0,.45);padding:12px;font-size:12.5px;border:1px solid var(--surface-2)}
 .data-editor .row{display:flex;gap:6px;align-items:center}
-.data-editor label{display:block;color:#9a9aa2;font-size:10.5px;margin:9px 0 3px;letter-spacing:.02em;text-transform:uppercase}
-.data-editor input,.data-editor textarea,.data-editor select{box-sizing:border-box;background:rgba(255,255,255,.07);border:none;
-  border-radius:7px;color:#e8e8ea;padding:7px 9px;font-size:12.5px;outline:none;font-family:inherit}
-.data-editor input:focus,.data-editor textarea:focus,.data-editor select:focus{box-shadow:0 0 0 1.5px #3c78ff}
+.data-editor label{display:block;color:var(--text-dim);font-size:10.5px;margin:9px 0 3px;letter-spacing:.02em;text-transform:uppercase}
+.data-editor input,.data-editor textarea,.data-editor select{box-sizing:border-box;background:var(--border);border:none;
+  border-radius:7px;color:var(--text);padding:7px 9px;font-size:12.5px;outline:none;font-family:inherit}
+.data-editor input:focus,.data-editor textarea:focus,.data-editor select:focus{box-shadow:0 0 0 1.5px var(--accent)}
 .data-editor .url{flex:1;min-width:0}
 .data-editor select.method{font-weight:600;cursor:pointer;padding-right:6px}
 .data-editor textarea{width:100%;resize:vertical;min-height:60px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
 .data-editor .hdr{display:flex;gap:6px;margin-top:5px}
 .data-editor .hdr input{flex:1;min-width:0}
-.data-editor .hdr button,.data-editor .addhdr{border:none;background:rgba(255,255,255,.08);color:#cfcfd6;border-radius:7px;
+.data-editor .hdr button,.data-editor .addhdr{border:none;background:var(--surface-2);color:#cfcfd6;border-radius:7px;
   cursor:pointer;padding:6px 9px;font-size:12px}
-.data-editor .hdr button:hover,.data-editor .addhdr:hover{background:rgba(255,255,255,.16)}
+.data-editor .hdr button:hover,.data-editor .addhdr:hover{background:var(--surface-hover)}
 .data-editor .addhdr{margin-top:6px}
 .data-editor .foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
 .data-editor .send{border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;
-  color:#fff;background:linear-gradient(135deg,#3c78ff,#6741d9)}
+  color:#fff;background:linear-gradient(135deg,var(--accent),#6741d9)}
 .data-editor .send:hover{filter:brightness(1.08)}
 .data-editor .note{color:#6f6f78;font-size:10.5px}
 `;
