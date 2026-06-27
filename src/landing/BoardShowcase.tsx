@@ -14,13 +14,13 @@ import infographic from './assets/referral-infographic.png';
 
 type Phase = 'idle' | 'run' | 'done';
 type Status = 'empty' | 'thinking' | 'done';
-type Step = 'pull' | 'run' | 'pick' | 'wire' | 'post' | 'image' | 'done';
+type Step = 'pull' | 'run' | 'pick' | 'wire' | 'post' | 'wire2' | 'image' | 'done';
 type XY = { x: number; y: number };
 type Rect = XY & { w: number; h: number };
 type Created = { id: string; parentId: string; kind: 'idea' | 'post' | 'image'; status: Status; text: string };
 type Link = { from: string; to: string; dashed: boolean };
 
-const STEPS: Step[] = ['pull', 'run', 'pick', 'wire', 'post', 'image'];
+const STEPS: Step[] = ['pull', 'run', 'pick', 'wire', 'post', 'wire2', 'image'];
 const TOOLS = ['⬚', '✏', '▭', '◯', '◇', '⤳', '🗒', 'T', '✦'];
 
 const IDEAS = [
@@ -153,7 +153,10 @@ export default function BoardShowcase() {
     if (step === 'run' || step === 'pick') ids = ['ideate', ...ideas];
     else if (step === 'wire') ids = [selected || ideas[ideas.length - 1] || 'ideate', 'linkedin'];
     else if (step === 'post') ids = ['linkedin'];
-    else if (step === 'image') ids = ['img'];
+    else if (step === 'wire2') {
+      const post = createdRef.current.find((o) => o.parentId === 'linkedin');
+      ids = [post?.id || 'linkedin', 'img'];
+    } else if (step === 'image') ids = ['img'];
     if (ids.length) requestAnimationFrame(() => fit(ids));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, selected]);
@@ -189,6 +192,14 @@ export default function BoardShowcase() {
           if (lr && inside({ x: lr.x - pad, y: lr.y - pad, w: lr.w + 2 * pad, h: lr.h + 2 * pad }, w.x, w.y)) {
             setLinks((prev) => [...prev, { from: d.id!, to: 'linkedin', dashed: false }]);
             setStep('post');
+          }
+        } else if (st === 'wire2') {
+          const post = createdRef.current.find((o) => o.parentId === 'linkedin' && o.kind === 'post');
+          const gr = rectOf('img');
+          const pad = 70;
+          if (post && d.id === post.id && gr && inside({ x: gr.x - pad, y: gr.y - pad, w: gr.w + 2 * pad, h: gr.h + 2 * pad }, w.x, w.y)) {
+            setLinks((prev) => [...prev, { from: post.id, to: 'img', dashed: false }]);
+            setStep('image');
           }
         } else if (st === 'done') {
           const node = nodeById(d.id);
@@ -255,8 +266,7 @@ export default function BoardShowcase() {
       setPhase((p) => ({ ...p, [node.id]: 'done' }));
       if (node.id === 'ideate') setStep((s) => (s === 'run' ? 'pick' : s));
       else if (node.id === 'linkedin') {
-        setStep((s) => (s === 'post' ? 'image' : s));
-        requestAnimationFrame(() => fit(['linkedin', ...kids.map((k) => k.id)]));
+        setStep((s) => (s === 'post' ? 'wire2' : s));
       } else if (node.id === 'img') {
         setStep((s) => (s === 'image' ? 'done' : s));
         requestAnimationFrame(() => fit(['img', ...kids.map((k) => k.id)]));
@@ -305,12 +315,14 @@ export default function BoardShowcase() {
   const wires: Link[] = [...links, ...created.map((o) => ({ from: o.parentId, to: o.id, dashed: true }))];
 
   // is the user dragging the idea over the target node right now? (drop feedback)
-  const dropOnLinkedin = (() => {
-    if (!wireDrag || step !== 'wire') return false;
-    const lr = rectOf('linkedin');
+  const dropOver = (id: string, when: Step) => {
+    if (!wireDrag || step !== when) return false;
+    const r = rectOf(id);
     const pad = 70;
-    return !!(lr && inside({ x: lr.x - pad, y: lr.y - pad, w: lr.w + 2 * pad, h: lr.h + 2 * pad }, wireDrag.x, wireDrag.y));
-  })();
+    return !!(r && inside({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, wireDrag.x, wireDrag.y));
+  };
+  const dropOnLinkedin = dropOver('linkedin', 'wire');
+  const dropOnImg = dropOver('img', 'wire2');
 
   // ---- guide overlay (screen space) ----
   const sRect = (id: string): Rect | null => {
@@ -344,6 +356,10 @@ export default function BoardShowcase() {
     const lr = sRect('linkedin');
     if (lr) spot = { x: lr.x + lr.w - 18, y: lr.y - 18, w: 32, h: 32, round: true };
     coachText = 'Hit <b>▶</b> to draft the post';
+  } else if (step === 'wire2') {
+    const gr = sRect('img');
+    if (gr) spot = { x: gr.x - 6, y: gr.y - 6, w: gr.w + 12, h: gr.h + 12 };
+    coachText = 'Drag it into this node';
   } else if (step === 'image') {
     const gr = sRect('img');
     if (gr) spot = { x: gr.x + gr.w - 18, y: gr.y - 18, w: 32, h: 32, round: true };
@@ -357,7 +373,7 @@ export default function BoardShowcase() {
     if (!p) return null;
     const ref = (el: HTMLDivElement | null) => (elRefs.current[o.id] = el);
     const sel = selected === o.id;
-    const showPort = step === 'wire' && sel;
+    const showPort = (step === 'wire' && sel) || (step === 'wire2' && o.kind === 'post');
     const base: React.HTMLAttributes<HTMLDivElement> & { ref: (el: HTMLDivElement | null) => void } = {
       ref,
       onPointerDown: startObj(o.id),
@@ -437,8 +453,9 @@ export default function BoardShowcase() {
 
           {NODES.map((n) => {
             const showPort = step === 'done' || (n.id === 'ideate' && step === 'pull');
-            const dim = step !== 'done' && !runnable(n.id) && !(n.id === 'ideate' && (step === 'pull' || step === 'run'));
-            const drop = n.id === 'linkedin' && dropOnLinkedin;
+            const isWireTarget = (n.id === 'linkedin' && step === 'wire') || (n.id === 'img' && step === 'wire2');
+            const dim = step !== 'done' && !runnable(n.id) && !isWireTarget && !(n.id === 'ideate' && (step === 'pull' || step === 'run'));
+            const drop = (n.id === 'linkedin' && dropOnLinkedin) || (n.id === 'img' && dropOnImg);
             return (
               <div key={n.id} ref={(el) => (elRefs.current[n.id] = el)} className={`lp-sticky${drop ? ' drop' : ''}`} style={{ position: 'absolute', left: pos[n.id].x, top: pos[n.id].y, width: n.w, background: n.color, opacity: dim ? 0.55 : 1 }} onPointerDown={startObj(n.id)}>
                 <div className="lp-sk-body">{n.text}</div>
