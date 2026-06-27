@@ -181,23 +181,20 @@ export default function BoardShowcase() {
       if (d?.type === 'wire' && d.id && d.moved) {
         const w = toWorld(e.clientX, e.clientY);
         const st = stepRef.current;
+        const dist = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
         if (st === 'pull' && d.id === 'ideate' && ideaCount() < 3) {
           const id = genId();
           setPos((p) => ({ ...p, [id]: { x: w.x - 95, y: w.y - 30 } }));
           setCreated((prev) => [...prev, { id, parentId: 'ideate', kind: 'idea', status: 'empty', text: '' }]);
           if (ideaCount() + 1 >= 3) setStep('run');
-        } else if (st === 'wire' && d.id === selRef.current) {
-          const lr = rectOf('linkedin');
-          const pad = 70; // forgiving drop zone — covers the highlighted node + its glow
-          if (lr && inside({ x: lr.x - pad, y: lr.y - pad, w: lr.w + 2 * pad, h: lr.h + 2 * pad }, w.x, w.y)) {
-            setLinks((prev) => [...prev, { from: d.id!, to: 'linkedin', dashed: false }]);
-            setStep('post');
-          }
-        } else if (st === 'wire2') {
+        } else if (st === 'wire' && d.id === selRef.current && dist > 24) {
+          // single guided target — pulling a wire out and releasing connects it,
+          // then the view auto-frames to the node (no edge-precision needed)
+          setLinks((prev) => [...prev, { from: d.id!, to: 'linkedin', dashed: false }]);
+          setStep('post');
+        } else if (st === 'wire2' && dist > 24) {
           const post = createdRef.current.find((o) => o.parentId === 'linkedin' && o.kind === 'post');
-          const gr = rectOf('img');
-          const pad = 70;
-          if (post && d.id === post.id && gr && inside({ x: gr.x - pad, y: gr.y - pad, w: gr.w + 2 * pad, h: gr.h + 2 * pad }, w.x, w.y)) {
+          if (post && d.id === post.id) {
             setLinks((prev) => [...prev, { from: post.id, to: 'img', dashed: false }]);
             setStep('image');
           }
