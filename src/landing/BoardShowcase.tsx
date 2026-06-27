@@ -239,6 +239,13 @@ export default function BoardShowcase() {
     drag.current = { type: 'wire', id, sx: e.clientX, sy: e.clientY, ox: 0, oy: 0 };
     setWireDrag({ fromId: id, x: w.x, y: w.y });
   };
+  // during a wire step the WHOLE source object is the wire handle (forgiving),
+  // otherwise dragging the object just moves it
+  const startOutput = (o: Created) => (e: React.PointerEvent) => {
+    const isWireSrc = (step === 'wire' && o.id === selected) || (step === 'wire2' && o.kind === 'post');
+    if (isWireSrc) startPort(o.id)(e);
+    else startObj(o.id)(e);
+  };
 
   const nodeW = (id: string) => sizes[id]?.w ?? nodeById(id)?.w ?? 200;
   const runnable = (id: string) =>
@@ -376,7 +383,7 @@ export default function BoardShowcase() {
     const showPort = (step === 'wire' && sel) || (step === 'wire2' && o.kind === 'post');
     const base: React.HTMLAttributes<HTMLDivElement> & { ref: (el: HTMLDivElement | null) => void } = {
       ref,
-      onPointerDown: startObj(o.id),
+      onPointerDown: startOutput(o),
       onClick: o.kind === 'idea' ? pickIdea(o.id) : undefined,
     };
     const port = showPort ? (
