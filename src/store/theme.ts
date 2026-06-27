@@ -33,6 +33,13 @@ export function applyTheme(theme: Theme) {
 const CANVAS_LIGHT = { bg: '#f3f2ef', gridDot: 'rgba(60,60,70,0.18)', gridLine: 'rgba(60,60,70,0.08)' };
 const CANVAS_DARK = { bg: '#15151a', gridDot: 'rgba(255,255,255,0.09)', gridLine: 'rgba(255,255,255,0.05)' };
 
+// Default ink that reads well on each canvas surface (new strokes/shapes/text only).
+export const INK_ON_LIGHT = '#1a1a1a';
+export const INK_ON_DARK = '#e8e6f0';
+export function inkForCanvas(dark: boolean): string {
+  return dark ? INK_ON_DARK : INK_ON_LIGHT;
+}
+
 /** Set the drawing canvas surface light/dark for the open board, and repaint. */
 export function setCanvasDark(dark: boolean) {
   setSceneColors(dark ? CANVAS_DARK : CANVAS_LIGHT);

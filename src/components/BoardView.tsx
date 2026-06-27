@@ -83,6 +83,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       const kit = await resolveBoardKit(meta);
       setCanvasDark(!!meta.canvasDark);
       useUI.getState().set({ boardName: meta.name, selection: [], editingTextId: null, activeBrandKit: kit ?? null, canvasDark: !!meta.canvasDark });
+      useUI.getState().syncCanvasInk(!!meta.canvasDark);
       autosave = startAutosave(controller.doc, boardId);
       setLoaded(true);
     })();

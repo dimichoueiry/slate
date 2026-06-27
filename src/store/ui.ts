@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { BrandKit, DashStyle, PenTool, Routing, ToolId } from '../types';
-import { applyTheme, loadTheme, type Theme } from './theme';
+import { applyTheme, INK_ON_DARK, INK_ON_LIGHT, loadTheme, type Theme } from './theme';
 
 export type Route = { view: 'home' } | { view: 'board'; boardId: string };
 
@@ -13,6 +13,8 @@ interface UIState {
   toggleTheme: () => void;
   /** whether the currently-open board uses a dark canvas surface (per-board) */
   canvasDark: boolean;
+  /** flip the default pen/stroke ink to suit the canvas surface (keeps custom colors) */
+  syncCanvasInk: (dark: boolean) => void;
 
   tool: ToolId;
   // pen
@@ -217,6 +219,16 @@ export const useUI = create<UIState>((setState) => ({
       return { theme: next };
     }),
   canvasDark: false,
+  syncCanvasInk: (dark) =>
+    setState((s) => {
+      const from = dark ? INK_ON_LIGHT : INK_ON_DARK;
+      const to = dark ? INK_ON_DARK : INK_ON_LIGHT;
+      const patch: Partial<UIState> = {};
+      // only flip colors that are still at the *other* surface's default — leave custom picks alone
+      if (s.penColor.toLowerCase() === from.toLowerCase()) patch.penColor = to;
+      if (s.stroke.toLowerCase() === from.toLowerCase()) patch.stroke = to;
+      return patch;
+    }),
 
   set: (patch) => setState(patch),
 }));

@@ -45,6 +45,7 @@ import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
 import { clampHeight, clampLayout, pointInClampChip, stickyWidthFor } from './sticky';
 import { useUI } from '../store/ui';
+import { inkForCanvas } from '../store/theme';
 import { saveComponent, type ComponentDef } from '../store/db';
 import { exportPng } from '../export/export';
 import { tryToggleCheckbox, isOnCheckbox, attachChecklistNormalizer } from '../ui/checkboxes';
@@ -1011,7 +1012,7 @@ export class Controller {
           radius: 12,
           opacity: 1,
           text: '',
-          textColor: '#1a1a1a',
+          textColor: inkForCanvas(ui.canvasDark),
           fontSize: 16,
           fontFamily: ui.fontFamily,
           sketchy: ui.sketchy,
@@ -1675,7 +1676,7 @@ export class Controller {
       radius: 12,
       opacity: 1,
       text: '',
-      textColor: '#1a1a1a',
+      textColor: inkForCanvas(ui.canvasDark),
       fontSize: 16,
       fontFamily: ui.fontFamily,
       sketchy: ui.sketchy,

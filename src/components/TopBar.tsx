@@ -121,6 +121,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
           onClick={() => {
             const next = !ui.canvasDark;
             ui.set({ canvasDark: next });
+            ui.syncCanvasInk(next);
             setCanvasDark(next);
             ctl.markSceneDirty();
             void updateBoardMeta(boardId, { canvasDark: next });
