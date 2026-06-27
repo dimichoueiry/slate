@@ -13,7 +13,7 @@ type ReadObj = StickyObj | TextObj;
 // commit-on-blur behavior.
 const CSS = `
 .sticky-reader-bg{position:fixed;inset:0;z-index:150;background:rgba(10,10,14,.45);display:flex;align-items:flex-start;justify-content:center;padding-top:9vh}
-.sticky-reader{width:min(680px,92vw);max-height:80vh;display:flex;flex-direction:column;background:rgba(28,28,32,.98);color:#e8e8ea;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.45);overflow:hidden}
+.sticky-reader{width:min(760px,94vw);height:min(82vh,860px);display:flex;flex-direction:column;background:rgba(28,28,32,.98);color:#e8e8ea;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.45);overflow:hidden}
 .sticky-reader-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
 .sticky-reader-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 .sticky-reader-title{font-size:13.5px;font-weight:600}
@@ -22,7 +22,7 @@ const CSS = `
 .sticky-reader-head button:hover{background:rgba(255,255,255,.16)}
 .sticky-reader-head button.primary{background:#3c78ff;color:#fff}
 .sticky-reader-head button.primary:hover{background:#5288ff}
-.sticky-reader-text{flex:1;overflow-y:auto;width:100%;box-sizing:border-box;resize:none;border:none;outline:none;background:transparent;color:#e8e8ea;padding:18px 20px;font-size:15px;line-height:1.6;font-family:inherit}
+.sticky-reader-text{flex:1;min-height:0;overflow-y:auto;width:100%;box-sizing:border-box;resize:none;border:none;outline:none;background:transparent;color:#e8e8ea;padding:18px 22px;font-size:15px;line-height:1.65;font-family:inherit}
 `;
 
 function countWords(text: string): number {
