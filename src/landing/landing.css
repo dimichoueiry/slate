@@ -512,32 +512,133 @@
   min-height: 90px;
 }
 
-/* coach-mark callout (screen space) */
+/* coach-mark tooltip (screen space) — compact dark-glass card */
 .lp-coach {
   position: absolute;
-  z-index: 33;
+  z-index: 34;
+  width: 232px;
+  max-width: 64%;
+  padding: 13px 14px 12px;
+  border-radius: 13px;
+  background: rgba(18, 18, 24, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #f1eff7;
+  transition: left 0.45s var(--ease), top 0.45s var(--ease), opacity 0.3s;
+}
+.lp-coach-head {
   display: flex;
   align-items: center;
-  gap: 7px;
-  background: var(--ac);
-  color: #fff;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 8px 13px;
-  border-radius: 9px;
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.5);
-  white-space: nowrap;
-  pointer-events: none;
-  transition: left 0.4s var(--ease), top 0.4s var(--ease), opacity 0.3s;
+  justify-content: space-between;
+  margin-bottom: 9px;
 }
-.lp-coach .lp-step {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
+.lp-coach-dots {
+  display: flex;
+  gap: 5px;
+}
+.lp-coach-dots i {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
-  font-size: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.3s;
+}
+.lp-coach-dots i.done {
+  background: var(--ac-hi);
+}
+.lp-coach-dots i.cur {
+  background: var(--ac-hi);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3);
+}
+.lp-coach-skip {
+  background: none;
+  border: 0;
+  color: var(--dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+}
+.lp-coach-skip:hover {
+  color: #fff;
+}
+.lp-coach-title {
+  font-size: 13.5px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+.lp-coach-title b {
+  color: #c4b5fd;
+  font-weight: 600;
+}
+.lp-coach-count {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lp-coach-count b {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* spotlight ring on the active target (screen space) */
+.lp-spot {
+  position: absolute;
+  z-index: 32;
+  border-radius: 10px;
+  border: 2px solid #a78bfa;
+  pointer-events: none;
+  animation: lp-spot 1.6s ease-out infinite;
+}
+.lp-spot.round {
+  border-radius: 50%;
+}
+@keyframes lp-spot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.5), 0 0 18px rgba(124, 58, 237, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(124, 58, 237, 0), 0 0 18px rgba(124, 58, 237, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 58, 237, 0), 0 0 18px rgba(124, 58, 237, 0.4);
+  }
+}
+
+/* selected object outline (Slate blue) */
+.lp-sticky.sel,
+.lp-postcard.sel,
+.lp-imgout.sel {
+  box-shadow: 0 0 0 2px #3c78ff, 0 3px 8px rgba(0, 0, 0, 0.18) !important;
+}
+
+/* replay button when the tour is done */
+.lp-replay {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(26, 26, 30, 0.86);
+  border: 1px solid var(--chrome-border);
+  backdrop-filter: blur(10px);
+  color: var(--chrome-fg);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.lp-replay:hover {
+  background: rgba(40, 40, 48, 0.9);
 }
 .lp-world .lp-sticky,
 .lp-world .lp-postcard,

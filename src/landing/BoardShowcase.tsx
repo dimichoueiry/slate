@@ -2,18 +2,25 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import infographic from './assets/referral-infographic.png';
 
-/* An interactive, guided mini Slate board. It mirrors the real mechanic:
-   an AI node's outputs are objects you wire to it. So you PULL a connector out
-   of the node's "+" port to create empty output stickies, then hit ▶ to fill
-   them (and, like the app, running a node with nothing wired auto-spawns one).
-   Drag to pan, drag stickies to move. Outputs here are predefined. */
+/* A guided, gated mini Slate board that teaches the real mechanic step by step:
+   1. pull 3 outputs out of the ai node's "+" port
+   2. run it → each output fills with an idea
+   3. pick the idea you want
+   4. drag it into the next ai node (wire it as input)
+   5. run that → LinkedIn post
+   6. run the image node → matching art
+   Only the active step is interactive; a coach mark + spotlight guide each one.
+   Skippable (per UX best practice). Outputs are predefined. */
 
 type Phase = 'idle' | 'run' | 'done';
 type Status = 'empty' | 'thinking' | 'done';
+type Step = 'pull' | 'run' | 'pick' | 'wire' | 'post' | 'image' | 'done';
 type XY = { x: number; y: number };
 type Rect = XY & { w: number; h: number };
 type Created = { id: string; parentId: string; kind: 'idea' | 'post' | 'image'; status: Status; text: string };
+type Link = { from: string; to: string; dashed: boolean };
 
+const STEPS: Step[] = ['pull', 'run', 'pick', 'wire', 'post', 'image'];
 const TOOLS = ['⬚', '✏', '▭', '◯', '◇', '⤳', '🗒', 'T', '✦'];
 
 const IDEAS = [
@@ -25,23 +32,16 @@ const POST =
   'Excited to share what we just shipped — our new Tiered Referral Program is live! 🎉\n\nWhen someone joins through your link, they land in a personalized onboarding flow tailored to who referred them —';
 
 const NOTES = [
-  { id: 'brainstorm', x: 40, y: 40, w: 188, color: '#FFD6A5', title: 'Brainstorm', body: 'Ideas:\n- Gamify onboarding\n- Referral program\n- Weekly digest emails\n- In-app tutorials' },
-  { id: 'design', x: 268, y: 44, w: 196, color: '#B5EAD7', title: 'Design Review', body: '- Dashboard needs dark mode\n- Simplify nav bar\n- Icons too small on mobile\n- Revisit color palette' },
+  { id: 'brainstorm', x: 60, y: 60, w: 188, color: '#FFD6A5', title: 'Brainstorm', body: 'Ideas:\n- Gamify onboarding\n- Referral program\n- Weekly digest emails\n- In-app tutorials' },
+  { id: 'design', x: 288, y: 64, w: 196, color: '#B5EAD7', title: 'Design Review', body: '- Dashboard needs dark mode\n- Simplify nav bar\n- Icons too small on mobile\n- Revisit color palette' },
 ];
-
 const NODES = [
-  { id: 'ideate', x: 210, y: 330, w: 210, color: '#FFE066', text: 'ai: give me an idea on how i can do this', kind: 'idea' as const, texts: IDEAS },
-  { id: 'linkedin', x: 820, y: 320, w: 210, color: '#FFE066', text: 'ai: create a LinkedIn post about this new referral program we have', kind: 'post' as const, texts: [POST] },
-  { id: 'img', x: 1320, y: 330, w: 184, color: '#A8D8EA', text: 'img: make an image that goes with my LinkedIn post', kind: 'image' as const, texts: ['__IMAGE__'] },
+  { id: 'ideate', x: 230, y: 350, w: 210, color: '#FFE066', text: 'ai: give me an idea on how i can do this', kind: 'idea' as const, texts: IDEAS },
+  { id: 'linkedin', x: 920, y: 360, w: 210, color: '#FFE066', text: 'ai: create a LinkedIn post about this new referral program we have', kind: 'post' as const, texts: [POST] },
+  { id: 'img', x: 1480, y: 380, w: 184, color: '#A8D8EA', text: 'img: make an image that goes with my LinkedIn post', kind: 'image' as const, texts: ['__IMAGE__'] },
 ];
 const nodeById = (id: string) => NODES.find((n) => n.id === id);
-
-const INPUTS = [
-  { from: 'brainstorm', to: 'ideate' },
-  { from: 'design', to: 'ideate' },
-];
-
-const INITIAL_VIEW = { x: 24, y: 28, scale: 0.74 };
+const INITIAL_VIEW = { x: 24, y: 24, scale: 0.74 };
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 function border(r: Rect, tx: number, ty: number): XY {
@@ -50,11 +50,10 @@ function border(r: Rect, tx: number, ty: number): XY {
   const dx = tx - cx;
   const dy = ty - cy;
   if (!dx && !dy) return { x: cx, y: cy };
-  const sx = dx !== 0 ? r.w / 2 / Math.abs(dx) : Infinity;
-  const sy = dy !== 0 ? r.h / 2 / Math.abs(dy) : Infinity;
-  const s = Math.min(sx, sy);
+  const s = Math.min(dx !== 0 ? r.w / 2 / Math.abs(dx) : Infinity, dy !== 0 ? r.h / 2 / Math.abs(dy) : Infinity);
   return { x: cx + dx * s, y: cy + dy * s };
 }
+const inside = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
 export default function BoardShowcase() {
   const reduce = useReducedMotion();
@@ -69,25 +68,32 @@ export default function BoardShowcase() {
   });
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number }>>({});
   const [created, setCreated] = useState<Created[]>([]);
+  const [links, setLinks] = useState<Link[]>([
+    { from: 'brainstorm', to: 'ideate', dashed: false },
+    { from: 'design', to: 'ideate', dashed: false },
+  ]);
   const [phase, setPhase] = useState<Record<string, Phase>>({ ideate: 'idle', linkedin: 'idle', img: 'idle' });
-  const [step, setStep] = useState<'pullout' | 'run' | 'explore'>('pullout');
+  const [step, setStep] = useState<Step>('pull');
+  const [selected, setSelected] = useState<string | null>(null);
   const [wireDrag, setWireDrag] = useState<{ fromId: string; x: number; y: number } | null>(null);
   const [grabbing, setGrabbing] = useState(false);
 
-  // refs mirroring state for pointer handlers
   const viewRef = useRef(view);
   const posRef = useRef(pos);
   const createdRef = useRef(created);
   const stepRef = useRef(step);
+  const selRef = useRef(selected);
   viewRef.current = view;
   posRef.current = pos;
   createdRef.current = created;
   stepRef.current = step;
+  selRef.current = selected;
 
   const drag = useRef<null | { type: 'pan' | 'obj' | 'wire'; id?: string; sx: number; sy: number; ox: number; oy: number; moved?: boolean }>(null);
   const timers = useRef<number[]>([]);
   const idc = useRef(0);
   const genId = () => `o${++idc.current}`;
+  const ideaCount = () => createdRef.current.filter((o) => o.parentId === 'ideate').length;
 
   useLayoutEffect(() => {
     const next: Record<string, { w: number; h: number }> = {};
@@ -102,22 +108,58 @@ export default function BoardShowcase() {
     if (changed) setSizes((s) => ({ ...s, ...next }));
   });
 
+  const rectOf = (id: string): Rect | null => {
+    const s = sizes[id];
+    const p = pos[id];
+    if (!s || !p) return null;
+    return { x: p.x, y: p.y, w: s.w, h: s.h };
+  };
   const toWorld = (clientX: number, clientY: number): XY => {
     const r = boardRef.current?.getBoundingClientRect();
     const v = viewRef.current;
-    const lx = clientX - (r?.left ?? 0);
-    const ly = clientY - (r?.top ?? 0);
-    return { x: (lx - v.x) / v.scale, y: (ly - v.y) / v.scale };
+    return { x: (clientX - (r?.left ?? 0) - v.x) / v.scale, y: (clientY - (r?.top ?? 0) - v.y) / v.scale };
   };
+
+  // frame a set of objects into the viewport
+  const fit = (ids: string[]) => {
+    const r = boardRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const rects = ids.map((id) => {
+      const s = sizes[id];
+      const p = pos[id];
+      return s && p ? { x: p.x, y: p.y, w: s.w, h: s.h } : null;
+    }).filter(Boolean) as Rect[];
+    if (!rects.length) return;
+    const minX = Math.min(...rects.map((q) => q.x));
+    const minY = Math.min(...rects.map((q) => q.y));
+    const maxX = Math.max(...rects.map((q) => q.x + q.w));
+    const maxY = Math.max(...rects.map((q) => q.y + q.h));
+    const pad = 70;
+    const scale = clamp(Math.min((r.width - 2 * pad) / (maxX - minX), (r.height - 2 * pad) / (maxY - minY)), 0.4, 0.95);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    setView({ scale, x: r.width / 2 - cx * scale, y: r.height / 2 - cy * scale });
+  };
+
+  // auto-frame on step change
+  useEffect(() => {
+    const ideas = createdRef.current.filter((o) => o.parentId === 'ideate').map((o) => o.id);
+    let ids: string[] = [];
+    if (step === 'run' || step === 'pick') ids = ['ideate', ...ideas];
+    else if (step === 'wire') ids = [selected || ideas[ideas.length - 1] || 'ideate', 'linkedin'];
+    else if (step === 'post') ids = ['linkedin'];
+    else if (step === 'image') ids = ['img'];
+    if (ids.length) requestAnimationFrame(() => fit(ids));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selected]);
 
   useEffect(() => {
     const move = (e: PointerEvent) => {
       const d = drag.current;
       if (!d) return;
       d.moved = true;
-      if (d.type === 'pan') {
-        setView((v) => ({ ...v, x: d.ox + (e.clientX - d.sx), y: d.oy + (e.clientY - d.sy) }));
-      } else if (d.type === 'obj' && d.id) {
+      if (d.type === 'pan') setView((v) => ({ ...v, x: d.ox + (e.clientX - d.sx), y: d.oy + (e.clientY - d.sy) }));
+      else if (d.type === 'obj' && d.id) {
         const id = d.id;
         const sc = viewRef.current.scale;
         setPos((p) => ({ ...p, [id]: { x: d.ox + (e.clientX - d.sx) / sc, y: d.oy + (e.clientY - d.sy) / sc } }));
@@ -128,14 +170,27 @@ export default function BoardShowcase() {
     };
     const up = (e: PointerEvent) => {
       const d = drag.current;
-      if (d?.type === 'wire' && d.id) {
+      if (d?.type === 'wire' && d.id && d.moved) {
         const w = toWorld(e.clientX, e.clientY);
-        const node = nodeById(d.id);
-        if (node && d.moved) {
+        const st = stepRef.current;
+        if (st === 'pull' && d.id === 'ideate' && ideaCount() < 3) {
           const id = genId();
-          setPos((p) => ({ ...p, [id]: { x: w.x - 90, y: w.y - 30 } }));
-          setCreated((prev) => [...prev, { id, parentId: d.id!, kind: node.kind, status: 'empty', text: '' }]);
-          if (d.id === 'ideate' && stepRef.current === 'pullout') setStep('run');
+          setPos((p) => ({ ...p, [id]: { x: w.x - 95, y: w.y - 30 } }));
+          setCreated((prev) => [...prev, { id, parentId: 'ideate', kind: 'idea', status: 'empty', text: '' }]);
+          if (ideaCount() + 1 >= 3) setStep('run');
+        } else if (st === 'wire' && d.id === selRef.current) {
+          const lr = rectOf('linkedin');
+          if (lr && inside(lr, w.x, w.y)) {
+            setLinks((prev) => [...prev, { from: d.id!, to: 'linkedin', dashed: false }]);
+            setStep('post');
+          }
+        } else if (st === 'done') {
+          const node = nodeById(d.id);
+          if (node) {
+            const id = genId();
+            setPos((p) => ({ ...p, [id]: { x: w.x - 95, y: w.y - 30 } }));
+            setCreated((prev) => [...prev, { id, parentId: d.id!, kind: node.kind, status: 'empty', text: '' }]);
+          }
         }
       }
       drag.current = null;
@@ -148,6 +203,7 @@ export default function BoardShowcase() {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
@@ -168,9 +224,12 @@ export default function BoardShowcase() {
   };
 
   const nodeW = (id: string) => sizes[id]?.w ?? nodeById(id)?.w ?? 200;
+  const runnable = (id: string) =>
+    step === 'done' || (id === 'ideate' && step === 'run') || (id === 'linkedin' && step === 'post') || (id === 'img' && step === 'image');
 
   const run = (node: (typeof NODES)[number]) => (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!runnable(node.id)) return;
     const existing = createdRef.current.filter((o) => o.parentId === node.id && o.status !== 'done');
     let kids = existing;
     let spawn: Created | null = null;
@@ -183,24 +242,34 @@ export default function BoardShowcase() {
     }
     const assign = new Map<string, string>();
     kids.forEach((k, i) => assign.set(k.id, node.texts[i % node.texts.length]));
-    setCreated((prev) => {
-      const base = spawn ? [...prev, spawn] : prev;
-      return base.map((o) => (assign.has(o.id) ? { ...o, status: 'thinking', text: assign.get(o.id)! } : o));
-    });
+    setCreated((prev) => (spawn ? [...prev, spawn] : prev).map((o) => (assign.has(o.id) ? { ...o, status: 'thinking', text: assign.get(o.id)! } : o)));
     setPhase((p) => ({ ...p, [node.id]: 'run' }));
-    if (node.id === 'ideate') setStep('run');
     const t = window.setTimeout(() => {
       setCreated((prev) => prev.map((o) => (assign.has(o.id) ? { ...o, status: 'done' } : o)));
       setPhase((p) => ({ ...p, [node.id]: 'done' }));
-      if (node.id === 'ideate') setStep('explore');
+      if (node.id === 'ideate') setStep((s) => (s === 'run' ? 'pick' : s));
+      else if (node.id === 'linkedin') {
+        setStep((s) => (s === 'post' ? 'image' : s));
+        requestAnimationFrame(() => fit(['linkedin', ...kids.map((k) => k.id)]));
+      } else if (node.id === 'img') {
+        setStep((s) => (s === 'image' ? 'done' : s));
+        requestAnimationFrame(() => fit(['img', ...kids.map((k) => k.id)]));
+      }
     }, 1300);
     timers.current.push(t);
   };
 
+  const pickIdea = (id: string) => () => {
+    if (step === 'pick') {
+      setSelected(id);
+      setStep('wire');
+    }
+  };
+
   const zoom = (f: number) => {
-    const rect = boardRef.current?.getBoundingClientRect();
-    const cx = rect ? rect.width / 2 : 320;
-    const cy = rect ? rect.height / 2 : 220;
+    const r = boardRef.current?.getBoundingClientRect();
+    const cx = r ? r.width / 2 : 320;
+    const cy = r ? r.height / 2 : 220;
     setView((v) => {
       const ns = clamp(v.scale * f, 0.4, 1.4);
       const k = ns / v.scale;
@@ -208,62 +277,117 @@ export default function BoardShowcase() {
     });
   };
 
-  const rectOf = (id: string): Rect | null => {
-    const s = sizes[id];
-    const p = pos[id];
-    if (!s || !p) return null;
-    return { x: p.x, y: p.y, w: s.w, h: s.h };
+  const reset = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setCreated([]);
+    setLinks([
+      { from: 'brainstorm', to: 'ideate', dashed: false },
+      { from: 'design', to: 'ideate', dashed: false },
+    ]);
+    setPhase({ ideate: 'idle', linkedin: 'idle', img: 'idle' });
+    setSelected(null);
+    setPos((p) => ({ ...p, ideate: { x: 230, y: 350 }, linkedin: { x: 920, y: 360 }, img: { x: 1480, y: 380 } }));
+    setStep('pull');
+    setView(INITIAL_VIEW);
   };
-  const wires = [
-    ...INPUTS.map((w) => ({ ...w, dashed: false })),
-    ...created.map((o) => ({ from: o.parentId, to: o.id, dashed: true })),
-  ];
 
-  // coach-mark position (screen space), tracks the relevant node
-  const screenRect = (id: string) => {
+  const wires: Link[] = [...links, ...created.map((o) => ({ from: o.parentId, to: o.id, dashed: true }))];
+
+  // ---- guide overlay (screen space) ----
+  const sRect = (id: string): Rect | null => {
     const p = pos[id];
     if (!p) return null;
     const s = sizes[id] ?? { w: nodeById(id)?.w ?? 200, h: 70 };
     return { x: view.x + p.x * view.scale, y: view.y + p.y * view.scale, w: s.w * view.scale, h: s.h * view.scale };
   };
-  let coach: { left: number; top: number; n: number; text: string } | null = null;
-  const ir = screenRect('ideate');
-  if (step === 'pullout' && ir) coach = { left: ir.x + ir.w + 16, top: ir.y + ir.h / 2 - 17, n: 1, text: 'Drag the + to pull out an output' };
-  else if (step === 'run' && ir) coach = { left: ir.x + ir.w + 16, top: ir.y - 16, n: 2, text: 'Now hit ▶ to generate — pull out more first if you like' };
-  else if (step === 'explore') {
-    const lr = screenRect('linkedin');
-    if (lr) coach = { left: lr.x - 30, top: lr.y - 46, n: 3, text: 'Pan right → run the next nodes' };
+  const ideaScreenRects = () => created.filter((o) => o.parentId === 'ideate').map((o) => sRect(o.id)).filter(Boolean) as Rect[];
+  const br = boardRef.current?.getBoundingClientRect();
+  const bw = br?.width ?? 640;
+  const bh = br?.height ?? 440;
+
+  let spot: (Rect & { round?: boolean }) | null = null;
+  let coachText = '';
+  let coachCount: string | null = null;
+  const nr = sRect('ideate');
+  if (step === 'pull' && nr) {
+    spot = { x: nr.x + nr.w - 13, y: nr.y + nr.h / 2 - 13, w: 26, h: 26, round: true };
+    coachText = 'Drag from the <b>+</b> to pull an output out of the node. Do it <b>3×</b>.';
+    coachCount = `${ideaCount()} / 3 pulled`;
+  } else if (step === 'run' && nr) {
+    spot = { x: nr.x + nr.w - 18, y: nr.y - 18, w: 32, h: 32, round: true };
+    coachText = 'Hit <b>▶</b> — Slate runs the node and writes an idea into each output.';
+  } else if (step === 'pick') {
+    const rs = ideaScreenRects();
+    if (rs.length) {
+      const minX = Math.min(...rs.map((q) => q.x));
+      const minY = Math.min(...rs.map((q) => q.y));
+      const maxX = Math.max(...rs.map((q) => q.x + q.w));
+      const maxY = Math.max(...rs.map((q) => q.y + q.h));
+      spot = { x: minX - 6, y: minY - 6, w: maxX - minX + 12, h: maxY - minY + 12 };
+    }
+    coachText = '<b>Click</b> the idea you want to build on.';
+  } else if (step === 'wire') {
+    const lr = sRect('linkedin');
+    if (lr) spot = { x: lr.x - 6, y: lr.y - 6, w: lr.w + 12, h: lr.h + 12 };
+    coachText = "Drag from your idea's <b>+</b> into this node to wire it in as input.";
+  } else if (step === 'post') {
+    const lr = sRect('linkedin');
+    if (lr) spot = { x: lr.x + lr.w - 18, y: lr.y - 18, w: 32, h: 32, round: true };
+    coachText = 'Run it to <b>draft the LinkedIn post</b> from your idea.';
+  } else if (step === 'image') {
+    const gr = sRect('img');
+    if (gr) spot = { x: gr.x + gr.w - 18, y: gr.y - 18, w: 32, h: 32, round: true };
+    coachText = 'Run the image node for <b>matching art</b>.';
   }
+
+  // coach placement near the spot — kept fully on-board, prefers above when tight
+  const CARD_H = 138;
+  let coachPos = { left: 24, top: bh - CARD_H - 12 };
+  if (spot) {
+    const below = spot.y + spot.h + 14;
+    const placeBelow = below + CARD_H < bh - 8;
+    coachPos = {
+      left: clamp(spot.x + spot.w / 2 - 116, 10, Math.max(10, bw - 244)),
+      top: clamp(placeBelow ? below : spot.y - CARD_H - 14, 10, Math.max(10, bh - CARD_H - 10)),
+    };
+  }
+  const stepIdx = STEPS.indexOf(step);
 
   const renderOutput = (o: Created) => {
     const p = pos[o.id];
     if (!p) return null;
     const ref = (el: HTMLDivElement | null) => (elRefs.current[o.id] = el);
-    const base = { ref, onPointerDown: startObj(o.id) };
+    const sel = selected === o.id;
+    const showPort = step === 'wire' && sel;
+    const base: React.HTMLAttributes<HTMLDivElement> & { ref: (el: HTMLDivElement | null) => void } = {
+      ref,
+      onPointerDown: startObj(o.id),
+      onClick: o.kind === 'idea' ? pickIdea(o.id) : undefined,
+    };
+    const port = showPort ? (
+      <div className="lp-port pulse" style={{ right: -11, top: '50%', marginTop: -11 }} onPointerDown={startPort(o.id)}>+</div>
+    ) : null;
     if (o.kind === 'image') {
       return (
-        <div key={o.id} {...base} className="lp-imgout" style={{ position: 'absolute', left: p.x, top: p.y, width: 300 }}>
+        <div key={o.id} {...base} className={`lp-imgout${sel ? ' sel' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 300 }}>
           {o.status === 'done' ? <img src={infographic} alt="" /> : <div className="lp-think" style={{ padding: 20 }}>{o.status === 'thinking' ? '✦ rendering…' : '⌁ output'}</div>}
+          {port}
         </div>
       );
     }
     if (o.kind === 'post') {
       return (
-        <div key={o.id} {...base} className={`lp-postcard${o.status === 'empty' ? ' empty' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 240 }}>
-          {o.status === 'done' ? (
-            <>
-              <div className="lp-sk-body">{o.text}</div>
-              <span className="lp-showmore">Show more · 160 words</span>
-            </>
-          ) : (
-            <div className="lp-think">{o.status === 'thinking' ? '✍️ writing…' : ''}</div>
-          )}
+        <div key={o.id} {...base} className={`lp-postcard${o.status === 'empty' ? ' empty' : ''}${sel ? ' sel' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 240 }}>
+          {o.status === 'done' ? (<><div className="lp-sk-body">{o.text}</div><span className="lp-showmore">Show more · 160 words</span></>) : <div className="lp-think">{o.status === 'thinking' ? '✍️ writing…' : ''}</div>}
+          {port}
         </div>
       );
     }
     return (
-      <div key={o.id} {...base} className={`lp-sticky${o.status === 'empty' ? ' empty' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 210, background: o.status === 'empty' ? undefined : '#FFE066' }}>
+      <div key={o.id} {...base} className={`lp-sticky${o.status === 'empty' ? ' empty' : ''}${sel ? ' sel' : ''}${step === 'pick' ? ' pick' : ''}`} style={{ position: 'absolute', left: p.x, top: p.y, width: 210, background: o.status === 'empty' ? undefined : '#FFE066', cursor: step === 'pick' ? 'pointer' : undefined }}>
         {o.status === 'done' ? <div className="lp-sk-body">{o.text}</div> : <div className="lp-think">{o.status === 'thinking' ? '⏳ thinking…' : ''}</div>}
+        {port}
       </div>
     );
   };
@@ -278,12 +402,8 @@ export default function BoardShowcase() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
       >
-        <div
-          className="lp-world"
-          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, transition: grabbing ? 'none' : 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)' }}
-        >
-          {/* connectors */}
-          <svg className="lp-world-svg" width="2200" height="1300" viewBox="0 0 2200 1300" aria-hidden>
+        <div className="lp-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, transition: grabbing ? 'none' : 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+          <svg className="lp-world-svg" width="2400" height="1400" viewBox="0 0 2400 1400" aria-hidden>
             <defs>
               <marker id="lp-arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
                 <path d="M0 0 L9 4.5 L0 9 z" fill="#868e96" />
@@ -293,10 +413,8 @@ export default function BoardShowcase() {
               const a = rectOf(w.from);
               const b = rectOf(w.to);
               if (!a || !b) return null;
-              const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
-              const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-              const s = border(a, bc.x, bc.y);
-              const e = border(b, ac.x, ac.y);
+              const s = border(a, b.x + b.w / 2, b.y + b.h / 2);
+              const e = border(b, a.x + a.w / 2, a.y + a.h / 2);
               const dx = e.x - s.x;
               const dy = e.y - s.y;
               const d = `M${s.x} ${s.y} C ${s.x + dx * 0.4} ${s.y + dy * 0.12}, ${s.x + dx * 0.6} ${e.y - dy * 0.12}, ${e.x} ${e.y}`;
@@ -306,16 +424,10 @@ export default function BoardShowcase() {
               const a = rectOf(wireDrag.fromId);
               if (!a) return null;
               const s = border(a, wireDrag.x, wireDrag.y);
-              return (
-                <g>
-                  <path d={`M${s.x} ${s.y} L${wireDrag.x} ${wireDrag.y}`} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="7 6" />
-                  <circle cx={wireDrag.x} cy={wireDrag.y} r="6" fill="#7c3aed" />
-                </g>
-              );
+              return (<g><path d={`M${s.x} ${s.y} L${wireDrag.x} ${wireDrag.y}`} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="7 6" /><circle cx={wireDrag.x} cy={wireDrag.y} r="6" fill="#7c3aed" /></g>);
             })()}
           </svg>
 
-          {/* notes */}
           {NOTES.map((n) => (
             <div key={n.id} ref={(el) => (elRefs.current[n.id] = el)} className="lp-sticky" style={{ position: 'absolute', left: pos[n.id].x, top: pos[n.id].y, width: n.w, background: n.color }} onPointerDown={startObj(n.id)}>
               <div className="lp-sk-title">{n.title}</div>
@@ -323,40 +435,30 @@ export default function BoardShowcase() {
             </div>
           ))}
 
-          {/* ai nodes */}
-          {NODES.map((n) => (
-            <div key={n.id} ref={(el) => (elRefs.current[n.id] = el)} className="lp-sticky" style={{ position: 'absolute', left: pos[n.id].x, top: pos[n.id].y, width: n.w, background: n.color }} onPointerDown={startObj(n.id)}>
-              <div className="lp-sk-body">{n.text}</div>
-              <div className="lp-lockbtn" style={{ top: -10, right: 20 }} aria-hidden>🔒</div>
-              <button className={`lp-runbtn ${phase[n.id]}`} style={{ top: -12, right: -12, border: 0, padding: 0 }} onPointerDown={(e) => e.stopPropagation()} onClick={run(n)} aria-label={`Run ${n.text}`}>
-                {phase[n.id] === 'run' ? (
-                  <motion.span className="lp-spin" animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: 'linear', duration: 0.7 }} />
-                ) : phase[n.id] === 'done' ? '✓' : '▶'}
-              </button>
-              <div className={`lp-port${n.id === 'ideate' && step === 'pullout' ? ' pulse' : ''}`} style={{ right: -11, top: '50%', marginTop: -11 }} onPointerDown={startPort(n.id)} title="Drag to add an output">
-                +
+          {NODES.map((n) => {
+            const showPort = step === 'done' || (n.id === 'ideate' && step === 'pull');
+            const dim = step !== 'done' && !runnable(n.id) && !(n.id === 'ideate' && (step === 'pull' || step === 'run'));
+            return (
+              <div key={n.id} ref={(el) => (elRefs.current[n.id] = el)} className="lp-sticky" style={{ position: 'absolute', left: pos[n.id].x, top: pos[n.id].y, width: n.w, background: n.color, opacity: dim ? 0.55 : 1 }} onPointerDown={startObj(n.id)}>
+                <div className="lp-sk-body">{n.text}</div>
+                <div className="lp-lockbtn" style={{ top: -10, right: 20 }} aria-hidden>🔒</div>
+                <button className={`lp-runbtn ${phase[n.id]}`} style={{ top: -12, right: -12, border: 0, padding: 0, opacity: runnable(n.id) ? 1 : 0.6 }} onPointerDown={(e) => e.stopPropagation()} onClick={run(n)} aria-label={`Run ${n.text}`}>
+                  {phase[n.id] === 'run' ? <motion.span className="lp-spin" animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: 'linear', duration: 0.7 }} /> : phase[n.id] === 'done' ? '✓' : '▶'}
+                </button>
+                {showPort && <div className={`lp-port${n.id === 'ideate' && step === 'pull' ? ' pulse' : ''}`} style={{ right: -11, top: '50%', marginTop: -11 }} onPointerDown={startPort(n.id)}>+</div>}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
-          {/* created / generated outputs */}
           {created.map(renderOutput)}
         </div>
 
-        {/* ---- fixed chrome ---- */}
+        {/* chrome */}
         <div className="lp-panel lp-topbar" onPointerDown={(e) => e.stopPropagation()}>
-          <span className="lp-tb-btn">←</span>
-          <span className="lp-tb-name">Growth board</span>
-          <span className="lp-tb-btn">↩</span>
-          <span className="lp-tb-btn">↪</span>
-          <span className="lp-tb-btn">☾</span>
-          <span className="lp-tb-btn primary">Export</span>
+          <span className="lp-tb-btn">←</span><span className="lp-tb-name">Growth board</span><span className="lp-tb-btn">↩</span><span className="lp-tb-btn">↪</span><span className="lp-tb-btn">☾</span><span className="lp-tb-btn primary">Export</span>
         </div>
         <div className="lp-panel lp-toolbar" onPointerDown={(e) => e.stopPropagation()}>
-          <span className="lp-grip">⋮⋮</span>
-          {TOOLS.map((t, i) => (
-            <span key={i} className={`lp-tool${i === 6 ? ' active' : ''}`}>{t}</span>
-          ))}
+          <span className="lp-grip">⋮⋮</span>{TOOLS.map((t, i) => (<span key={i} className={`lp-tool${i === 6 ? ' active' : ''}`}>{t}</span>))}
         </div>
         <div className="lp-panel lp-zoom" onPointerDown={(e) => e.stopPropagation()}>
           <button className="lp-z-btn" style={{ background: 'none', border: 0, color: 'inherit', padding: 0 }} onClick={() => zoom(1 / 1.2)} aria-label="Zoom out">−</button>
@@ -375,11 +477,22 @@ export default function BoardShowcase() {
           </svg>
         </div>
 
-        {coach && (
-          <div className="lp-coach" style={{ left: clamp(coach.left, 8, 1100), top: clamp(coach.top, 44, 999) }}>
-            <span className="lp-step">{coach.n}</span>
-            {coach.text}
+        {/* guide overlay */}
+        {spot && step !== 'done' && <div className={`lp-spot${spot.round ? ' round' : ''}`} style={{ left: spot.x, top: spot.y, width: spot.w, height: spot.h }} />}
+        {step !== 'done' && (
+          <div className="lp-coach" style={{ left: coachPos.left, top: coachPos.top }}>
+            <div className="lp-coach-head">
+              <div className="lp-coach-dots">
+                {STEPS.map((s, i) => (<i key={s} className={i < stepIdx ? 'done' : i === stepIdx ? 'cur' : ''} />))}
+              </div>
+              <button className="lp-coach-skip" onPointerDown={(e) => e.stopPropagation()} onClick={() => setStep('done')}>Skip</button>
+            </div>
+            <div className="lp-coach-title" dangerouslySetInnerHTML={{ __html: coachText }} />
+            {coachCount && <div className="lp-coach-count"><b>{coachCount}</b></div>}
           </div>
+        )}
+        {step === 'done' && (
+          <button className="lp-replay" onPointerDown={(e) => e.stopPropagation()} onClick={reset}>↻ Replay the walkthrough</button>
         )}
       </motion.div>
     </div>
