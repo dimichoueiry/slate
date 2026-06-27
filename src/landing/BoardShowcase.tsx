@@ -134,11 +134,16 @@ export default function BoardShowcase() {
     const minY = Math.min(...rects.map((q) => q.y));
     const maxX = Math.max(...rects.map((q) => q.x + q.w));
     const maxY = Math.max(...rects.map((q) => q.y + q.h));
-    const pad = 70;
-    const scale = clamp(Math.min((r.width - 2 * pad) / (maxX - minX), (r.height - 2 * pad) / (maxY - minY)), 0.4, 0.95);
+    // reserve room: top bar above, docked coach bar below, gutters on the sides
+    const padX = 64;
+    const padTop = 58;
+    const padBottom = 96;
+    const availW = r.width - 2 * padX;
+    const availH = r.height - padTop - padBottom;
+    const scale = clamp(Math.min(availW / (maxX - minX), availH / (maxY - minY)), 0.4, 0.95);
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    setView({ scale, x: r.width / 2 - cx * scale, y: r.height / 2 - cy * scale });
+    setView({ scale, x: padX + availW / 2 - cx * scale, y: padTop + availH / 2 - cy * scale });
   };
 
   // auto-frame on step change
@@ -302,18 +307,14 @@ export default function BoardShowcase() {
     return { x: view.x + p.x * view.scale, y: view.y + p.y * view.scale, w: s.w * view.scale, h: s.h * view.scale };
   };
   const ideaScreenRects = () => created.filter((o) => o.parentId === 'ideate').map((o) => sRect(o.id)).filter(Boolean) as Rect[];
-  const br = boardRef.current?.getBoundingClientRect();
-  const bw = br?.width ?? 640;
-  const bh = br?.height ?? 440;
-
   let spot: (Rect & { round?: boolean }) | null = null;
   let coachText = '';
   let coachCount: string | null = null;
   const nr = sRect('ideate');
   if (step === 'pull' && nr) {
     spot = { x: nr.x + nr.w - 13, y: nr.y + nr.h / 2 - 13, w: 26, h: 26, round: true };
-    coachText = 'Drag from the <b>+</b> to pull an output out of the node. Do it <b>3×</b>.';
-    coachCount = `${ideaCount()} / 3 pulled`;
+    coachText = 'Drag from the <b>+</b> to pull an output out of the node — do it <b>3×</b>.';
+    coachCount = `${ideaCount()} / 3`;
   } else if (step === 'run' && nr) {
     spot = { x: nr.x + nr.w - 18, y: nr.y - 18, w: 32, h: 32, round: true };
     coachText = 'Hit <b>▶</b> — Slate runs the node and writes an idea into each output.';
@@ -341,17 +342,6 @@ export default function BoardShowcase() {
     coachText = 'Run the image node for <b>matching art</b>.';
   }
 
-  // coach placement near the spot — kept fully on-board, prefers above when tight
-  const CARD_H = 138;
-  let coachPos = { left: 24, top: bh - CARD_H - 12 };
-  if (spot) {
-    const below = spot.y + spot.h + 14;
-    const placeBelow = below + CARD_H < bh - 8;
-    coachPos = {
-      left: clamp(spot.x + spot.w / 2 - 116, 10, Math.max(10, bw - 244)),
-      top: clamp(placeBelow ? below : spot.y - CARD_H - 14, 10, Math.max(10, bh - CARD_H - 10)),
-    };
-  }
   const stepIdx = STEPS.indexOf(step);
 
   const renderOutput = (o: Created) => {
@@ -480,15 +470,13 @@ export default function BoardShowcase() {
         {/* guide overlay */}
         {spot && step !== 'done' && <div className={`lp-spot${spot.round ? ' round' : ''}`} style={{ left: spot.x, top: spot.y, width: spot.w, height: spot.h }} />}
         {step !== 'done' && (
-          <div className="lp-coach" style={{ left: coachPos.left, top: coachPos.top }}>
-            <div className="lp-coach-head">
-              <div className="lp-coach-dots">
-                {STEPS.map((s, i) => (<i key={s} className={i < stepIdx ? 'done' : i === stepIdx ? 'cur' : ''} />))}
-              </div>
-              <button className="lp-coach-skip" onPointerDown={(e) => e.stopPropagation()} onClick={() => setStep('done')}>Skip</button>
+          <div className="lp-coach" onPointerDown={(e) => e.stopPropagation()}>
+            <div className="lp-coach-dots">
+              {STEPS.map((s, i) => (<i key={s} className={i < stepIdx ? 'done' : i === stepIdx ? 'cur' : ''} />))}
             </div>
             <div className="lp-coach-title" dangerouslySetInnerHTML={{ __html: coachText }} />
-            {coachCount && <div className="lp-coach-count"><b>{coachCount}</b></div>}
+            {coachCount && <div className="lp-coach-count">{coachCount}</div>}
+            <button className="lp-coach-skip" onClick={() => setStep('done')}>Skip</button>
           </div>
         )}
         {step === 'done' && (
