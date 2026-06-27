@@ -506,6 +506,11 @@
   }
 }
 
+/* drop-target feedback while wiring */
+.lp-sticky.drop {
+  box-shadow: 0 0 0 3px #34d399, 0 0 22px rgba(52, 211, 153, 0.55) !important;
+}
+
 /* empty (not-yet-generated) output sticky */
 .lp-sticky.empty {
   background: rgba(255, 224, 102, 0.45);

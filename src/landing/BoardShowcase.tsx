@@ -304,6 +304,14 @@ export default function BoardShowcase() {
 
   const wires: Link[] = [...links, ...created.map((o) => ({ from: o.parentId, to: o.id, dashed: true }))];
 
+  // is the user dragging the idea over the target node right now? (drop feedback)
+  const dropOnLinkedin = (() => {
+    if (!wireDrag || step !== 'wire') return false;
+    const lr = rectOf('linkedin');
+    const pad = 70;
+    return !!(lr && inside({ x: lr.x - pad, y: lr.y - pad, w: lr.w + 2 * pad, h: lr.h + 2 * pad }, wireDrag.x, wireDrag.y));
+  })();
+
   // ---- guide overlay (screen space) ----
   const sRect = (id: string): Rect | null => {
     const p = pos[id];
@@ -430,8 +438,9 @@ export default function BoardShowcase() {
           {NODES.map((n) => {
             const showPort = step === 'done' || (n.id === 'ideate' && step === 'pull');
             const dim = step !== 'done' && !runnable(n.id) && !(n.id === 'ideate' && (step === 'pull' || step === 'run'));
+            const drop = n.id === 'linkedin' && dropOnLinkedin;
             return (
-              <div key={n.id} ref={(el) => (elRefs.current[n.id] = el)} className="lp-sticky" style={{ position: 'absolute', left: pos[n.id].x, top: pos[n.id].y, width: n.w, background: n.color, opacity: dim ? 0.55 : 1 }} onPointerDown={startObj(n.id)}>
+              <div key={n.id} ref={(el) => (elRefs.current[n.id] = el)} className={`lp-sticky${drop ? ' drop' : ''}`} style={{ position: 'absolute', left: pos[n.id].x, top: pos[n.id].y, width: n.w, background: n.color, opacity: dim ? 0.55 : 1 }} onPointerDown={startObj(n.id)}>
                 <div className="lp-sk-body">{n.text}</div>
                 <div className="lp-lockbtn" style={{ top: -10, right: 20 }} aria-hidden>🔒</div>
                 <button className={`lp-runbtn ${phase[n.id]}`} style={{ top: -12, right: -12, border: 0, padding: 0, opacity: runnable(n.id) ? 1 : 0.6 }} onPointerDown={(e) => e.stopPropagation()} onClick={run(n)} aria-label={`Run ${n.text}`}>
