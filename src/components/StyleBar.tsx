@@ -1,9 +1,22 @@
+import { useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type Routing } from '../types';
 import FloatingPanel from './FloatingPanel';
 
 const FONT_SIZES = [12, 14, 16, 20, 24, 32, 40, 56, 72, 96];
+
+// Crisp corner-style icons (the old ⃞/▢ glyphs rendered inverted in some fonts).
+const SharpCornerIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden focusable="false">
+    <rect x="2.5" y="2.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
+const RoundCornerIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden focusable="false">
+    <rect x="2.5" y="2.5" width="9" height="9" rx="3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+  </svg>
+);
 
 function FontSizeSelect({ value, onPick }: { value: number; onPick: (n: number) => void }) {
   const options = FONT_SIZES.includes(value) ? FONT_SIZES : [...FONT_SIZES, value].sort((a, b) => a - b);
@@ -102,6 +115,56 @@ function Swatches({
   );
 }
 
+/** Compact color control: a chip showing the current color that opens a swatch popover. */
+function ColorControl({
+  label,
+  value,
+  onPick,
+  colors,
+  allowTransparent,
+}: {
+  label?: string;
+  value: string;
+  onPick: (c: string) => void;
+  colors?: string[];
+  allowTransparent?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [open]);
+
+  const empty = value === 'transparent' || !value;
+  return (
+    <div className="color-ctl" ref={ref}>
+      <button
+        className="color-chip-btn"
+        title={label ? `${label} color` : 'Color'}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {label && <span className="color-chip-label">{label}</span>}
+        <span
+          className={`color-chip${empty ? ' empty' : ''}`}
+          style={empty ? undefined : { background: value }}
+        />
+      </button>
+      {open && (
+        <div className="color-pop" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="color-pop-grid">
+            <Swatches value={value} onPick={onPick} colors={colors} allowTransparent={allowTransparent} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StyleBar({ ctl }: { ctl: Controller }) {
   const ui = useUI();
   useUI((s) => s.docVersion); // re-render when object props change so controls track the document
@@ -119,45 +182,34 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
     return (
       <FloatingPanel id="stylebar" className="stylebar">
         {(types.has('stroke') || types.has('text') || types.has('icon')) && (
-          <label>
-            Color
-            <Swatches
-              value={(single as any)?.color ?? ''}
-              onPick={(c) => ctl.updateSelected({ color: c })}
-            />
-          </label>
+          <ColorControl
+            label="Color"
+            value={(single as any)?.color ?? ''}
+            onPick={(c) => ctl.updateSelected({ color: c })}
+          />
         )}
         {(types.has('shape') || types.has('connector')) && (
           <>
-            <label>
-              Stroke
-              <Swatches
-                value={(single as any)?.stroke ?? ''}
-                onPick={(c) => ctl.updateSelected({ stroke: c })}
-              />
-            </label>
+            <ColorControl
+              label="Stroke"
+              value={(single as any)?.stroke ?? ''}
+              onPick={(c) => ctl.updateSelected({ stroke: c })}
+            />
             {types.has('shape') && (
               <>
-                <label>
-                  Fill
-                  <Swatches
-                    allowTransparent
-                    value={(single as any)?.fill ?? ''}
-                    onPick={(c) => ctl.updateSelected({ fill: c })}
-                  />
-                </label>
+                <ColorControl
+                  label="Fill"
+                  allowTransparent
+                  value={(single as any)?.fill ?? ''}
+                  onPick={(c) => ctl.updateSelected({ fill: c })}
+                />
                 {ui.editingTextId !== null &&
                   selObjs.some((o) => o.id === ui.editingTextId && o.type === 'shape') && (
-                    <label
-                      title="Color of the text inside the shape"
-                      onMouseDown={(e) => e.preventDefault() /* keep the text editor focused */}
-                    >
-                      Text
-                      <Swatches
-                        value={single?.type === 'shape' ? single.textColor : ''}
-                        onPick={(c) => ctl.updateSelected({ textColor: c })}
-                      />
-                    </label>
+                    <ColorControl
+                      label="Text"
+                      value={single?.type === 'shape' ? single.textColor : ''}
+                      onPick={(c) => ctl.updateSelected({ textColor: c })}
+                    />
                   )}
               </>
             )}
@@ -208,14 +260,14 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
                   title="Square corners"
                   onClick={() => ctl.updateSelected({ shape: 'rect' })}
                 >
-                  ⃞
+                  <SharpCornerIcon />
                 </button>
                 <button
                   className={single?.type === 'shape' && single.shape === 'roundedRect' ? 'active' : ''}
                   title="Rounded corners"
                   onClick={() => ctl.updateSelected({ shape: 'roundedRect' })}
                 >
-                  ▢
+                  <RoundCornerIcon />
                 </button>
               </div>
             )}
@@ -276,14 +328,12 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
           </div>
         )}
         {types.has('sticky') && (
-          <label>
-            Note
-            <Swatches
-              colors={STICKY_COLORS}
-              value={(single as any)?.color ?? ''}
-              onPick={(c) => ctl.updateSelected({ color: c })}
-            />
-          </label>
+          <ColorControl
+            label="Note"
+            colors={STICKY_COLORS}
+            value={(single as any)?.color ?? ''}
+            onPick={(c) => ctl.updateSelected({ color: c })}
+          />
         )}
         {sel.length >= 2 && (
           <>
@@ -363,9 +413,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             </button>
           ))}
         </div>
-        <label>
-          <Swatches value={ui.penColor} onPick={(c) => ui.set({ penColor: c })} />
-        </label>
+        <ColorControl label="Ink" value={ui.penColor} onPick={(c) => ui.set({ penColor: c })} />
         <label>
           Size
           <input
@@ -413,14 +461,8 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond'].includes(ui.tool)) {
     return (
       <FloatingPanel id="stylebar" className="stylebar">
-        <label>
-          Stroke
-          <Swatches value={ui.stroke} onPick={(c) => ui.set({ stroke: c })} />
-        </label>
-        <label>
-          Fill
-          <Swatches allowTransparent value={ui.fill} onPick={(c) => ui.set({ fill: c })} />
-        </label>
+        <ColorControl label="Stroke" value={ui.stroke} onPick={(c) => ui.set({ stroke: c })} />
+        <ColorControl label="Fill" allowTransparent value={ui.fill} onPick={(c) => ui.set({ fill: c })} />
         <label>
           W
           <input
@@ -450,10 +492,10 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
         {ui.tool === 'rect' && (
           <div className="seg">
             <button className={!ui.rounded ? 'active' : ''} title="Square corners" onClick={() => ui.set({ rounded: false })}>
-              ⃞
+              <SharpCornerIcon />
             </button>
             <button className={ui.rounded ? 'active' : ''} title="Rounded corners" onClick={() => ui.set({ rounded: true })}>
-              ▢
+              <RoundCornerIcon />
             </button>
           </div>
         )}
@@ -469,9 +511,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
           <FontSelect value={ui.fontFamily} onPick={(id) => ui.set({ fontFamily: id })} />
         </label>
         <FontSizeSelect value={ui.fontSize} onPick={(n) => ui.set({ fontSize: n })} />
-        <label>
-          <Swatches value={ui.penColor} onPick={(c) => ui.set({ penColor: c })} />
-        </label>
+        <ColorControl label="Color" value={ui.penColor} onPick={(c) => ui.set({ penColor: c })} />
       </FloatingPanel>
     );
   }
@@ -479,10 +519,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (ui.tool === 'connector' || ui.tool === 'line') {
     return (
       <FloatingPanel id="stylebar" className="stylebar">
-        <label>
-          Stroke
-          <Swatches value={ui.stroke} onPick={(c) => ui.set({ stroke: c })} />
-        </label>
+        <ColorControl label="Stroke" value={ui.stroke} onPick={(c) => ui.set({ stroke: c })} />
         {ui.tool === 'connector' && (
           <div className="seg">
             {(['straight', 'elbow', 'curved'] as Routing[]).map((r) => (
@@ -510,10 +547,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (ui.tool === 'sticky') {
     return (
       <FloatingPanel id="stylebar" className="stylebar">
-        <label>
-          Color
-          <Swatches colors={STICKY_COLORS} value={ui.stickyColor} onPick={(c) => ui.set({ stickyColor: c })} />
-        </label>
+        <ColorControl label="Color" colors={STICKY_COLORS} value={ui.stickyColor} onPick={(c) => ui.set({ stickyColor: c })} />
       </FloatingPanel>
     );
   }
