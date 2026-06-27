@@ -2,8 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { applyTheme, loadTheme } from './store/theme';
 // file-persistence sync (no-ops gracefully when the dev /__slate endpoints are absent)
 import './store/fsync';
+
+// apply the saved (or default dark) theme before first paint
+applyTheme(loadTheme());
 // bundled open-source fonts (latin, regular weight) — keeps the font picker offline-safe
 import '@fontsource/inter';
 import '@fontsource/roboto';

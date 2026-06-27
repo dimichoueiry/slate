@@ -24,6 +24,19 @@ import rough from 'roughjs';
 
 const roughGenerator = rough.generator();
 
+// ---------- theme-aware canvas colors ----------
+// Set by the theme layer (src/store/theme.ts) whenever light/dark changes, so the
+// canvas clear, grid dots, and text-fade match the active theme.
+export const sceneColors = {
+  bg: '#f3f2ef',
+  gridDot: 'rgba(60,60,70,0.18)',
+  gridLine: 'rgba(60,60,70,0.08)',
+};
+
+export function setSceneColors(next: Partial<typeof sceneColors>) {
+  Object.assign(sceneColors, next);
+}
+
 // ---------- image bitmap cache ----------
 
 type CachedImage = ImageBitmap | HTMLImageElement;
@@ -103,7 +116,7 @@ export function drawScene(
 ) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, viewW, viewH);
-  ctx.fillStyle = '#f3f2ef';
+  ctx.fillStyle = sceneColors.bg;
   ctx.fillRect(0, 0, viewW, viewH);
 
   if (grid.mode !== 'none') drawGrid(ctx, camera, viewW, viewH, grid.mode);
@@ -207,7 +220,7 @@ function drawGrid(
 
   ctx.save();
   if (mode === 'dots') {
-    ctx.fillStyle = 'rgba(60,60,70,0.18)';
+    ctx.fillStyle = sceneColors.gridDot;
     const r = Math.max(1, 1.2);
     for (let x = startX; x <= endX; x += step) {
       for (let y = startY; y <= endY; y += step) {
@@ -219,7 +232,7 @@ function drawGrid(
       }
     }
   } else {
-    ctx.strokeStyle = 'rgba(60,60,70,0.08)';
+    ctx.strokeStyle = sceneColors.gridLine;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = startX; x <= endX; x += step) {
@@ -451,9 +464,6 @@ export function drawSticky(ctx: CanvasRenderingContext2D, o: StickyObj) {
   ctx.restore();
 }
 
-/** Canvas background — clamped text fades into this where there's no paper behind it. */
-const SCENE_BG = '#f3f2ef';
-
 /** Same color at zero alpha, so a fade reads as "dissolving" rather than greying out. */
 function transparentVariant(color: string): string {
   const h = color.trim();
@@ -510,7 +520,7 @@ export function drawText(ctx: CanvasRenderingContext2D, o: TextObj) {
     ctx.fillText(line, o.x, y);
     y += lh;
   }
-  drawClampOverlay(ctx, o, layout, SCENE_BG);
+  drawClampOverlay(ctx, o, layout, sceneColors.bg);
   ctx.restore();
 }
 

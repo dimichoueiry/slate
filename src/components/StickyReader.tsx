@@ -17,21 +17,21 @@ type ReadObj = StickyObj | TextObj;
 const CSS = `
 @keyframes reader-scrim-in{from{opacity:0}to{opacity:1}}
 @keyframes reader-card-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-.sticky-reader-bg{position:fixed;inset:0;z-index:150;background:rgba(12,12,16,.52);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding-top:9vh;animation:reader-scrim-in .18s ease-out both}
-.sticky-reader{width:min(720px,94vw);height:min(82vh,860px);display:flex;flex-direction:column;background:rgba(26,26,30,.98);color:#ece9f5;border:1px solid rgba(255,255,255,.07);border-radius:16px;box-shadow:0 20px 70px rgba(0,0,0,.5);overflow:hidden;animation:reader-card-in .24s cubic-bezier(.16,1,.3,1) both}
-.sticky-reader-head{display:flex;align-items:center;gap:11px;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sticky-reader-bg{position:fixed;inset:0;z-index:150;background:var(--scrim);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding-top:9vh;animation:reader-scrim-in .18s var(--ease-out) both}
+.sticky-reader{width:min(720px,94vw);height:min(82vh,860px);display:flex;flex-direction:column;background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);overflow:hidden;animation:reader-card-in .24s var(--ease-out) both}
+.sticky-reader-head{display:flex;align-items:center;gap:11px;padding:15px 18px;border-bottom:1px solid var(--border)}
 .sticky-reader-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 .sticky-reader-title{font-size:13.5px;font-weight:600;letter-spacing:.01em}
-.sticky-reader-meta{font-size:11.5px;color:#9b97a8;margin-right:auto;font-variant-numeric:tabular-nums}
-.sticky-reader-head button{border:none;border-radius:9px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;background:rgba(255,255,255,.08);color:#ece9f5;transition:background .15s ease-out,transform .12s ease-out}
-.sticky-reader-head button:hover{background:rgba(255,255,255,.16)}
+.sticky-reader-meta{font-size:11.5px;color:var(--text-dim);margin-right:auto;font-variant-numeric:tabular-nums}
+.sticky-reader-head button{border:none;border-radius:9px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;background:var(--surface-2);color:var(--text);transition:background var(--dur) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.sticky-reader-head button:hover{background:var(--surface-hover)}
 .sticky-reader-head button:active{transform:scale(.96)}
-.sticky-reader-head button:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(124,58,237,.9)}
-.sticky-reader-head button.primary{background:#7C3AED;color:#fff}
-.sticky-reader-head button.primary:hover{background:#8B5CF6}
+.sticky-reader-head button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--accent)}
+.sticky-reader-head button.primary{background:var(--accent);color:var(--on-accent)}
+.sticky-reader-head button.primary:hover{background:var(--violet-2)}
 .sticky-reader-progress{height:2px;background:transparent;flex-shrink:0}
-.sticky-reader-progress > i{display:block;height:100%;background:linear-gradient(90deg,#7C3AED,#0891B2);transition:width .08s linear}
-.sticky-reader-text{flex:1;min-height:0;align-self:center;width:100%;max-width:68ch;box-sizing:border-box;overflow-y:auto;resize:none;border:none;outline:none;background:transparent;color:#ece9f5;padding:26px 28px 44px;font-size:16px;line-height:1.75;font-family:inherit}
+.sticky-reader-progress > i{display:block;height:100%;background:var(--accent-grad);transition:width .08s linear}
+.sticky-reader-text{flex:1;min-height:0;align-self:center;width:100%;max-width:68ch;box-sizing:border-box;overflow-y:auto;resize:none;border:none;outline:none;background:transparent;color:var(--text);padding:26px 28px 44px;font-size:16px;line-height:1.75;font-family:inherit}
 .sticky-reader-text::selection{background:rgba(124,58,237,.4)}
 @media (prefers-reduced-motion: reduce){.sticky-reader-bg,.sticky-reader{animation:none}.sticky-reader-head button:active{transform:none}}
 `;

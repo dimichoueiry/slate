@@ -1,10 +1,72 @@
 :root {
-  --chrome-bg: rgba(28, 28, 32, 0.92);
-  --chrome-fg: #e8e8ea;
-  --chrome-dim: #9a9aa2;
-  --accent: #3c78ff;
+  /* ===== signature palette (violet → teal) ===== */
+  --violet: #7c3aed;
+  --violet-2: #8b5cf6;
+  --teal: #0891b2;
+  --accent: var(--violet);
+  --accent-2: var(--teal);
+  --accent-grad: linear-gradient(95deg, #7c3aed, #0891b2);
+  --on-accent: #ffffff;
+
+  /* ===== dark chrome (default) — canvas stays light paper for ink legibility ===== */
+  --canvas-bg: #f3f2ef;
+  --grid-dot: rgba(60, 60, 70, 0.18);
+  --grid-line: rgba(60, 60, 70, 0.08);
+  --surface: rgba(26, 26, 30, 0.92);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.10);
+  --elevated: rgba(34, 34, 40, 0.98);
+  --text: #ece9f5;
+  --text-dim: #9b97a8;
+  --text-faint: #6c6878;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --scrim: rgba(12, 12, 16, 0.52);
+
+  /* legacy aliases — keep existing rules working */
+  --chrome-bg: var(--surface);
+  --chrome-fg: var(--text);
+  --chrome-dim: var(--text-dim);
+
+  /* radius scale */
+  --r-sm: 8px;
   --radius: 12px;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.22);
+  --r-lg: 16px;
+
+  /* shadow scale */
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.25);
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 20px 70px rgba(0, 0, 0, 0.5);
+
+  /* spacing scale (4px rhythm) */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+
+  /* type scale */
+  --fs-xs: 11px; --fs-sm: 12.5px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 0.12s;
+  --dur: 0.2s;
+}
+
+:root[data-theme='light'] {
+  --canvas-bg: #f3f2ef;
+  --grid-dot: rgba(60, 60, 70, 0.18);
+  --grid-line: rgba(60, 60, 70, 0.08);
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-2: rgba(0, 0, 0, 0.04);
+  --surface-hover: rgba(0, 0, 0, 0.07);
+  --elevated: rgba(255, 255, 255, 0.99);
+  --text: #1f1d29;
+  --text-dim: #6c6878;
+  --text-faint: #9b97a8;
+  --border: rgba(0, 0, 0, 0.10);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --scrim: rgba(20, 20, 26, 0.30);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.10);
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.16);
+  --shadow-lg: 0 20px 70px rgba(0, 0, 0, 0.22);
 }
 
 * { box-sizing: border-box; }
@@ -15,7 +77,7 @@ button { font-family: inherit; }
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #f3f2ef;
+  background: var(--canvas-bg);
 }
 
 .board-root canvas.layer {
@@ -32,6 +94,7 @@ button { font-family: inherit; }
   position: absolute;
   background: var(--chrome-bg);
   color: var(--chrome-fg);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);

@@ -1,11 +1,16 @@
 import { create } from 'zustand';
 import type { BrandKit, DashStyle, PenTool, Routing, ToolId } from '../types';
+import { applyTheme, loadTheme, type Theme } from './theme';
 
 export type Route = { view: 'home' } | { view: 'board'; boardId: string };
 
 interface UIState {
   route: Route;
   boardName: string;
+
+  /** active color theme; toggled via toggleTheme(), persisted */
+  theme: Theme;
+  toggleTheme: () => void;
 
   tool: ToolId;
   // pen
@@ -198,6 +203,14 @@ export const useUI = create<UIState>((setState) => ({
     saveUsage({ ...ZERO_USAGE });
     setState({ usage: { ...ZERO_USAGE } });
   },
+
+  theme: loadTheme(),
+  toggleTheme: () =>
+    setState((s) => {
+      const next: Theme = s.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      return { theme: next };
+    }),
 
   set: (patch) => setState(patch),
 }));

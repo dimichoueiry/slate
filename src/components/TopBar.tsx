@@ -106,6 +106,13 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           ⌖
         </button>
+        <button
+          className="chrome-btn"
+          title={ui.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          onClick={() => ui.toggleTheme()}
+        >
+          {ui.theme === 'dark' ? '☀' : '☾'}
+        </button>
         {flows.length > 0 && (
           <button
             className="chrome-btn"
