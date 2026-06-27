@@ -185,7 +185,8 @@ export default function BoardShowcase() {
           if (ideaCount() + 1 >= 3) setStep('run');
         } else if (st === 'wire' && d.id === selRef.current) {
           const lr = rectOf('linkedin');
-          if (lr && inside(lr, w.x, w.y)) {
+          const pad = 70; // forgiving drop zone — covers the highlighted node + its glow
+          if (lr && inside({ x: lr.x - pad, y: lr.y - pad, w: lr.w + 2 * pad, h: lr.h + 2 * pad }, w.x, w.y)) {
             setLinks((prev) => [...prev, { from: d.id!, to: 'linkedin', dashed: false }]);
             setStep('post');
           }
