@@ -1522,6 +1522,13 @@ export class Controller {
     this.overlayDirty = true;
   }
 
+  /** Open the reader for an object, recording its on-screen center so the modal can grow from it. */
+  openReader(o: SlateObj) {
+    if (o.type !== 'sticky' && o.type !== 'text') return;
+    const origin = this.worldToScreenPt({ x: o.x + o.w / 2, y: o.y + o.h / 2 });
+    useUI.getState().set({ readerObjectId: o.id, readerOrigin: origin });
+  }
+
   /** Open the reader modal if a world point lands on a clamped object's "Show more" chip. */
   tryOpenStickyReader(world: Vec): boolean {
     const hit = hitTest(this.doc, world, 6 / this.camera.zoom);
@@ -1530,7 +1537,7 @@ export class Controller {
     if (o && (o.type === 'sticky' || o.type === 'text') && pointInClampChip(o, world)) {
       this.selection = new Set([o.id]);
       this.syncSelection();
-      useUI.getState().set({ readerObjectId: o.id });
+      this.openReader(o);
       return true;
     }
     return false;
@@ -1550,7 +1557,7 @@ export class Controller {
       // long content that's clamped on the canvas opens the reader instead of the cramped inline editor
       const hitObj = this.doc.get(hit.id);
       if (hitObj && (hitObj.type === 'sticky' || hitObj.type === 'text') && clampLayout(hitObj).clamped) {
-        useUI.getState().set({ readerObjectId: hit.id });
+        this.openReader(hitObj);
         return;
       }
       this.startEditingText(hit.id);

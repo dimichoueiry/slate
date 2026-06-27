@@ -52,6 +52,8 @@ interface UIState {
   editingTextId: string | null;
   /** sticky or text object whose full content is open in the reader modal, or null */
   readerObjectId: string | null;
+  /** screen-space point the reader should grow from (the trigger's center), or null */
+  readerOrigin: { x: number; y: number } | null;
   zoomPct: number;
   canUndo: boolean;
   canRedo: boolean;
@@ -163,6 +165,7 @@ export const useUI = create<UIState>((setState) => ({
   selection: [],
   editingTextId: null,
   readerObjectId: null,
+  readerOrigin: null,
   zoomPct: 100,
   canUndo: false,
   canRedo: false,

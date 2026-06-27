@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import type { StickyObj, TextObj } from '../types';
 import { useUI } from '../store/ui';
@@ -16,9 +16,9 @@ type ReadObj = StickyObj | TextObj;
 // Edits are written back on close as a single change (commit-on-blur behavior).
 const CSS = `
 @keyframes reader-scrim-in{from{opacity:0}to{opacity:1}}
-@keyframes reader-card-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
 .sticky-reader-bg{position:fixed;inset:0;z-index:150;background:var(--scrim);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding-top:9vh;animation:reader-scrim-in .18s var(--ease-out) both}
-.sticky-reader{width:min(720px,94vw);height:min(82vh,860px);display:flex;flex-direction:column;background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);overflow:hidden;animation:reader-card-in .24s var(--ease-out) both}
+.sticky-reader-bg.closing{opacity:0;transition:opacity .2s ease-in}
+.sticky-reader{width:min(720px,94vw);height:min(82vh,860px);display:flex;flex-direction:column;background:var(--elevated);color:var(--text);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-lg);overflow:hidden;will-change:transform,opacity}
 .sticky-reader-head{display:flex;align-items:center;gap:11px;padding:15px 18px;border-bottom:1px solid var(--border)}
 .sticky-reader-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 .sticky-reader-title{font-size:13.5px;font-weight:600;letter-spacing:.01em}
@@ -65,7 +65,52 @@ export function StickyReader({ ctl, objectId }: { ctl: Controller; objectId: str
   const textRef = useRef(text);
   textRef.current = text;
 
-  const close = () => useUI.getState().set({ readerObjectId: null });
+  // shared-element transition: grow from / shrink into the trigger's on-screen point
+  const cardRef = useRef<HTMLDivElement>(null);
+  const bgRef = useRef<HTMLDivElement>(null);
+  const originRef = useRef(useUI.getState().readerOrigin);
+  const closingRef = useRef(false);
+  const reduced =
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  const offsetToOrigin = (card: HTMLDivElement) => {
+    const r = card.getBoundingClientRect();
+    const o0 = originRef.current!;
+    return { dx: o0.x - (r.left + r.width / 2), dy: o0.y - (r.top + r.height / 2) };
+  };
+
+  // entrance: from the note's point, scaled down, to the centered card
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card || !originRef.current || reduced) return;
+    const { dx, dy } = offsetToOrigin(card);
+    card.style.transition = 'none';
+    card.style.transform = `translate(${dx}px, ${dy}px) scale(0.08)`;
+    card.style.opacity = '0';
+    void card.offsetWidth; // force reflow so the next styles animate
+    card.style.transition = 'transform .34s var(--ease-out), opacity .22s ease-out';
+    card.style.transform = 'none';
+    card.style.opacity = '1';
+  }, [reduced]);
+
+  const finish = () => useUI.getState().set({ readerObjectId: null, readerOrigin: null });
+
+  const close = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    const card = cardRef.current;
+    if (!card || !originRef.current || reduced) {
+      finish();
+      return;
+    }
+    bgRef.current?.classList.add('closing');
+    const { dx, dy } = offsetToOrigin(card);
+    // exit shorter than enter (~65%), shrinking back into the note
+    card.style.transition = 'transform .22s var(--ease-out), opacity .18s ease-in';
+    card.style.transform = `translate(${dx}px, ${dy}px) scale(0.08)`;
+    card.style.opacity = '0';
+    window.setTimeout(finish, 220);
+  };
 
   // commit edits back when the modal closes
   useEffect(() => {
@@ -106,8 +151,8 @@ export function StickyReader({ ctl, objectId }: { ctl: Controller; objectId: str
   return (
     <>
       <style>{CSS}</style>
-      <div className="sticky-reader-bg" onPointerDown={close}>
-        <div className="sticky-reader" onPointerDown={(e) => e.stopPropagation()}>
+      <div className="sticky-reader-bg" ref={bgRef} onPointerDown={close}>
+        <div className="sticky-reader" ref={cardRef} onPointerDown={(e) => e.stopPropagation()}>
           <div className="sticky-reader-head">
             <span className="sticky-reader-dot" style={{ background: o.color }} />
             <span className="sticky-reader-title">{title}</span>
