@@ -1,5 +1,6 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { useUI } from './store/ui';
+import type { Route } from './store/ui';
 import Home from './components/Home';
 import BoardView from './components/BoardView';
 import SettingsPanel from './settings/SettingsPanel';
@@ -7,24 +8,22 @@ import SettingsPanel from './settings/SettingsPanel';
 // marketing landing — lazy so it never weighs down the canvas bundle
 const Landing = lazy(() => import('./landing/Landing'));
 
+// path-based routing: / = landing, /app = board list, /board/:id = a board
+function parsePath(path: string): Route {
+  const board = path.match(/^\/board\/(.+?)\/?$/);
+  if (board) return { view: 'board', boardId: decodeURIComponent(board[1]) };
+  if (/^\/app\/?$/.test(path)) return { view: 'home' };
+  return { view: 'welcome' };
+}
+
 export default function App() {
   const route = useUI((s) => s.route);
 
-  // simple hash routing so boards are linkable / survive refresh
   useEffect(() => {
-    const apply = () => {
-      const board = location.hash.match(/^#\/board\/(.+)$/);
-      if (board) {
-        useUI.getState().set({ route: { view: 'board', boardId: board[1] } });
-      } else if (location.hash.match(/^#\/welcome\/?$/)) {
-        useUI.getState().set({ route: { view: 'welcome' } });
-      } else {
-        useUI.getState().set({ route: { view: 'home' } });
-      }
-    };
+    const apply = () => useUI.getState().set({ route: parsePath(location.pathname) });
     apply();
-    window.addEventListener('hashchange', apply);
-    return () => window.removeEventListener('hashchange', apply);
+    window.addEventListener('popstate', apply);
+    return () => window.removeEventListener('popstate', apply);
   }, []);
 
   if (route.view === 'welcome') {
@@ -44,14 +43,20 @@ export default function App() {
   );
 }
 
+function navigate(path: string) {
+  if (location.pathname === path) return;
+  history.pushState(null, '', path);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
 export function openBoard(id: string) {
-  location.hash = `#/board/${id}`;
+  navigate(`/board/${encodeURIComponent(id)}`);
 }
 
 export function goHome() {
-  location.hash = '#/';
+  navigate('/app');
 }
 
 export function goWelcome() {
-  location.hash = '#/welcome';
+  navigate('/');
 }

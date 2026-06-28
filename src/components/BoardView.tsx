@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { goHome } from '../App';
 import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
 import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit } from '../store/db';
@@ -72,7 +73,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
     (async () => {
       const meta = await db.boards.get(boardId);
       if (!meta) {
-        location.hash = '#/';
+        goHome();
         return;
       }
       const objects = await loadBoardObjects(boardId);

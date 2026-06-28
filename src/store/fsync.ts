@@ -102,9 +102,9 @@ async function restore() {
     for (const c of snap.components ?? []) {
       if (c?.id && !(await db.components.get(c.id))) await db.components.put(c);
     }
-    if ((snap.boards?.length ?? 0) > 0 && location.hash === '' && document.visibilityState === 'visible') {
+    if ((snap.boards?.length ?? 0) > 0 && /^\/app\/?$/.test(location.pathname) && document.visibilityState === 'visible') {
       // boards restored before the home screen first rendered need a refresh of the list
-      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
   } catch {
     // ignore — endpoints only exist under the dev server
