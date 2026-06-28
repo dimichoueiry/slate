@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { goHome } from '../App';
 import BoardShowcase from './BoardShowcase';
@@ -59,9 +59,10 @@ function Reveal({ children, delay = 0 }: { children: ReactNode; delay?: number }
 export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
   const reduce = useReducedMotion();
+  const lpRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = document.querySelector('.lp');
+    const el = lpRef.current;
     if (!el) return;
     const onScroll = () => setScrolled(el.scrollTop > 12);
     el.addEventListener('scroll', onScroll, { passive: true });
@@ -77,7 +78,7 @@ export default function Landing() {
   };
 
   return (
-    <div className="lp">
+    <div className="lp" ref={lpRef}>
       {/* nav */}
       <nav className={`lp-nav${scrolled ? ' scrolled' : ''}`}>
         <div className="lp-wrap lp-nav-inner">
@@ -194,22 +195,8 @@ export default function Landing() {
       </section>
 
       {/* AI nodes */}
-      <section className="lp-section" id="nodes">
-        <div className="lp-wrap">
-          <Reveal>
-            <div className="lp-sec-head">
-              <p className="lp-kicker">AI, on the canvas</p>
-              <h2 className="lp-h2">Any note that starts with a command runs.</h2>
-              <p className="lp-sec-lede">
-                A dozen built-in agents — write, search, research, chart, analyze, extract, generate.
-                Pick one and watch it work. Hover to pause.
-              </p>
-            </div>
-          </Reveal>
-          <Reveal delay={0.06}>
-            <NodeDemo />
-          </Reveal>
-        </div>
+      <section className="lp-section lp-nodes" id="nodes">
+        <NodeDemo scrollRef={lpRef} />
       </section>
 
       {/* features */}

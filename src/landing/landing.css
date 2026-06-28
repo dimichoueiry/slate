@@ -749,73 +749,165 @@
 
 /* AI node = a sticky-styled card whose text starts with a slash command */
 .lp-ainode {
-  position: absolute;
-  background: #f1f0ec;
-  border-radius: 4px;
-  padding: 12px 13px 13px;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+  position: relative;
+  width: 100%;
+  background: #fcfbf9;
+  border-radius: 9px;
+  padding: 13px 14px 14px;
+  border: 1px solid rgba(124, 58, 237, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 12px 32px -10px rgba(30, 25, 50, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.08);
   z-index: 8;
+}
+.lp-ainode-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9b95a8;
+}
+.lp-ainode-chip {
+  display: inline-grid;
+  place-items: center;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ac), var(--teal));
 }
 .lp-ainode .lp-cmd {
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: #2a2833;
+  min-height: 1.5em;
 }
 .lp-ainode .lp-cmd b {
   color: var(--ac);
   font-weight: 700;
 }
+.lp-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--ac);
+  animation: lp-caret-blink 0.9s steps(1) infinite;
+}
+@keyframes lp-caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
 
-/* the circular run button (30px, 135deg violet→purple) */
+/* the circular run button (32px, 135deg violet→purple) */
 .lp-runbtn {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  top: -14px;
+  right: -14px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 700;
   background: linear-gradient(135deg, #7c3aed, #6741d9);
-  box-shadow: 0 3px 10px rgba(40, 60, 160, 0.45);
+  box-shadow: 0 4px 14px rgba(40, 60, 160, 0.45);
   z-index: 10;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 .lp-runbtn.run {
-  background: linear-gradient(135deg, #5a5a64, #3a3a44);
+  background: linear-gradient(135deg, #4b4b55, #313139);
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.3), 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 .lp-runbtn.done {
   background: linear-gradient(135deg, #2f9e44, #37b24d);
+  box-shadow: 0 4px 16px rgba(47, 158, 68, 0.5);
+}
+/* rotating gradient activity ring while running */
+.lp-runbtn-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(124, 58, 237, 0),
+    var(--ac-hi),
+    var(--teal),
+    rgba(124, 58, 237, 0)
+  );
+  padding: 2px;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: lp-nd-spin 0.9s linear infinite;
 }
 .lp-runbtn .lp-spin {
-  width: 13px;
-  height: 13px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
   border-radius: 50%;
+  animation: lp-nd-spin 0.7s linear infinite;
 }
 
 /* generated output object (written back onto the canvas) */
 .lp-out {
-  position: absolute;
+  position: relative;
+  width: 100%;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(20, 20, 40, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border-radius: 11px;
+  box-shadow: 0 22px 50px -18px rgba(20, 20, 40, 0.42), 0 0 0 1px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   z-index: 7;
 }
 .lp-out-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #3a3746;
+  background: #fcfbfe;
+  border-bottom: 1px solid #f0eef5;
+}
+.lp-out-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ac), var(--teal));
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+.lp-out-name {
+  color: #2a2833;
+  font-weight: 600;
+}
+.lp-out-file {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
   font-size: 10.5px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(95deg, #7c3aed, #0891b2);
+  font-weight: 500;
+  color: #a7a2b5;
 }
 .lp-out-body {
-  padding: 9px 11px 11px;
+  padding: 12px 13px 13px;
   color: #1f1d29;
 }
 .lp-out-table {
@@ -983,24 +1075,91 @@
   color: var(--ac-hi);
 }
 
-/* ---------- node demo (faithful node on paper) ---------- */
-.lp-demo {
-  display: grid;
-  grid-template-columns: 250px 1fr;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
+/* ============================================================================
+   "AI, on the canvas" — pinned two-pane feature moment
+   ========================================================================== */
+.lp-nodes {
+  padding: 0;
+  border-top: 1px solid var(--line-soft);
 }
-.lp-demo-list {
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--line);
+
+/* tall spacer drives the pin; the stage sticks inside it */
+.lp-nd-scroll {
+  position: relative;
 }
-.lp-demo-cmd {
+.lp-nd-sticky {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 15px 18px;
+  padding: clamp(76px, 10vh, 112px) 0 clamp(48px, 8vh, 88px);
+}
+.lp-nd-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr);
+  gap: clamp(40px, 6vw, 92px);
+  align-items: center;
+  width: 100%;
+}
+
+/* ---- narrative column ---- */
+.lp-nd-narr {
+  max-width: 520px;
+}
+.lp-nd-narr .lp-kicker {
+  margin-bottom: 22px;
+}
+.lp-nd-h2 {
+  font-size: clamp(30px, 3.6vw, 52px);
+  line-height: 1.03;
+  letter-spacing: -0.03em;
+  font-weight: 500;
+  margin: 0 0 24px;
+}
+.lp-nd-grad {
+  background: linear-gradient(100deg, var(--ac-hi), var(--teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.lp-nd-desc {
+  min-height: 3.4em;
+  margin-bottom: 30px;
+}
+.lp-nd-desc p {
+  margin: 0;
+  font-size: clamp(16px, 1.15vw, 18.5px);
+  line-height: 1.55;
+  color: var(--dim);
+  max-width: 42ch;
+}
+
+/* ---- editorial agent index ---- */
+.lp-nd-index {
+  position: relative;
+  border-top: 1px solid var(--line-soft);
+}
+.lp-nd-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform-origin: top;
+  background: linear-gradient(180deg, var(--ac-hi), var(--teal));
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+  z-index: 3;
+}
+.lp-nd-cmd-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px 14px 18px;
   border: 0;
   border-bottom: 1px solid var(--line-soft);
   background: transparent;
@@ -1008,38 +1167,148 @@
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  font-size: 13.5px;
-  transition: background 0.16s, color 0.16s;
+  font-size: 14px;
+  transition: color 0.2s ease, padding-left 0.28s var(--ease);
 }
-.lp-demo-cmd:hover {
-  background: rgba(255, 255, 255, 0.03);
+.lp-nd-cmd-row:hover {
   color: var(--fg);
 }
-.lp-demo-cmd.active {
-  background: rgba(124, 58, 237, 0.1);
+.lp-nd-cmd-row.active {
   color: #fff;
+  padding-left: 24px;
+}
+.lp-nd-hi {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.18), rgba(124, 58, 237, 0.02));
   box-shadow: inset 2px 0 0 var(--ac);
 }
-.lp-demo-cmd code {
-  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-  font-size: 12px;
-  color: var(--ac-hi);
-  min-width: 62px;
-}
-.lp-demo-stage {
+.lp-nd-cmd-row > * {
   position: relative;
-  min-height: 340px;
+  z-index: 1;
+}
+.lp-nd-num {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  min-width: 20px;
+  transition: color 0.2s ease;
+}
+.lp-nd-cmd-row.active .lp-nd-num {
+  color: var(--ac-hi);
+}
+.lp-nd-cmd-row code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--ac-hi);
+  min-width: 72px;
+}
+.lp-nd-label {
+  flex: 1;
+}
+.lp-nd-arrow {
+  color: var(--ac-hi);
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.2s ease, transform 0.2s var(--ease);
+}
+.lp-nd-cmd-row.active .lp-nd-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ---- the right pane: a real mini Slate board ---- */
+.lp-nd-board {
+  position: relative;
   display: grid;
   place-items: center;
-  padding: 40px;
-  background: var(--paper);
-  background-image: radial-gradient(rgba(60, 60, 70, 0.16) 1.2px, transparent 1.2px);
-  background-size: 22px 22px;
-}
-.lp-demo-node {
-  position: relative;
   width: 100%;
-  max-width: 360px;
+  min-height: clamp(400px, 58vh, 560px);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper);
+  /* faint dot grid — matches the real renderer */
+  background-image: radial-gradient(rgba(60, 60, 70, 0.18) 1.2px, transparent 1.2px);
+  background-size: 26px 26px;
+  background-position: -2px -2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 60px 130px -44px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+/* fixed coordinate space, scaled to fit the pane (set via inline transform) */
+.lp-nd-flow {
+  position: relative;
+  flex: none;
+  transform-origin: center;
+}
+.lp-nd-wire {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+/* the yellow sticky AI node (reuses .lp-sticky) */
+.lp-nd-node {
+  z-index: 3;
+}
+.lp-nd-cmd {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #2a2833;
+  min-height: 1.5em;
+}
+.lp-nd-cmd b {
+  color: var(--ac);
+  font-weight: 700;
+}
+/* context source objects wired into the node */
+.lp-nd-ctx-note {
+  z-index: 3;
+}
+.lp-nd-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(20, 20, 40, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  z-index: 3;
+}
+.lp-nd-file-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--ac);
+  background: rgba(124, 58, 237, 0.1);
+}
+.lp-nd-file-name {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: #2a2833;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-nd-file-badge {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #6d28d9;
+  background: rgba(124, 58, 237, 0.12);
+  padding: 2px 6px;
+  border-radius: 5px;
 }
 .lp-pill {
   display: inline-block;
@@ -1050,6 +1319,210 @@
   padding: 2px 9px;
   border-radius: 999px;
   margin: 2px 5px 2px 0;
+}
+
+/* console readout — top-right of the board, clear of the topbar */
+.lp-nd-meta {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.lp-nd-count {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #4a4756;
+}
+.lp-nd-count i {
+  font-style: normal;
+  color: #b3aec2;
+}
+.lp-nd-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.lp-nd-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.lp-nd-status.run {
+  color: #9a6700;
+  background: rgba(245, 159, 0, 0.15);
+}
+.lp-nd-status.run .lp-nd-status-dot {
+  background: #f59f00;
+  animation: lp-nd-pulse 1s ease-in-out infinite;
+}
+.lp-nd-status.done {
+  color: #2b8a3e;
+  background: rgba(47, 158, 68, 0.15);
+}
+.lp-nd-status.done .lp-nd-status-dot {
+  background: #2f9e44;
+}
+
+/* generated output object (a white card, board-style) */
+.lp-nd-out {
+  z-index: 2;
+  padding: 0;
+  overflow: hidden;
+}
+.lp-nd-out-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  background: #fcfbfe;
+  border-bottom: 1px solid #f0eef5;
+}
+.lp-nd-out-body {
+  padding: 12px 13px 13px;
+  color: #1f1d29;
+}
+.lp-out-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ac), var(--teal));
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+.lp-out-name {
+  color: #2a2833;
+  font-weight: 600;
+}
+.lp-out-file {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #a7a2b5;
+}
+.lp-out-copy {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #3a3746;
+}
+.lp-out-copy strong {
+  color: #1f1d29;
+  font-weight: 700;
+}
+.lp-out-foot {
+  margin-top: 10px;
+  font-size: 10.5px;
+  color: #9b95a8;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+}
+.lp-out-delta {
+  margin-top: 9px;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2b8a3e;
+  background: rgba(47, 158, 68, 0.12);
+  padding: 2px 9px;
+  border-radius: 6px;
+}
+.lp-out-cap {
+  margin-top: 9px;
+  font-size: 10.5px;
+  color: #9b95a8;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+}
+.lp-out-lines {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #1f1d29;
+}
+.lp-out-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+/* scroll hint */
+.lp-nd-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #9b97a8;
+  pointer-events: none;
+}
+.lp-nd-hint svg {
+  animation: lp-nd-bob 1.6s ease-in-out infinite;
+}
+
+/* output content extras */
+.lp-out-quote {
+  color: var(--ac);
+  font-weight: 700;
+}
+.lp-out-pills {
+  display: flex;
+  flex-wrap: wrap;
+}
+.lp-out-bullet {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ac), var(--teal));
+}
+.lp-out-img {
+  height: 72px;
+  border-radius: 8px;
+  background: radial-gradient(120% 120% at 20% 10%, #8b5cf6, transparent 60%),
+    linear-gradient(95deg, #7c3aed, #0891b2);
+}
+
+@keyframes lp-nd-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes lp-nd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes lp-nd-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(4px);
+    opacity: 1;
+  }
 }
 
 /* ---------- features ---------- */
@@ -1166,21 +1639,23 @@
     padding: 28px 0 30px !important;
     border-left: 0 !important;
   }
-  .lp-demo {
+  .lp-nd-grid {
     grid-template-columns: 1fr;
+    gap: 36px;
   }
-  .lp-demo-list {
-    flex-direction: row;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+  .lp-nd-sticky {
+    padding: clamp(72px, 9vh, 96px) 0 40px;
+    align-items: flex-start;
   }
-  .lp-demo-cmd {
-    border-bottom: 0;
-    white-space: nowrap;
+  .lp-nd-narr {
+    max-width: none;
   }
-  .lp-demo-cmd.active {
-    box-shadow: inset 0 -2px 0 var(--ac);
+  .lp-nd-desc {
+    min-height: 2.6em;
+    margin-bottom: 22px;
+  }
+  .lp-nd-board {
+    min-height: clamp(360px, 52vh, 460px);
   }
   .lp-feats {
     grid-template-columns: 1fr;
@@ -1188,8 +1663,21 @@
   }
 }
 
+/* no-pin layout used when motion is reduced */
+.lp-nd-static {
+  padding-block: clamp(80px, 12vh, 140px);
+  align-items: start;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lp {
     scroll-behavior: auto;
+  }
+  .lp-nd-hint svg,
+  .lp-runbtn-ring,
+  .lp-runbtn .lp-spin,
+  .lp-nd-status.run .lp-nd-status-dot,
+  .lp-caret {
+    animation: none;
   }
 }
