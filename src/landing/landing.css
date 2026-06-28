@@ -266,6 +266,212 @@
   transform-origin: left center;
 }
 
+/* ============================================================================
+   Hero dashboard — the real "My boards" grid, faithful to the app home
+   ========================================================================== */
+.lp-dash-shell {
+  position: relative;
+  width: 100%;
+}
+.lp-dash {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0e0e12; /* --app-bg */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 50px 120px -42px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.lp-dash-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.lp-dash-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ece9f5;
+}
+.lp-dash-brand svg {
+  color: var(--ac-hi);
+}
+.lp-dash-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 6px;
+  flex: 1;
+  max-width: 200px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #6c6878;
+  font-size: 12px;
+}
+.lp-dash-new-top {
+  margin-left: auto;
+  border: 0;
+  cursor: pointer;
+  padding: 7px 13px;
+  border-radius: 8px;
+  background: var(--ac);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+}
+.lp-dash-new-top:hover {
+  background: #6d28d9;
+}
+.lp-dash-body {
+  padding: 16px;
+}
+.lp-dash-sub {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #9b97a8;
+  margin: 2px 2px 14px;
+}
+.lp-dash-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.lp-dash-card {
+  display: block;
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  overflow: hidden;
+  background: #191920; /* --app-card */
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.lp-dash-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--ac);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+.lp-dash-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--paper);
+  background-image: radial-gradient(rgba(60, 60, 70, 0.16) 1px, transparent 1px);
+  background-size: 13px 13px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.lp-dash-thumb-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lp-dash-live {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--ac);
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.5);
+}
+.lp-dash-meta {
+  padding: 9px 11px 11px;
+}
+.lp-dash-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ece9f5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-dash-date {
+  font-size: 10.5px;
+  color: #8a8794;
+  margin-top: 3px;
+}
+.lp-dash-new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 13px;
+  background: transparent;
+  color: #9b97a8;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.lp-dash-new:hover {
+  border-color: var(--ac);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+}
+.lp-dash-new-plus {
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* opened board view */
+.lp-dash-open {
+  width: 100%;
+}
+.lp-board-static {
+  cursor: default;
+}
+.lp-board-static .lp-sticky,
+.lp-board-static .lp-postcard {
+  cursor: default;
+}
+.lp-dash-cmd {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #2a2833;
+}
+.lp-dash-cmd b {
+  color: var(--ac);
+  font-weight: 700;
+}
+.lp-dash-out-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #2a2833;
+  background: #fcfbfe;
+  border-bottom: 1px solid #f0eef5;
+}
+.lp-dash-out-body {
+  padding: 10px 11px 11px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #4a4756;
+}
+
 /* floating chrome panels (dark glass) */
 .lp-panel {
   position: absolute;
@@ -1628,6 +1834,9 @@
   .lp-hero-grid {
     grid-template-columns: 1fr;
     gap: 44px;
+  }
+  .lp-dash-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
   .lp-board-tilt {
     transform: none;

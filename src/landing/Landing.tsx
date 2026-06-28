@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { goHome } from '../App';
-import BoardShowcase from './BoardShowcase';
+import HeroDashboard from './HeroDashboard';
 import NodeDemo from './NodeDemo';
 import './landing.css';
 
@@ -135,7 +135,7 @@ export default function Landing() {
             </div>
           </motion.div>
 
-          <BoardShowcase />
+          <HeroDashboard />
         </div>
       </section>
 

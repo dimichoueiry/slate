@@ -55,7 +55,7 @@ function border(r: Rect, tx: number, ty: number): XY {
 }
 const inside = (r: Rect, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
-export default function BoardShowcase() {
+export default function BoardShowcase({ onBack }: { onBack?: () => void } = {}) {
   const reduce = useReducedMotion();
   const boardRef = useRef<HTMLDivElement>(null);
   const elRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -477,7 +477,7 @@ export default function BoardShowcase() {
 
         {/* chrome */}
         <div className="lp-panel lp-topbar" onPointerDown={(e) => e.stopPropagation()}>
-          <span className="lp-tb-btn">←</span><span className="lp-tb-name">Growth board</span><span className="lp-tb-btn">↩</span><span className="lp-tb-btn">↪</span><span className="lp-tb-btn">☾</span><span className="lp-tb-btn primary">Export</span>
+          <button className="lp-tb-btn" onClick={onBack} title="Back to boards" style={{ border: 0, padding: 0, cursor: onBack ? 'pointer' : 'default' }}>←</button><span className="lp-tb-name">Growth board</span><span className="lp-tb-btn">↩</span><span className="lp-tb-btn">↪</span><span className="lp-tb-btn">☾</span><span className="lp-tb-btn primary">Export</span>
         </div>
         <div className="lp-panel lp-toolbar" onPointerDown={(e) => e.stopPropagation()}>
           <span className="lp-grip">⋮⋮</span>{TOOLS.map((t, i) => (<span key={i} className={`lp-tool${i === 6 ? ' active' : ''}`}>{t}</span>))}
