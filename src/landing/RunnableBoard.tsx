@@ -16,9 +16,10 @@ export type RNote = {
   y: number;
   w: number;
   h: number;
-  color: string;
+  color?: string;
   title?: string;
-  body: string;
+  body?: string;
+  img?: string; // an image context object (rendered bare) instead of a sticky
 };
 export type ROut = {
   id: string;
@@ -29,6 +30,7 @@ export type ROut = {
   title: string;
   file?: string;
   bare?: boolean; // render without the yellow sticky wrapper (e.g. image outputs)
+  color?: string; // sticky color when filled (defaults to yellow)
   render: (anim: boolean) => JSX.Element;
 };
 export type RNode = {
@@ -153,18 +155,19 @@ export default function RunnableBoard({ scene, onBack }: { scene: RScene; onBack
   };
 
   // ── camera ──
-  const focus = useMemo(() => {
-    const running = scene.nodes.find((n) => phase[n.id] === 'run');
-    if (running) return [running.id, running.out.id, ...running.inputs];
+  // Frame the active node WITH its inputs and its output, and hold that frame
+  // through the whole idle → pull → run → done lifecycle. The camera only moves
+  // when we advance to the next node — no twitching between micro-steps.
+  const focusKey = useMemo(() => {
     const active = scene.nodes.find((n) => phase[n.id] !== 'done' && inputsReady(n));
-    if (active) {
-      const ids = [active.id, ...active.inputs];
-      if (phase[active.id] !== 'idle') ids.push(active.out.id);
-      return ids;
-    }
-    return Object.keys(rects);
+    return active ? active.id : '__all__';
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, scene, rects]);
+  }, [phase, scene]);
+  const focus = useMemo(() => {
+    if (focusKey === '__all__') return Object.keys(rects);
+    const active = scene.nodes.find((n) => n.id === focusKey);
+    return active ? [active.id, ...active.inputs, active.out.id] : Object.keys(rects);
+  }, [focusKey, scene, rects]);
 
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -289,7 +292,7 @@ export default function RunnableBoard({ scene, onBack }: { scene: RScene; onBack
     <div className={`lp-board lp-rb${grabbing ? ' grabbing' : ''}`} ref={boardRef} onPointerDown={startPan}>
       <div
         className="lp-world"
-        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, transformOrigin: '0 0', transition: grabbing || wireDrag ? 'none' : `transform 0.6s ${ease}` }}
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, transformOrigin: '0 0', transition: grabbing || wireDrag ? 'none' : `transform 0.85s ${ease}` }}
       >
         <Wires items={wires} />
 
@@ -307,9 +310,15 @@ export default function RunnableBoard({ scene, onBack }: { scene: RScene; onBack
             );
           })()}
 
-        {scene.notes.map((n) => (
-          <Sticky key={n.id} dataId={n.id} x={n.x} y={n.y} w={n.w} color={n.color} title={n.title} body={n.body} />
-        ))}
+        {scene.notes.map((n) =>
+          n.img ? (
+            <div key={n.id} data-oid={n.id} className="lp-rb-img" style={{ position: 'absolute', left: n.x, top: n.y, width: n.w }}>
+              <img className="lp-out-photo" src={n.img} alt="" />
+            </div>
+          ) : (
+            <Sticky key={n.id} dataId={n.id} x={n.x} y={n.y} w={n.w} color={n.color ?? '#FFE066'} title={n.title} body={n.body} />
+          ),
+        )}
 
         {scene.nodes.map((n) => {
           const ph = phase[n.id];
@@ -383,7 +392,7 @@ export default function RunnableBoard({ scene, onBack }: { scene: RScene; onBack
             };
             return (
               <>
-                {scene.notes.map((n) => cell(n.id, n.color, n.id))}
+                {scene.notes.map((n) => cell(n.id, n.color ?? '#e9e6f0', n.id))}
                 {scene.nodes.map((n) => cell(n.id, '#FFE066', n.id))}
                 {scene.nodes.map((n) => (phase[n.id] !== 'idle' ? cell(n.out.id, 'rgba(255,255,255,0.9)', n.out.id) : null))}
               </>

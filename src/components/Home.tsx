@@ -68,7 +68,7 @@ export default function Home() {
           audience: p.audience,
           donts: p.donts,
           palette: p.palette,
-          fontFamily: 'sans',
+          fontFamily: 'hand',
           createdAt: Date.now(),
         };
         await saveBrandKit(kit);

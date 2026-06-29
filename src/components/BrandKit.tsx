@@ -42,7 +42,7 @@ const CSS = `
 `;
 
 export function blankKit(): BrandKit {
-  return { id: nanoid(10), name: 'New brand', voice: '', audience: '', donts: '', palette: [], fontFamily: 'sans', createdAt: Date.now() };
+  return { id: nanoid(10), name: 'New brand', voice: '', audience: '', donts: '', palette: [], fontFamily: 'hand', createdAt: Date.now() };
 }
 
 function LogoPreview({ blobId }: { blobId?: string }) {

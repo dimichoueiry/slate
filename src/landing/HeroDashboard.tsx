@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { goHome } from '../App';
 import BoardShowcase from './BoardShowcase';
 import RunnableBoard, { type RScene } from './RunnableBoard';
-import { cobblestoneScene, competitorScene, receiptlyScene } from './examples';
+import { cobblestoneScene, kidDrawingScene, youtubeScene } from './examples';
 
 /* The hero showcase = the real Slate dashboard. A grid of example boards (the
    same cards you'd see in "My boards"); click one and it opens right here —
@@ -60,60 +60,43 @@ const SCENES: Scene[] = [
     ],
   },
   {
-    id: 'receiptly',
-    name: 'Launch board',
+    id: 'youtube',
+    name: 'YouTube video script',
     date: 'today',
     kind: 'runnable',
-    runnable: receiptlyScene,
+    runnable: youtubeScene,
     objects: [
-      { id: 'pos', x: 24, y: 24, w: 150, color: '#FFD6A5', title: 'Positioning', body: '“Expensify for\npeople who hate it”' },
-      { id: 'flow', x: 24, y: 150, w: 150, color: '#A8D8EA', title: 'Flow', body: '📷 → OCR → PDF' },
-      { id: 'priv', x: 24, y: 256, w: 150, color: '#F2D3D3', title: '🔒 Private', body: 'pivot idea' },
-      { id: 'h', x: 210, y: 40, w: 180, kind: 'node', color: '#FFE066', body: 'ai: 3 hero options' },
-      { id: 'ho', x: 432, y: 40, w: 150, kind: 'out', title: 'Heroes', body: '3 headlines' },
-      { id: 'c', x: 210, y: 230, w: 180, kind: 'node', color: '#FFE066', body: 'chart: MRR' },
-      { id: 'co', x: 432, y: 230, w: 150, kind: 'out', title: 'MRR', body: 'wk 2 → 12' },
+      { id: 't', x: 18, y: 100, w: 120, color: '#A8D8EA', title: 'Topic', body: 'neural nets' },
+      { id: 'r', x: 168, y: 60, w: 150, kind: 'node', color: '#FFE066', body: 'research:' },
+      { id: 'a', x: 168, y: 170, w: 150, kind: 'node', color: '#FFE066', body: 'ai: script' },
+      { id: 'i', x: 168, y: 280, w: 150, kind: 'node', color: '#FFE066', body: 'img: thumb' },
+      { id: 'o', x: 360, y: 280, w: 130, kind: 'out', title: 'Thumbnail', body: 'made' },
     ],
     wires: [
-      { from: 'pos', to: 'h' },
-      { from: 'flow', to: 'h' },
-      { from: 'h', to: 'ho', dashed: true },
-      { from: 'flow', to: 'c' },
-      { from: 'c', to: 'co', dashed: true },
+      { from: 't', to: 'r' },
+      { from: 'r', to: 'a' },
+      { from: 'a', to: 'i' },
+      { from: 'i', to: 'o', dashed: true },
     ],
   },
   {
-    id: 'competitors',
-    name: 'Competitor teardown',
-    date: '3 days ago',
+    id: 'kid-drawing',
+    name: "Kid's drawing",
+    date: 'today',
     kind: 'runnable',
-    runnable: competitorScene,
+    runnable: kidDrawingScene,
     objects: [
-      { id: 'a', x: 28, y: 22, w: 150, color: '#FFD6A5', title: 'Notion', body: 'docs + DB\ncanvas bolted on' },
-      { id: 'b', x: 28, y: 150, w: 150, color: '#B5EAD7', title: 'Miro', body: 'canvas\nno real AI' },
-      { id: 'c', x: 28, y: 278, w: 150, color: '#A8D8EA', title: 'tldraw', body: 'drawing only' },
-      { id: 'n', x: 228, y: 150, w: 200, kind: 'node', color: '#FFE066', body: 'ai: where do we win?' },
-      { id: 'f', x: 470, y: 150, w: 164, kind: 'out', title: 'Angles', body: 'agents · data\nlocal-first' },
+      { id: 'd', x: 20, y: 70, w: 130, color: '#F1F0EC', title: 'Doodle', body: 'line art' },
+      { id: 'n1', x: 180, y: 36, w: 168, kind: 'node', color: '#FFE066', body: 'img: make it funky' },
+      { id: 'o1', x: 380, y: 36, w: 130, kind: 'out', title: 'Art', body: 'colorful' },
+      { id: 'n2', x: 180, y: 196, w: 168, kind: 'node', color: '#FFE066', body: 'img: sign it' },
+      { id: 'o2', x: 380, y: 196, w: 130, kind: 'out', title: 'Dylan', body: 'signed' },
     ],
     wires: [
-      { from: 'a', to: 'n' },
-      { from: 'b', to: 'n' },
-      { from: 'c', to: 'n' },
-      { from: 'n', to: 'f', dashed: true },
-    ],
-  },
-  {
-    id: 'content',
-    name: 'Content calendar',
-    date: 'yesterday',
-    objects: [
-      { id: 'w', x: 30, y: 26, w: 184, color: '#B5EAD7', title: 'This week', body: 'Mon  launch\nWed  how-to\nFri  demo' },
-      { id: 'n', x: 108, y: 218, w: 206, kind: 'node', color: '#FFE066', body: 'ai: draft these posts' },
-      { id: 'd', x: 376, y: 210, w: 156, kind: 'out', title: '3 drafts', body: 'ready to schedule' },
-    ],
-    wires: [
-      { from: 'w', to: 'n' },
-      { from: 'n', to: 'd', dashed: true },
+      { from: 'd', to: 'n1' },
+      { from: 'n1', to: 'o1', dashed: true },
+      { from: 'o1', to: 'n2' },
+      { from: 'n2', to: 'o2', dashed: true },
     ],
   },
   {

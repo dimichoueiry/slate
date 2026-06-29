@@ -15,11 +15,11 @@ let zc = 1;
 const z = () => zc++;
 
 function label(x: number, y: number, text: string): TextObj {
-  return { id: nanoid(8), type: 'text', x, y, w: 200, h: 30, rotation: 0, z: z(), text, color: '#1a1a1a', fontSize: 22, fontFamily: 'sans', fixedWidth: false };
+  return { id: nanoid(8), type: 'text', x, y, w: 200, h: 30, rotation: 0, z: z(), text, color: '#1a1a1a', fontSize: 22, fontFamily: 'hand', fixedWidth: false };
 }
 
 function sticky(x: number, y: number, text: string, color = '#FFE066', w = 230, h = 130): StickyObj {
-  return { id: nanoid(8), type: 'sticky', x, y, w, h, rotation: 0, z: z(), color, text, fontSize: 15, fontFamily: 'sans' };
+  return { id: nanoid(8), type: 'sticky', x, y, w, h, rotation: 0, z: z(), color, text, fontSize: 15, fontFamily: 'hand' };
 }
 
 function connect(from: SlateObj, to: SlateObj): ConnectorObj {

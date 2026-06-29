@@ -1,189 +1,199 @@
 import { TEMPLATES } from '../engine/templates';
 import { type RScene } from './RunnableBoard';
 import { sceneFromObjects } from './sceneAdapter';
-import { Bars, Bullets, Copy, Photo } from './outputs';
+import { Bullets, Doc, Photo } from './outputs';
 import cobblestoneLogo from './assets/cobblestone-logo.png';
+import kidHorseInput from './assets/kid-horse-input.png';
+import kidHorseFunky from './assets/kid-horse-funky.png';
+import kidHorseDylan from './assets/kid-horse-dylan.png';
+import ytThumb1 from './assets/yt-thumb-1.png';
+import ytThumb2 from './assets/yt-thumb-2.png';
 
 /* Real, runnable example boards for the hero dashboard.
    Each is a genuine little workflow: context wired into AI nodes you can run.
    To add one: copy a scene, change the notes/prompts, and pick an output
    component from ./outputs (Bars, Bullets, Pills, TableOut, Copy, ImageOut). */
 
-/* ── Competitor teardown → positioning ───────────────────────────────────
-   Premise: notes on three rivals. Run the first agent to find where you
-   actually win; those angles feed a second agent that writes the one-liner. */
-export const competitorScene: RScene = {
-  id: 'competitors',
-  name: 'Competitor teardown',
-  notes: [
-    { id: 'notion', x: 40, y: 36, w: 196, h: 96, color: '#FFD6A5', title: 'Rival · Notion', body: 'Docs + databases are strong.\nCanvas feels bolted on.' },
-    { id: 'miro', x: 40, y: 146, w: 196, h: 96, color: '#B5EAD7', title: 'Rival · Miro', body: 'Best-in-class canvas.\nNo AI that does the work.' },
-    { id: 'tldraw', x: 40, y: 256, w: 196, h: 96, color: '#A8D8EA', title: 'Rival · tldraw', body: 'Gorgeous, open-source.\nDrawing only — no data.' },
-  ],
+/* ── Kid's drawing → finished art ─────────────────────────────────────────
+   A line-art doodle becomes a colorful kid drawing (shape kept, made funky),
+   then a second img node adds a messy "Dylan" signature. Image in → image out,
+   chained — outputs render bare (no sticky behind them). */
+export const kidDrawingScene: RScene = {
+  id: 'kid-drawing',
+  name: "Kid's drawing",
+  // a clean left→right pipeline with aligned vertical centers, so connectors
+  // run nearly straight (no diagonal swoops).
+  notes: [{ id: 'doodle', x: 40, y: 90, w: 250, h: 210, img: kidHorseInput }],
   nodes: [
     {
-      id: 'winNode',
-      x: 316,
-      y: 156,
+      id: 'funkNode',
+      x: 360,
+      y: 140,
       w: 250,
-      h: 64,
-      cmd: 'ai:',
-      rest: 'where do we actually win?',
-      inputs: ['notion', 'miro', 'tldraw'],
+      h: 110,
+      cmd: 'img:',
+      rest: 'turn this into a hand-drawn kid drawing — keep the shape, make it funky',
+      inputs: ['doodle'],
       out: {
-        id: 'angles',
-        x: 316,
-        y: 300,
-        w: 258,
-        h: 160,
-        title: 'Positioning',
-        file: 'positioning.md',
-        render: (a) => (
-          <Bullets
-            anim={a}
-            items={[
-              'Only canvas where agents do the work — not just chat.',
-              'Freeform ideas + structured data on one page.',
-              'Local-first and fast — no enterprise tax.',
-            ]}
-          />
-        ),
+        id: 'funkyOut',
+        x: 680,
+        y: 85,
+        w: 262,
+        h: 222,
+        title: '',
+        bare: true,
+        render: (a) => <Photo anim={a} src={kidHorseFunky} />,
       },
     },
     {
-      id: 'lineNode',
-      x: 656,
-      y: 332,
-      w: 244,
-      h: 64,
-      cmd: 'ai:',
-      rest: 'turn it into a one-liner',
-      inputs: ['angles'],
+      id: 'signNode',
+      x: 1012,
+      y: 140,
+      w: 250,
+      h: 110,
+      cmd: 'img:',
+      rest: 'write "Dylan" at the bottom, like a messy kid signature',
+      inputs: ['funkyOut'],
       out: {
-        id: 'tagline',
-        x: 656,
-        y: 472,
-        w: 272,
-        h: 122,
-        title: 'Tagline',
-        file: 'tagline.md',
-        render: (a) => (
-          <Copy
-            anim={a}
-            lead="The canvas that does the work."
-            body="Freeform ideas in, finished work out — agents on an infinite, local-first page."
-          />
-        ),
+        id: 'dylanOut',
+        x: 1332,
+        y: 70,
+        w: 262,
+        h: 252,
+        title: '',
+        bare: true,
+        render: (a) => <Photo anim={a} src={kidHorseDylan} />,
       },
     },
   ],
 };
 
-/* ── Receiptly · Launch board ─────────────────────────────────────────────
-   Maya, solo founder, 3 weeks from a Product Hunt launch — pitch, launch plan
-   and a private fallback on one offline canvas. Positioning + a sketched
-   product flow feed an `ai:` hero-copy node, which chains into a `research:`
-   investor 1-pager; a separate `chart:` node projects MRR from her launch
-   loop. The pivot idea stays in a private sticky that never leaves her Mac. */
-export const receiptlyScene: RScene = {
-  id: 'receiptly',
-  name: 'Launch board',
-  notes: [
-    { id: 'pos1', x: 40, y: 40, w: 192, h: 86, color: '#FFD6A5', title: 'Positioning', body: '“Expensify for people\nwho hate Expensify.”' },
-    { id: 'pos2', x: 40, y: 140, w: 192, h: 86, color: '#B5EAD7', title: 'Other angles', body: 'Receipts that file\nthemselves.' },
-    { id: 'flow', x: 40, y: 240, w: 192, h: 92, color: '#A8D8EA', title: 'Product flow (sketch)', body: '📷 → OCR → categories\n→ tax-ready PDF' },
-    { id: 'week', x: 300, y: 470, w: 192, h: 86, color: '#FFD6A5', title: 'Launch loop', body: 'PH → 3 newsletters →\nr/freelance → SEO' },
-    { id: 'private', x: 612, y: 120, w: 208, h: 96, color: '#F2D3D3', title: '🔒 Private · this Mac', body: 'If flat by week 6 → pivot\nWhatsApp-first, LATAM.' },
-  ],
+/* ── YouTube video script → thumbnail ─────────────────────────────────────
+   Topic → audience research → full script → a YouTube thumbnail (informed by a
+   separate "what makes a great thumbnail" research note), then a second img
+   node refines that thumbnail. Outputs are the real long text (clamped with a
+   "Show more · N words" pill) and real generated images. */
+const YT_CONCEPTS = `### Core Concepts and Common Beginner Questions
+*  **How they work:** Neural networks process data through layers of interconnected nodes. They "learn" by adjusting weights based on input, "evaluate" their accuracy through backpropagation, and "use" the refined patterns to make decisions and predictions.
+*  **Effective analogies:** Viewers grasp the concept best when networks are`;
+
+const YT_SCRIPT = `Title Options:
+1. Neural Networks Explained Simply (How AI Learns)
+2. Stop Coding, Start Training: Neural Networks for Beginners
+3. The Hidden AI Running Your Life: Neural Networks 101
+
+Hook (15 seconds):
+What if I told you the AI taking over the world isn't magic? It is just a giant web of math trying to guess the right answer. In the next few minutes, you will understand exactly how neural`;
+
+const YT_FRAMEWORK = `## Core Framework Overview
+- **Mobile-first design:** Prioritize clarity and impact on small screens, as mobile viewing dictates performance.
+- **One dominant subject:** Limit the composition to a single focal point to avoid clutter.
+- **Strict color palette:** Use only two or three colors with high contrast to make the thumbnail pop.
+- **Instant value promise:** The thumbnail must immediately communicate what the viewer will learn or gain.`;
+
+export const youtubeScene: RScene = {
+  id: 'youtube',
+  name: 'YouTube video script',
+  notes: [{ id: 'topic', x: 40, y: 130, w: 210, h: 110, color: '#A8D8EA', body: 'artificial neural networks' }],
   nodes: [
     {
-      id: 'heroNode',
-      x: 300,
+      id: 'researchNode',
+      x: 320,
       y: 120,
-      w: 244,
-      h: 60,
-      cmd: 'ai:',
-      rest: 'write 3 hero options — dry, confident, a bit irreverent',
-      inputs: ['pos1', 'pos2', 'flow'],
-      out: {
-        id: 'heroes',
-        x: 300,
-        y: 258,
-        w: 256,
-        h: 150,
-        title: 'Hero options',
-        file: 'hero.md',
-        render: (a) => (
-          <Bullets
-            anim={a}
-            items={[
-              'Point, shoot, deduct.',
-              'Every receipt is a write-off you’re forgetting.',
-              'Bookkeeping for people who’d rather be working.',
-            ]}
-          />
-        ),
-      },
-    },
-    {
-      id: 'investNode',
-      x: 612,
-      y: 300,
-      w: 244,
-      h: 60,
+      w: 252,
+      h: 132,
       cmd: 'research:',
-      rest: 'turn the winner into a 1-page investor summary',
-      inputs: ['heroes'],
+      rest: 'what viewers want to know about this topic — angles, common questions, examples',
+      inputs: ['topic'],
       out: {
-        id: 'summary',
-        x: 612,
-        y: 438,
-        w: 268,
-        h: 184,
-        title: 'Investor 1-pager',
-        file: 'pitch.md',
-        render: (a) => (
-          <Bullets
-            anim={a}
-            items={[
-              'Problem: freelancers lose ~$1.2k/yr in missed write-offs.',
-              'Market: 70M+ solo freelancers, no tool built for them.',
-              'Why now: on-device OCR is finally good enough.',
-              'Plan: Product Hunt → niche newsletters → SEO.',
-            ]}
-          />
-        ),
+        id: 'concepts',
+        x: 640,
+        y: 100,
+        w: 252,
+        h: 210,
+        title: '',
+        color: '#FFE066',
+        render: (a) => <Doc anim={a} text={YT_CONCEPTS} words={633} />,
       },
     },
     {
-      id: 'mrrNode',
-      x: 300,
-      y: 580,
-      w: 244,
-      h: 60,
-      cmd: 'chart:',
-      rest: 'project MRR for the first 12 weeks',
-      inputs: ['week'],
+      id: 'scriptNode',
+      x: 960,
+      y: 120,
+      w: 262,
+      h: 150,
+      cmd: 'ai:',
+      rest: 'write a YouTube script — 3 clickable title options, a 15-second hook, then a structured script with sections',
+      inputs: ['concepts'],
       out: {
-        id: 'mrr',
-        x: 300,
-        y: 718,
-        w: 256,
-        h: 150,
-        title: 'MRR projection',
-        file: 'mrr.svg',
-        render: (a) => (
-          <Bars
-            anim={a}
-            rows={[
-              ['Wk 2', 1],
-              ['Wk 4', 2],
-              ['Wk 6', 4],
-              ['Wk 8', 7],
-              ['Wk 12', 12],
-            ]}
-          />
-        ),
+        id: 'titles',
+        x: 1300,
+        y: 100,
+        w: 262,
+        h: 210,
+        title: '',
+        color: '#B5EAD7',
+        render: (a) => <Doc anim={a} text={YT_SCRIPT} words={486} />,
+      },
+    },
+    {
+      id: 'frameworkNode',
+      x: 320,
+      y: 560,
+      w: 262,
+      h: 152,
+      cmd: 'research:',
+      rest: 'what is the best framework of how an explainer video youtube thumbnail should look like in 2026?',
+      inputs: [],
+      out: {
+        id: 'framework',
+        x: 640,
+        y: 540,
+        w: 262,
+        h: 220,
+        title: '',
+        color: '#A8D8EA',
+        render: (a) => <Doc anim={a} text={YT_FRAMEWORK} words={642} />,
+      },
+    },
+    {
+      id: 'thumbNode',
+      x: 1640,
+      y: 330,
+      w: 258,
+      h: 120,
+      cmd: 'img:',
+      rest: 'YouTube thumbnail concept for this video',
+      inputs: ['titles', 'framework'],
+      out: {
+        id: 'thumb1',
+        x: 1960,
+        y: 300,
+        w: 280,
+        h: 210,
+        title: '',
+        bare: true,
+        render: (a) => <Photo anim={a} src={ytThumb1} />,
+      },
+    },
+    {
+      id: 'refineNode',
+      x: 1960,
+      y: 620,
+      w: 262,
+      h: 158,
+      cmd: 'img:',
+      rest: "remove the 'NETS', the arrow, and the browser icon with X UNDER 'Neural Nets' and add a 'nets' sticky note instead. make sure it is well placed",
+      inputs: ['thumb1'],
+      out: {
+        id: 'thumb2',
+        x: 2280,
+        y: 600,
+        w: 280,
+        h: 220,
+        title: '',
+        bare: true,
+        render: (a) => <Photo anim={a} src={ytThumb2} />,
       },
     },
   ],

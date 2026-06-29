@@ -103,6 +103,17 @@ export function ImageOut({ caption, anim = true }: { caption?: string; anim?: bo
   );
 }
 
+/* a long text/markdown output, clamped with a "Show more · N words" pill —
+   the real thing the app writes back (verbatim text, not a summary) */
+export function Doc({ text, words, anim = true }: { text: string; words?: number; anim?: boolean }) {
+  return (
+    <motion.div className="lp-out-doc" {...pop(anim, 0)}>
+      <div className="lp-out-doc-text">{text}</div>
+      {words ? <span className="lp-showmore">Show more · {words} words</span> : null}
+    </motion.div>
+  );
+}
+
 /* a real generated image (import a png and pass it as src) */
 export function Photo({ src, anim = true }: { src: string; anim?: boolean }) {
   return (

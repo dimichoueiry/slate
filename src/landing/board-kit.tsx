@@ -191,6 +191,7 @@ export type OutputObj = {
   w: number;
   h: number;
   bare?: boolean;
+  color?: string; // sticky color when filled (defaults to yellow)
   render: (anim: boolean) => ReactNode;
 };
 
@@ -223,7 +224,14 @@ export function OutputObject({ out, phase, anim }: { out: OutputObj; phase: Phas
     <motion.div
       data-oid={out.id}
       className={`lp-sticky lp-rb-output${phase === 'pulled' ? ' empty' : ''}`}
-      style={{ position: 'absolute', left: out.x, top: out.y, width: out.w, minHeight: out.h, background: phase === 'pulled' ? undefined : '#FFE066' }}
+      style={{
+        position: 'absolute',
+        left: out.x,
+        top: out.y,
+        width: out.w,
+        minHeight: out.h,
+        background: phase === 'pulled' ? undefined : phase === 'done' ? out.color ?? '#FFE066' : '#FFE066',
+      }}
       {...motionProps}
     >
       {body}
