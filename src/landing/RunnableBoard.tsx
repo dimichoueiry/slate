@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AINode, Lock, Port, RunButton, Sticky, Wires, border, type Phase, type Rect } from './board-kit';
+import { AnimatePresence, useReducedMotion } from 'framer-motion';
+import { AINode, Lock, OutputObject, Port, RunButton, Sticky, Wires, border, type Phase, type Rect } from './board-kit';
 
 /* A real, runnable example board — same interaction model as the Growth board:
    DRAG the + out of a node to pull its output sticky onto the canvas, then hit
@@ -327,42 +327,9 @@ export default function RunnableBoard({ scene, onBack }: { scene: RScene; onBack
         <AnimatePresence>
           {scene.nodes
             .filter((n) => phase[n.id] !== 'idle')
-            .map((n) => {
-              const ph = phase[n.id];
-              const body = ph === 'done' ? n.out.render(!reduce) : ph === 'run' ? <div className="lp-think">⏳ {n.out.bare ? 'rendering…' : 'thinking…'}</div> : null;
-              const anim = {
-                initial: reduce ? false : { opacity: 0, scale: 0.95 },
-                animate: { opacity: 1, scale: 1 },
-                exit: { opacity: 0, transition: { duration: 0.16 } },
-                transition: { duration: 0.3, ease: E },
-              };
-              // image outputs render bare (a framed image, like the app's imgout);
-              // text outputs are yellow stickies — pulled empty, then filled.
-              if (n.out.bare) {
-                return (
-                  <motion.div
-                    key={n.out.id}
-                    data-oid={n.out.id}
-                    className={`lp-rb-img${ph === 'done' ? '' : ' empty'}`}
-                    style={{ position: 'absolute', left: n.out.x, top: n.out.y, width: n.out.w, minHeight: ph === 'done' ? undefined : n.out.h }}
-                    {...anim}
-                  >
-                    {body}
-                  </motion.div>
-                );
-              }
-              return (
-                <motion.div
-                  key={n.out.id}
-                  data-oid={n.out.id}
-                  className={`lp-sticky lp-rb-output${ph === 'pulled' ? ' empty' : ''}`}
-                  style={{ position: 'absolute', left: n.out.x, top: n.out.y, width: n.out.w, minHeight: n.out.h, background: ph === 'pulled' ? undefined : '#FFE066' }}
-                  {...anim}
-                >
-                  {body}
-                </motion.div>
-              );
-            })}
+            .map((n) => (
+              <OutputObject key={n.out.id} out={n.out} phase={phase[n.id]} anim={!reduce} />
+            ))}
         </AnimatePresence>
       </div>
 

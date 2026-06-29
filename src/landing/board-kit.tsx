@@ -180,32 +180,53 @@ export function Wires({ items }: { items: { from: Rect; to: Rect; dashed?: boole
   );
 }
 
-/* ── a generated output object (white card written back onto the canvas) ── */
-export function OutputCard({
-  x,
-  y,
-  w,
-  title,
-  file,
-  children,
-  motionProps,
-}: {
+/* ── a generated output object written back onto the canvas ──
+   Text outputs render as a yellow sticky (pulled empty → filled); image outputs
+   (`bare`) render as a framed image, with NO sticky behind them. This is the one
+   shared place that decides output appearance for every example board. */
+export type OutputObj = {
+  id: string;
   x: number;
   y: number;
   w: number;
-  title: string;
-  file?: string;
-  children: ReactNode;
-  motionProps?: MotionProps;
-}) {
+  h: number;
+  bare?: boolean;
+  render: (anim: boolean) => ReactNode;
+};
+
+export function OutputObject({ out, phase, anim }: { out: OutputObj; phase: Phase; anim: boolean }) {
+  const body =
+    phase === 'done' ? (
+      out.render(anim)
+    ) : phase === 'run' ? (
+      <div className="lp-think">⏳ {out.bare ? 'rendering…' : 'thinking…'}</div>
+    ) : null;
+  const motionProps: MotionProps = {
+    initial: anim ? { opacity: 0, scale: 0.95 } : false,
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, transition: { duration: 0.16 } },
+    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] },
+  };
+  if (out.bare) {
+    return (
+      <motion.div
+        data-oid={out.id}
+        className={`lp-rb-img${phase === 'done' ? '' : ' empty'}`}
+        style={{ position: 'absolute', left: out.x, top: out.y, width: out.w, minHeight: phase === 'done' ? undefined : out.h }}
+        {...motionProps}
+      >
+        {body}
+      </motion.div>
+    );
+  }
   return (
-    <motion.div className="lp-postcard lp-rb-out" style={{ position: 'absolute', left: x, top: y, width: w }} {...motionProps}>
-      <div className="lp-rb-out-head">
-        <span className="lp-out-dot" />
-        <span className="lp-out-name">{title}</span>
-        {file && <span className="lp-out-file">{file}</span>}
-      </div>
-      <div className="lp-rb-out-body">{children}</div>
+    <motion.div
+      data-oid={out.id}
+      className={`lp-sticky lp-rb-output${phase === 'pulled' ? ' empty' : ''}`}
+      style={{ position: 'absolute', left: out.x, top: out.y, width: out.w, minHeight: out.h, background: phase === 'pulled' ? undefined : '#FFE066' }}
+      {...motionProps}
+    >
+      {body}
     </motion.div>
   );
 }
