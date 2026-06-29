@@ -46,6 +46,85 @@ const COL = 330; // horizontal spacing between stages
 
 export const TEMPLATES: TemplateDef[] = [
   {
+    id: 'cobblestone-rebrand',
+    name: 'Cobblestone Coffee — rebrand',
+    description: 'A brand designer board: brand kit + positioning → taglines, logo marks, scorecard.',
+    build: () => {
+      const head = label(0, 0, 'Cobblestone Coffee — rebrand v3');
+      const brand = sticky(
+        0,
+        60,
+        'Brand kit (every node reads this)\nVoice: understated, sensory, not pretentious\nAudience: 30–45 specialty coffee drinkers\nPalette: terracotta · cream · deep green\nType: humanist serif',
+        '#FFD6A5',
+        266,
+        180
+      );
+      const positioning = sticky(
+        0,
+        268,
+        'Positioning: small-batch, warm, craft — not pretension. "Coffee you take seriously, not snobbishly."',
+        '#A8D8EA',
+        266,
+        140
+      );
+      const mood = sticky(
+        0,
+        436,
+        'Moodboard: matte kraft packaging, hand-touched marks, warm earth tones, analog feel, slow mornings.',
+        '#A8D8EA',
+        266,
+        140
+      );
+      const sketch = sticky(
+        0,
+        604,
+        'Logo sketches: 8 rough thumbnails → 3 favorites. Directions: geometric, minimal, one continuous line.',
+        '#A8D8EA',
+        266,
+        140
+      );
+
+      const tagNode = sticky(
+        COL + 30,
+        90,
+        'ai: write 3 tagline options for Cobblestone Coffee — understated, sensory, not pretentious. 6 words max each.',
+        '#FFE066',
+        272,
+        170
+      );
+      const tagOut = sticky(COL * 2 + 60, 90, '', '#B5EAD7', 250, 170);
+
+      const markNode = sticky(
+        COL + 30,
+        470,
+        'img: a coffee-roaster logo mark — geometric, minimal, one continuous line. Palette: terracotta, cream, deep green. Flat vector, no text.',
+        '#FFE066',
+        272,
+        200
+      );
+      const markOut = sticky(COL * 2 + 60, 470, '', '#B5EAD7', 250, 200);
+
+      return [
+        head,
+        brand,
+        positioning,
+        mood,
+        sketch,
+        tagNode,
+        tagOut,
+        markNode,
+        markOut,
+        connect(brand, tagNode),
+        connect(positioning, tagNode),
+        connect(tagNode, tagOut),
+        connect(brand, markNode),
+        connect(mood, markNode),
+        connect(sketch, markNode),
+        connect(markNode, markOut),
+      ];
+    },
+  },
+  {
     id: 'lead-qualifier',
     name: 'Lead qualifier',
     description: 'A company URL → scrape → ICP fit assessment.',

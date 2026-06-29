@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { goHome } from '../App';
 import BoardShowcase from './BoardShowcase';
+import RunnableBoard, { type RScene } from './RunnableBoard';
+import { cobblestoneScene, competitorScene, receiptlyScene } from './examples';
 
 /* The hero showcase = the real Slate dashboard. A grid of example boards (the
    same cards you'd see in "My boards"); click one and it opens right here —
@@ -26,7 +28,8 @@ type Scene = {
   id: string;
   name: string;
   date: string;
-  interactive?: boolean;
+  kind?: 'growth' | 'runnable' | 'static';
+  runnable?: RScene;
   objects: SObj[];
   wires: SWire[];
 };
@@ -45,7 +48,7 @@ const SCENES: Scene[] = [
     id: 'growth',
     name: 'Growth board',
     date: '2 days ago',
-    interactive: true,
+    kind: 'growth',
     objects: [
       { id: 'b', x: 40, y: 24, w: 176, color: '#FFD6A5', title: 'Brainstorm', body: 'Gamify onboarding\nReferral program\nWeekly digest' },
       { id: 'd', x: 256, y: 30, w: 180, color: '#B5EAD7', title: 'Design review', body: 'Dark mode\nSimpler nav\nBigger icons' },
@@ -57,32 +60,45 @@ const SCENES: Scene[] = [
     ],
   },
   {
-    id: 'launch',
-    name: 'Launch plan',
-    date: '5 days ago',
+    id: 'receiptly',
+    name: 'Launch board',
+    date: 'today',
+    kind: 'runnable',
+    runnable: receiptlyScene,
     objects: [
-      { id: 'p', x: 30, y: 26, w: 174, color: '#FFD6A5', title: 'Plan · March', body: 'T-2w  beta\nT-1w  press\nDay 0  ship' },
-      { id: 'o', x: 252, y: 40, w: 160, color: '#B5EAD7', title: 'Owners', body: 'Site · Mia\nEmail · Sam\nDemo · you' },
-      { id: 'n', x: 120, y: 230, w: 216, kind: 'node', color: '#FFE066', body: 'ai: build a launch timeline' },
-      { id: 't', x: 392, y: 224, w: 156, kind: 'out', title: 'Timeline', body: '6 milestones, dated' },
+      { id: 'pos', x: 24, y: 24, w: 150, color: '#FFD6A5', title: 'Positioning', body: '“Expensify for\npeople who hate it”' },
+      { id: 'flow', x: 24, y: 150, w: 150, color: '#A8D8EA', title: 'Flow', body: '📷 → OCR → PDF' },
+      { id: 'priv', x: 24, y: 256, w: 150, color: '#F2D3D3', title: '🔒 Private', body: 'pivot idea' },
+      { id: 'h', x: 210, y: 40, w: 180, kind: 'node', color: '#FFE066', body: 'ai: 3 hero options' },
+      { id: 'ho', x: 432, y: 40, w: 150, kind: 'out', title: 'Heroes', body: '3 headlines' },
+      { id: 'c', x: 210, y: 230, w: 180, kind: 'node', color: '#FFE066', body: 'chart: MRR' },
+      { id: 'co', x: 432, y: 230, w: 150, kind: 'out', title: 'MRR', body: 'wk 2 → 12' },
     ],
     wires: [
-      { from: 'p', to: 'n' },
-      { from: 'o', to: 'n' },
-      { from: 'n', to: 't', dashed: true },
+      { from: 'pos', to: 'h' },
+      { from: 'flow', to: 'h' },
+      { from: 'h', to: 'ho', dashed: true },
+      { from: 'flow', to: 'c' },
+      { from: 'c', to: 'co', dashed: true },
     ],
   },
   {
-    id: 'research',
-    name: 'User research',
-    date: 'last week',
+    id: 'competitors',
+    name: 'Competitor teardown',
+    date: '3 days ago',
+    kind: 'runnable',
+    runnable: competitorScene,
     objects: [
-      { id: 'i', x: 28, y: 40, w: 168, color: '#A8D8EA', title: 'Interviews', body: '8 calls\n3 themes' },
-      { id: 'n', x: 96, y: 210, w: 224, kind: 'node', color: '#FFE066', body: 'research: what do power users want?' },
-      { id: 'f', x: 392, y: 128, w: 162, kind: 'out', title: 'Findings', body: 'speed · keyboard · offline' },
+      { id: 'a', x: 28, y: 22, w: 150, color: '#FFD6A5', title: 'Notion', body: 'docs + DB\ncanvas bolted on' },
+      { id: 'b', x: 28, y: 150, w: 150, color: '#B5EAD7', title: 'Miro', body: 'canvas\nno real AI' },
+      { id: 'c', x: 28, y: 278, w: 150, color: '#A8D8EA', title: 'tldraw', body: 'drawing only' },
+      { id: 'n', x: 228, y: 150, w: 200, kind: 'node', color: '#FFE066', body: 'ai: where do we win?' },
+      { id: 'f', x: 470, y: 150, w: 164, kind: 'out', title: 'Angles', body: 'agents · data\nlocal-first' },
     ],
     wires: [
-      { from: 'i', to: 'n' },
+      { from: 'a', to: 'n' },
+      { from: 'b', to: 'n' },
+      { from: 'c', to: 'n' },
       { from: 'n', to: 'f', dashed: true },
     ],
   },
@@ -101,17 +117,24 @@ const SCENES: Scene[] = [
     ],
   },
   {
-    id: 'pitch',
-    name: 'Pitch outline',
-    date: '3 weeks ago',
+    id: 'cobblestone',
+    name: 'Cobblestone rebrand',
+    date: 'today',
+    kind: 'runnable',
+    runnable: cobblestoneScene,
     objects: [
-      { id: 'o', x: 30, y: 32, w: 172, color: '#FFD6A5', title: 'Outline', body: 'Problem\nSolution\nThe ask' },
-      { id: 'n', x: 108, y: 214, w: 206, kind: 'node', color: '#FFE066', body: 'ai: tighten this pitch' },
-      { id: 'p', x: 380, y: 144, w: 160, kind: 'out', title: 'Pitch v2', body: 'half the words' },
+      { id: 'bk', x: 24, y: 24, w: 150, color: '#EDE3CE', title: 'Brand kit', body: 'terracotta · cream\n· green' },
+      { id: 's', x: 24, y: 150, w: 150, color: '#FFD6A5', title: 'Sketches', body: '8 thumbs → 3' },
+      { id: 'a', x: 210, y: 36, w: 180, kind: 'node', color: '#FFE066', body: 'ai: 3 taglines' },
+      { id: 't', x: 432, y: 36, w: 150, kind: 'out', title: 'Taglines', body: '3 options' },
+      { id: 'i', x: 210, y: 220, w: 180, kind: 'node', color: '#FFE066', body: 'img: mark variations' },
+      { id: 'iv', x: 432, y: 220, w: 150, kind: 'out', title: 'Marks', body: '3 variants' },
     ],
     wires: [
-      { from: 'o', to: 'n' },
-      { from: 'n', to: 'p', dashed: true },
+      { from: 'bk', to: 'a' },
+      { from: 's', to: 'i' },
+      { from: 'a', to: 't', dashed: true },
+      { from: 'i', to: 'iv', dashed: true },
     ],
   },
 ];
@@ -360,7 +383,9 @@ export default function HeroDashboard() {
                   >
                     <div className="lp-dash-thumb">
                       <Thumb scene={s} />
-                      {s.interactive && <span className="lp-dash-live">▶ Try it</span>}
+                      {(s.kind === 'growth' || s.kind === 'runnable') && (
+                        <span className="lp-dash-live">▶ Try it</span>
+                      )}
                     </div>
                     <div className="lp-dash-meta">
                       <div className="lp-dash-name">{s.name}</div>
@@ -380,8 +405,10 @@ export default function HeroDashboard() {
             exit={{ opacity: 0, transition: { duration: 0.16 } }}
             transition={{ duration: 0.45, ease: E }}
           >
-            {scene.interactive ? (
+            {scene.kind === 'growth' ? (
               <BoardShowcase onBack={() => setOpen(null)} />
+            ) : scene.kind === 'runnable' && scene.runnable ? (
+              <RunnableBoard scene={scene.runnable} onBack={() => setOpen(null)} />
             ) : (
               <StaticBoard scene={scene} onBack={() => setOpen(null)} />
             )}

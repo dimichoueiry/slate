@@ -472,6 +472,105 @@
   color: #4a4756;
 }
 
+/* runnable example board */
+.lp-runbtn.pulse {
+  animation: lp-pulse 1.5s ease-out infinite;
+}
+.lp-rb-out {
+  padding: 0;
+  overflow: hidden;
+}
+.lp-rb-out-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  background: #fcfbfe;
+  border-bottom: 1px solid #f0eef5;
+}
+.lp-rb-out-body {
+  padding: 11px 12px 12px;
+}
+.lp-rb-themes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lp-rb-theme {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: #2a2833;
+}
+.lp-rb-theme-label {
+  flex: none;
+  width: 92px;
+  font-weight: 500;
+}
+.lp-rb-bar {
+  flex: 1;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  overflow: hidden;
+}
+.lp-rb-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ac), var(--teal));
+}
+.lp-rb-count {
+  flex: none;
+  width: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #6d28d9;
+}
+.lp-rb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ac-hi);
+  animation: lp-nd-pulse 1s ease-in-out infinite;
+}
+.lp-rb-think {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #7a7568;
+}
+.lp-rb-empty {
+  color: #a7a2b5;
+}
+.lp-rb-spin {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid rgba(124, 58, 237, 0.25);
+  border-top-color: var(--ac);
+  border-radius: 50%;
+  animation: lp-nd-spin 0.7s linear infinite;
+}
+/* spotlight rings pinned to the node's + port / ▶ button via CSS (no math) */
+.lp-spot-port {
+  right: -17px;
+  top: 50%;
+  margin-top: -17px;
+  width: 34px;
+  height: 34px;
+}
+.lp-spot-run {
+  right: -15px;
+  top: -15px;
+  width: 38px;
+  height: 38px;
+}
+
 /* floating chrome panels (dark glass) */
 .lp-panel {
   position: absolute;
@@ -1703,6 +1802,40 @@
   border-radius: 8px;
   background: radial-gradient(120% 120% at 20% 10%, #8b5cf6, transparent 60%),
     linear-gradient(95deg, #7c3aed, #0891b2);
+}
+/* bare image output (not a sticky) — like the app's image objects */
+.lp-rb-img {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 14px 36px -10px rgba(20, 20, 40, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+.lp-rb-img.empty {
+  background: rgba(255, 255, 255, 0.65);
+  border: 2px dashed rgba(120, 120, 140, 0.4);
+  box-shadow: none;
+}
+.lp-rb-img .lp-think {
+  padding: 16px;
+}
+.lp-out-photo {
+  display: block;
+  width: 100%;
+}
+.lp-out-marks {
+  display: flex;
+  gap: 8px;
+}
+.lp-out-mark {
+  flex: 1;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.lp-out-mark svg {
+  width: 56%;
+  height: 56%;
 }
 
 @keyframes lp-nd-pulse {
