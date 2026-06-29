@@ -3,7 +3,18 @@
 // wired INTO it with connectors; outputs = objects it points AT. Clicking the
 // glyph gathers input texts, runs the instruction through the LLM, and writes
 // the result into the output objects (creating one if none is wired).
-import { chat, chatWithTools, explainEmptyToolResult, generateImage, hasOpenRouter } from '../ai/llm';
+import {
+  chat,
+  chatWithTools,
+  explainEmptyToolResult,
+  generateImage,
+  hasOpenRouter,
+  submitVideo,
+  pollVideo,
+  ensureVideoModels,
+  cachedVideoModelInfo,
+  getVideoModel,
+} from '../ai/llm';
 import { makeBusinessTools, pickTable, pickTableText, tableSummary } from '../ai/tools';
 import { withPython } from '../ai/pythonTool';
 import { useUI } from '../store/ui';
@@ -52,8 +63,9 @@ async function brandLogoDataUrl(): Promise<string | null> {
 }
 
 // ai: text · img: image · web: scrape · search: links · ask: answered web search · research: deep agent · extract: table · chart: graph · fix: better prompt · data: HTTP fetch · condition: yes/no branch · interval/timer: schedule
-const RUN = /^(▶ ?)?(ai|img|web|search|ask|research|extract|chart|fix|data|business|condition|if|interval|timer|every):/i;
+const RUN = /^(▶ ?)?(ai|img|vid|video|web|search|ask|research|extract|chart|fix|data|business|condition|if|interval|timer|every):/i;
 const IMG = /^(▶ ?)?img:/i;
+const VID = /^(▶ ?)?(vid|video):/i;
 const WEB = /^(▶ ?)?web:/i;
 const ASK = /^(▶ ?)?ask:/i;
 const DATA = /^(▶ ?)?data:/i;
@@ -201,11 +213,199 @@ export function hiddenNodeAt(ctl: AnyObj, e: { clientX: number; clientY: number 
 }
 
 /** Public runner used by the floating run buttons. */
+// ---------- video generation (async: submit → poll → render) ----------
+
+/** Gather the images wired into a video node, bucketed by the connector LABEL:
+ *  a wire labelled first/start → first frame, last/end → last frame, anything
+ *  else (incl. "ref"/unlabelled) → a reference image. */
+async function gatherVideoFrames(
+  ctl: AnyObj,
+  node: AnyObj,
+): Promise<{ first?: string; last?: string; refs: string[] }> {
+  const doc = ctl.doc;
+  const conns = doc
+    .all()
+    .filter((c: AnyObj) => c.type === 'connector' && c.to?.objectId === node.id && c.from?.objectId);
+  const res: { first?: string; last?: string; refs: string[] } = { refs: [] };
+  for (const c of conns) {
+    const src = doc.get(c.from.objectId);
+    if (!src || src.type !== 'image' || !src.blobId || String(src.blobId).startsWith('pending-')) continue;
+    let url: string;
+    try {
+      const blob = await getBlob(src.blobId);
+      if (!blob) continue;
+      url = await blobToDataUrl(blob);
+    } catch {
+      continue;
+    }
+    const label = String(c.label ?? '').toLowerCase();
+    if (/first|start/.test(label) && !res.first) res.first = url;
+    else if (/last|end/.test(label) && !res.last) res.last = url;
+    else res.refs.push(url);
+  }
+  return res;
+}
+
+/** read a video Blob's natural pixel size (for sizing the canvas object) */
+function videoDims(blob: Blob): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => resolve({ w: v.videoWidth || 16, h: v.videoHeight || 9 });
+    v.onerror = () => reject(new Error('metadata'));
+    v.src = URL.createObjectURL(blob);
+  });
+}
+
+/** remove the little status text under a node, if any */
+function clearStatus(ctl: AnyObj, nodeId: string) {
+  const n = ctl.doc.get(nodeId);
+  if (!n?.statusId) return;
+  ctl.doc.begin();
+  if (ctl.doc.get(n.statusId)) ctl.doc.delete(n.statusId);
+  ctl.doc.update(nodeId, { statusId: undefined });
+  ctl.doc.commit();
+}
+
+/** store the finished video blob on the output object + size it; clear status */
+async function finishVideo(ctl: AnyObj, nodeId: string | null, outId: string, blob: Blob) {
+  const blobId = await putBlob(blob);
+  const patch: AnyObj = { blobId, videoJobId: undefined };
+  try {
+    const d = await videoDims(blob);
+    const scale = Math.min(1, 420 / Math.max(d.w, d.h));
+    patch.w = Math.round(d.w * scale);
+    patch.h = Math.round(d.h * scale);
+  } catch {
+    /* keep the placeholder size */
+  }
+  ctl.doc.begin();
+  ctl.doc.update(outId, patch);
+  ctl.doc.commit();
+  if (nodeId) clearStatus(ctl, nodeId);
+}
+
+async function executeVideo(ctl: AnyObj, node: AnyObj) {
+  const doc = ctl.doc;
+  const inputs = gatherInputs(ctl, node);
+  const frames = await gatherVideoFrames(ctl, node); // roles come from connector labels
+
+  // reuse a wired video output if there is one, else spawn one + connector
+  let outId: string | null =
+    doc
+      .all()
+      .filter((c: AnyObj) => c.type === 'connector' && c.from?.objectId === node.id && c.to?.objectId)
+      .map((c: AnyObj) => c.to.objectId)
+      .find((id: string) => doc.get(id)?.type === 'video') ?? null;
+  doc.begin();
+  if (!outId) {
+    const out: AnyObj = {
+      id: nid(),
+      type: 'video',
+      x: node.x + (node.w ?? 200) + 80,
+      y: node.y,
+      w: 360,
+      h: 203,
+      rotation: 0,
+      z: doc.nextZ(),
+      blobId: 'pending-' + nid(),
+      opacity: 1,
+      radius: 8,
+    };
+    doc.set(out);
+    doc.set({
+      id: nid(),
+      type: 'connector',
+      x: node.x,
+      y: node.y,
+      rotation: 0,
+      z: doc.nextZ(),
+      from: { objectId: node.id },
+      to: { objectId: out.id },
+      routing: 'curved',
+      stroke: '#868e96',
+      strokeWidth: 2,
+      dash: 'dashed',
+      startArrow: 'none',
+      endArrow: 'triangle',
+      opacity: 1,
+    });
+    outId = out.id;
+  }
+  doc.commit();
+
+  const instruction = promptSource(node).replace(RUN, '').trim();
+  const prompt =
+    inputs.length > 0
+      ? `${instruction}\n\nContext / subject:\n${inputs.map((o: AnyObj) => o.text).join('\n')}`
+      : instruction;
+
+  tickStatus(ctl, node.id, '⏳ video — submitting…');
+  try {
+    // fall back to the model's first supported value for anything the user didn't set
+    await ensureVideoModels();
+    const info = cachedVideoModelInfo(getVideoModel());
+    const jobId = await submitVideo(prompt, {
+      firstFrame: frames.first,
+      lastFrame: frames.last,
+      referenceImages: frames.refs,
+      duration: typeof node.videoDuration === 'number' ? node.videoDuration : info?.supported_durations?.[0],
+      resolution: node.videoResolution || info?.supported_resolutions?.[0],
+      aspectRatio: node.videoAspect || info?.supported_aspect_ratios?.[0],
+      generateAudio: node.videoAudio === true ? true : undefined,
+    });
+    // persist the job id on the output so a reload can resume the poll
+    doc.begin();
+    doc.update(outId, { videoJobId: jobId });
+    doc.commit();
+    const blob = await pollVideo(jobId, { onStatus: (s) => tickStatus(ctl, node.id, `⏳ video — ${s}…`) });
+    await finishVideo(ctl, node.id, outId!, blob);
+  } catch (err) {
+    clearStatus(ctl, node.id);
+    doc.begin();
+    doc.set({
+      id: nid(),
+      type: 'sticky',
+      x: node.x + (node.w ?? 200) + 80,
+      y: node.y + (node.h ?? 160) + 24,
+      w: 220,
+      h: 120,
+      rotation: 0,
+      z: doc.nextZ(),
+      color: '#FFB3BA',
+      text: '⚠ ' + (err instanceof Error ? err.message : String(err)),
+      fontSize: 14,
+    });
+    doc.commit();
+  }
+}
+
+/** After a board loads, resume polling any video jobs that were still pending
+ *  (so a tab reload doesn't orphan a job you already paid for). */
+export function resumeVideoJobs(ctl: AnyObj) {
+  for (const o of ctl.doc.all() as AnyObj[]) {
+    if (o.type !== 'video' || !o.videoJobId || !String(o.blobId).startsWith('pending-')) continue;
+    if (inflight.has(o.id)) continue;
+    inflight.add(o.id);
+    const conn = (ctl.doc.all() as AnyObj[]).find(
+      (c) => c.type === 'connector' && c.to?.objectId === o.id && c.from?.objectId,
+    );
+    const nodeId: string | null = conn?.from?.objectId ?? null;
+    void pollVideo(o.videoJobId, { onStatus: (s) => nodeId && tickStatus(ctl, nodeId, `⏳ video — ${s}…`) })
+      .then((blob) => finishVideo(ctl, nodeId, o.id, blob))
+      .catch(() => {
+        /* leave it pending — the user can re-run */
+      })
+      .finally(() => inflight.delete(o.id));
+  }
+}
+
 export async function runAINode(ctl: AnyObj, node: AnyObj): Promise<void> {
   if (inflight.has(node.id)) return; // already running — don't fire a second LLM call (double-bill)
   inflight.add(node.id);
   try {
     const head = promptSource(node).split('\n')[0];
+    if (VID.test(head)) return await executeVideo(ctl, node);
     if (IMG.test(head)) return await executeImage(ctl, node);
     if (WEB.test(head)) return await executeWeb(ctl, node);
     if (SEARCH.test(head)) return await executeSearch(ctl, node);

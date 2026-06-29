@@ -15,7 +15,7 @@ import { StickyReader } from './StickyReader';
 import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
-import { stopAllSchedules } from '../ui/ainodes';
+import { stopAllSchedules, resumeVideoJobs } from '../ui/ainodes';
 import { isUploadable, readUpload, uploadLabel } from '../ui/upload';
 import { UPLOAD_ACCEPT } from '../ui/aiNodeButtons';
 import CommandPalette from './CommandPalette';
@@ -87,6 +87,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       useUI.getState().syncCanvasInk(!!meta.canvasDark);
       autosave = startAutosave(controller.doc, boardId);
       setLoaded(true);
+      resumeVideoJobs(controller); // resume any video jobs that were still rendering
     })();
 
     // persist viewport (debounced)

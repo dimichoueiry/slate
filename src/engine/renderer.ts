@@ -4,6 +4,7 @@ import type {
   FrameObj,
   IconObj,
   ImageObj,
+  VideoObj,
   ShapeObj,
   SlateObj,
   StickyObj,
@@ -98,6 +99,92 @@ export function primeBitmap(blobId: string, bmp: ImageBitmap) {
   bitmapCache.set(blobId, bmp);
 }
 
+// ---------- video element cache ----------
+// Videos are drawn into the 2D canvas frame-by-frame (so they behave exactly
+// like image objects — selectable, draggable, exportable). A hidden, muted,
+// looping <video> per blob feeds ctx.drawImage; while any are playing we ask
+// the scene to keep redrawing.
+const videoCache = new Map<string, HTMLVideoElement | 'loading' | 'missing'>();
+let videoPumpRaf = 0;
+
+function pumpVideos() {
+  let anyPlaying = false;
+  videoCache.forEach((v) => {
+    if (v instanceof HTMLVideoElement && !v.paused && !v.ended && v.readyState >= 2) anyPlaying = true;
+  });
+  if (anyPlaying) {
+    onBitmapReady?.(); // mark the scene dirty so the next frame redraws
+    videoPumpRaf = requestAnimationFrame(pumpVideos);
+  } else {
+    videoPumpRaf = 0;
+  }
+}
+function ensureVideoPump() {
+  if (!videoPumpRaf) videoPumpRaf = requestAnimationFrame(pumpVideos);
+}
+
+function getVideoEl(blobId: string): HTMLVideoElement | null {
+  const hit = videoCache.get(blobId);
+  if (hit instanceof HTMLVideoElement) return hit.readyState >= 2 ? hit : null;
+  if (hit === 'loading' || hit === 'missing') return null;
+  videoCache.set(blobId, 'loading');
+  blobLoader?.(blobId).then((blob) => {
+    if (!blob) {
+      videoCache.set(blobId, 'missing');
+      return;
+    }
+    const v = document.createElement('video');
+    v.src = URL.createObjectURL(blob);
+    v.muted = true;
+    v.loop = true;
+    v.playsInline = true;
+    v.autoplay = true;
+    v.oncanplay = () => {
+      v.play().catch(() => {});
+      onBitmapReady?.();
+      ensureVideoPump();
+    };
+    videoCache.set(blobId, v);
+  });
+  return null;
+}
+
+export function drawVideo(ctx: CanvasRenderingContext2D, o: VideoObj) {
+  const v = getVideoEl(o.blobId);
+  ctx.save();
+  ctx.globalAlpha = o.opacity;
+  if (o.radius > 0) {
+    const clip = new Path2D();
+    clip.roundRect(o.x, o.y, o.w, o.h, o.radius);
+    ctx.clip(clip);
+  }
+  if (v) {
+    try {
+      ctx.drawImage(v, o.x, o.y, o.w, o.h);
+    } catch {
+      /* frame not ready this tick */
+    }
+    ensureVideoPump();
+  } else {
+    ctx.fillStyle = 'rgba(140,140,150,0.2)';
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.strokeStyle = 'rgba(140,140,150,0.5)';
+    ctx.strokeRect(o.x, o.y, o.w, o.h);
+    // play glyph
+    ctx.fillStyle = 'rgba(90,90,100,0.6)';
+    const cx = o.x + o.w / 2;
+    const cy = o.y + o.h / 2;
+    const r = Math.min(o.w, o.h) * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.5, cy - r);
+    ctx.lineTo(cx - r * 0.5, cy + r);
+    ctx.lineTo(cx + r, cy);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 // ---------- scene ----------
 
 export interface GridSettings {
@@ -190,6 +277,9 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: SlateObj, doc: Doc,
       break;
     case 'image':
       drawImage(ctx, o);
+      break;
+    case 'video':
+      drawVideo(ctx, o);
       break;
     case 'icon':
       drawIcon(ctx, o);

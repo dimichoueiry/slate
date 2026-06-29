@@ -62,6 +62,8 @@ const MAX_TOKENS = 'slate-max-tokens';
 export const DEFAULT_OPENROUTER_MODEL = 'openrouter/auto';
 export const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image';
 const OR_IMG_MODEL = 'slate-openrouter-image-model';
+export const DEFAULT_VIDEO_MODEL = 'google/veo-3.1-lite';
+const OR_VID_MODEL = 'slate-openrouter-video-model';
 export const DEFAULT_OLLAMA_URL = 'http://localhost:11434';
 export const DEFAULT_OLLAMA_MODEL = 'llama3.2';
 
@@ -86,6 +88,8 @@ export const setOpenRouterKey = (key: string | null) => set(OR_KEY, key);
 export const getOpenRouterModel = () => get(OR_MODEL) ?? DEFAULT_OPENROUTER_MODEL;
 export const getImageModel = () => get(OR_IMG_MODEL) ?? DEFAULT_IMAGE_MODEL;
 export const setImageModel = (m: string | null) => set(OR_IMG_MODEL, m);
+export const getVideoModel = () => get(OR_VID_MODEL) ?? DEFAULT_VIDEO_MODEL;
+export const setVideoModel = (m: string | null) => set(OR_VID_MODEL, m);
 export const setOpenRouterModel = (m: string | null) => set(OR_MODEL, m);
 export const getOllamaUrl = () => get(OLLAMA_URL) ?? DEFAULT_OLLAMA_URL;
 export const setOllamaUrl = (u: string | null) => set(OLLAMA_URL, u);
@@ -239,6 +243,138 @@ export async function generateImage(
     throw new Error(`No image returned — make sure the image model (⚙ settings, currently "${getImageModel()}") supports generation`);
   }
   return await (await fetch(url)).blob();
+}
+
+// ---------- video generation (OpenRouter async /videos) ----------
+
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+
+export interface VideoModelInfo {
+  id: string;
+  name?: string;
+  description?: string;
+  supported_aspect_ratios?: string[];
+  supported_durations?: number[];
+  supported_resolutions?: string[];
+  supported_frame_images?: string[];
+  generate_audio?: boolean;
+  pricing_skus?: { generate?: string };
+}
+
+let _videoModels: VideoModelInfo[] = [];
+
+/** List the video-gen models OpenRouter currently offers (with their capabilities). */
+export async function listVideoModels(): Promise<VideoModelInfo[]> {
+  const key = getOpenRouterKey();
+  const res = await fetch(`${OPENROUTER_BASE}/videos/models`, {
+    headers: key ? openRouterHeaders(key) : { 'content-type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`OpenRouter ${res.status}`);
+  const data = await res.json();
+  _videoModels = (data?.data ?? []) as VideoModelInfo[];
+  return _videoModels;
+}
+
+/** Cached capabilities for a video model id (populated by listVideoModels). */
+export const cachedVideoModelInfo = (id: string) => _videoModels.find((m) => m.id === id);
+
+/** Ensure the video-model list is loaded (fetch once); returns the cache. */
+export async function ensureVideoModels(): Promise<VideoModelInfo[]> {
+  if (_videoModels.length) return _videoModels;
+  try {
+    return await listVideoModels();
+  } catch {
+    return _videoModels;
+  }
+}
+
+export interface VideoGenOptions {
+  model?: string;
+  duration?: number;
+  resolution?: string;
+  aspectRatio?: string;
+  generateAudio?: boolean;
+  /** data-URLs (or http URLs) for image→video; sent as frame_images */
+  firstFrame?: string;
+  lastFrame?: string;
+  /** images that guide subject/identity/style (input_references) */
+  referenceImages?: string[];
+  signal?: AbortSignal;
+}
+
+function videoBody(prompt: string, opts: VideoGenOptions): Record<string, unknown> {
+  // only send params the caller resolved (from the model's supported values) —
+  // sending an unsupported duration/resolution makes OpenRouter 400.
+  const body: Record<string, unknown> = { model: opts.model || getVideoModel(), prompt };
+  if (opts.duration != null) body.duration = opts.duration;
+  if (opts.resolution) body.resolution = opts.resolution;
+  if (opts.aspectRatio) body.aspect_ratio = opts.aspectRatio;
+  if (opts.generateAudio != null) body.generate_audio = opts.generateAudio;
+  const frames: Record<string, unknown>[] = [];
+  if (opts.firstFrame) frames.push({ type: 'image_url', image_url: { url: opts.firstFrame }, frame_type: 'first_frame' });
+  if (opts.lastFrame) frames.push({ type: 'image_url', image_url: { url: opts.lastFrame }, frame_type: 'last_frame' });
+  if (frames.length) body.frame_images = frames;
+  if (opts.referenceImages?.length) {
+    body.input_references = opts.referenceImages.map((url) => ({ type: 'image_url', image_url: { url } }));
+  }
+  return body;
+}
+
+/** Submit a video job; returns the job id to poll. */
+export async function submitVideo(prompt: string, opts: VideoGenOptions = {}): Promise<string> {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('Video generation needs an OpenRouter API key (add one in ⚙ settings)');
+  const res = await fetch(`${OPENROUTER_BASE}/videos`, {
+    method: 'POST',
+    headers: openRouterHeaders(key),
+    signal: opts.signal,
+    body: JSON.stringify(videoBody(prompt, opts)),
+  });
+  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`);
+  const job = await res.json();
+  const id = job?.id;
+  if (!id) throw new Error('No video job id returned');
+  return id;
+}
+
+/** Poll a video job until it completes; returns the downloaded video Blob. */
+export async function pollVideo(
+  jobId: string,
+  opts: { signal?: AbortSignal; onStatus?: (status: string) => void } = {},
+): Promise<Blob> {
+  const key = getOpenRouterKey();
+  if (!key) throw new Error('Video generation needs an OpenRouter API key');
+  const started = Date.now();
+  const TIMEOUT_MS = 10 * 60 * 1000;
+  let delay = 3000;
+  for (;;) {
+    if (opts.signal?.aborted) throw new Error('cancelled');
+    if (Date.now() - started > TIMEOUT_MS) throw new Error('Video generation timed out');
+    await new Promise((r) => setTimeout(r, delay));
+    delay = Math.min(Math.round(delay * 1.3), 12000);
+    let st: any;
+    try {
+      const res = await fetch(`${OPENROUTER_BASE}/videos/${jobId}`, { headers: openRouterHeaders(key), signal: opts.signal });
+      if (!res.ok) continue; // transient — keep polling
+      st = await res.json();
+    } catch {
+      continue; // network blip — keep polling
+    }
+    opts.onStatus?.(String(st?.status ?? 'processing'));
+    if (st?.status === 'completed') {
+      // the content URL is an OpenRouter API endpoint — it needs the auth header.
+      const url = st?.unsigned_urls?.[0] || `${OPENROUTER_BASE}/videos/${jobId}/content?index=0`;
+      const dl = await fetch(url, { headers: openRouterHeaders(key), signal: opts.signal });
+      if (!dl.ok) throw new Error(`Video download failed: OpenRouter ${dl.status}: ${(await dl.text().catch(() => '')).slice(0, 200)}`);
+      const blob = await dl.blob();
+      const ct = blob.type || '';
+      if (!blob.size || /json|text|html/i.test(ct)) {
+        throw new Error(`Video download returned ${ct || 'empty'} content, not a video`);
+      }
+      return blob;
+    }
+    if (st?.status === 'failed') throw new Error(st?.error || 'Video generation failed');
+  }
 }
 
 // ---------- tool calling (agent loop) ----------

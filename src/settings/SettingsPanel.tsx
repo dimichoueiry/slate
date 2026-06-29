@@ -4,6 +4,11 @@ import {
   DEFAULT_IMAGE_MODEL,
   getImageModel,
   setImageModel,
+  DEFAULT_VIDEO_MODEL,
+  getVideoModel,
+  setVideoModel,
+  listVideoModels,
+  type VideoModelInfo,
   DEFAULT_OLLAMA_MODEL,
   DEFAULT_OLLAMA_URL,
   getOllamaModel,
@@ -128,6 +133,10 @@ export default function SettingsPanel() {
   const [loadErr, setLoadErr] = useState(false);
   const [imageModel, setImageModelState] = useState('');
   const [imgFilter, setImgFilter] = useState('');
+  const [vidOpen, setVidOpen] = useState(false);
+  const [videoModel, setVideoModelState] = useState('');
+  const [vidFilter, setVidFilter] = useState('');
+  const [vidModels, setVidModels] = useState<VideoModelInfo[] | null>(null);
   const [ollamaUrl, setOllamaUrlState] = useState('');
   const [ollamaModel, setOllamaModelState] = useState('');
   const [maxTokens, setMaxTokensState] = useState('');
@@ -148,6 +157,11 @@ export default function SettingsPanel() {
     setFilter('');
     setImageModelState(getImageModel());
     setImgFilter('');
+    setVideoModelState(getVideoModel());
+    setVidFilter('');
+    setVidOpen(false);
+    if (getOpenRouterKey()) listVideoModels().then(setVidModels).catch(() => setVidModels([]));
+    else setVidModels([]);
     setOllamaUrlState(getOllamaUrl());
     setOllamaModelState(getOllamaModel());
     setMaxTokensState(getMaxTokens() != null ? String(getMaxTokens()) : '');
@@ -176,6 +190,17 @@ export default function SettingsPanel() {
     return filtered.slice(0, 40);
   }, [models, imgFilter]);
 
+  const vidList = useMemo(() => {
+    const base = vidModels ?? [];
+    const q = vidFilter.trim().toLowerCase();
+    const filtered = q
+      ? base.filter((m) => m.id.toLowerCase().includes(q) || (m.name ?? '').toLowerCase().includes(q))
+      : base;
+    return filtered.slice(0, 40);
+  }, [vidModels, vidFilter]);
+
+  const selVidName = (vidModels ?? []).find((m) => m.id === (videoModel || DEFAULT_VIDEO_MODEL))?.name ?? (videoModel || DEFAULT_VIDEO_MODEL);
+
   const list = useMemo(() => {
     const source = models ?? FALLBACK_MODELS;
     const q = filter.trim().toLowerCase();
@@ -194,6 +219,7 @@ export default function SettingsPanel() {
     setOpenRouterKey(key.trim() || null);
     setOpenRouterModel(model.trim() || null);
     setImageModel(imageModel.trim() === DEFAULT_IMAGE_MODEL ? null : imageModel.trim() || null);
+    setVideoModel(videoModel.trim() === DEFAULT_VIDEO_MODEL ? null : videoModel.trim() || null);
     setOllamaUrl(ollamaUrl.trim() === DEFAULT_OLLAMA_URL ? null : ollamaUrl.trim() || null);
     setOllamaModel(ollamaModel.trim() === DEFAULT_OLLAMA_MODEL ? null : ollamaModel.trim() || null);
     setMaxTokens(maxTokens.trim() ? Number(maxTokens) : null);
@@ -299,6 +325,39 @@ export default function SettingsPanel() {
                     </button>
                   ))}
                   {imgList.length === 0 && <button disabled>No image models match</button>}
+                </div>
+              </>
+            )}
+
+            <label>Video model (for vid: nodes)</label>
+            <button type="button" className="slate-model-trigger" onClick={() => setVidOpen((o) => !o)}>
+              <span>{selVidName}</span>
+              <span className="mid">{videoModel || DEFAULT_VIDEO_MODEL}</span>
+              <span className="chev">{vidOpen ? '▲' : '▼'}</span>
+            </button>
+            {vidOpen && (
+              <>
+                <input placeholder="Search video models…" value={vidFilter} autoFocus onChange={(e) => setVidFilter(e.target.value)} />
+                <div className="slate-model-list">
+                  {vidList.map((m) => (
+                    <button
+                      key={m.id}
+                      className={m.id === videoModel ? 'sel' : ''}
+                      onClick={() => {
+                        setVideoModelState(m.id);
+                        setVidOpen(false);
+                      }}
+                    >
+                      <span>{m.name ?? m.id}</span>
+                      <span className="mid">
+                        {m.id}
+                        {m.pricing_skus?.generate ? ` · $${m.pricing_skus.generate}/clip` : ''}
+                      </span>
+                    </button>
+                  ))}
+                  {vidList.length === 0 && (
+                    <button disabled>{getOpenRouterKey() ? 'No video models found' : 'Add an API key to load video models'}</button>
+                  )}
                 </div>
               </>
             )}

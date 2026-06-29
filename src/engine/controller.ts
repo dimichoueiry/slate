@@ -1885,7 +1885,7 @@ export class Controller {
   }
 
   private multiResize(it: Extract<Interaction, { kind: 'resizing' }>): boolean {
-    return it.origins.size > 1 || [...it.origins.values()].some((o) => o.type === 'stroke' || o.type === 'image');
+    return it.origins.size > 1 || [...it.origins.values()].some((o) => o.type === 'stroke' || o.type === 'image' || o.type === 'video');
   }
 
   private reassignFrameParents(movedIds: Set<string>) {

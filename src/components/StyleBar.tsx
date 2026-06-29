@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type Routing } from '../types';
+import { ensureVideoModels, cachedVideoModelInfo, getVideoModel, type VideoModelInfo } from '../ai/llm';
 import FloatingPanel from './FloatingPanel';
 
 const FONT_SIZES = [12, 14, 16, 20, 24, 32, 40, 56, 72, 96];
@@ -172,6 +173,24 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   const selObjs = ctl.selectedObjects();
   const hasSel = ui.tool === 'select' && selObjs.length > 0;
 
+  // when a single vid: node is selected, load the chosen model's capabilities so
+  // Size/Seconds offer only its supported values
+  const vidNode =
+    selObjs.length === 1 &&
+    (selObjs[0].type === 'sticky' || selObjs[0].type === 'text') &&
+    /^(▶ ?)?(vid|video):/i.test(String((selObjs[0] as { text?: string }).text ?? ''))
+      ? selObjs[0]
+      : null;
+  const [vidCaps, setVidCaps] = useState<VideoModelInfo | undefined>(undefined);
+  useEffect(() => {
+    if (!vidNode) return;
+    let on = true;
+    void ensureVideoModels().then(() => on && setVidCaps(cachedVideoModelInfo(getVideoModel())));
+    return () => {
+      on = false;
+    };
+  }, [vidNode?.id]);
+
   // ---------- selection context ----------
   if (hasSel) {
     const types = new Set(selObjs.map((o) => o.type));
@@ -335,6 +354,54 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             onPick={(c) => ctl.updateSelected({ color: c })}
           />
         )}
+        {vidNode &&
+          (() => {
+            const resolutions = vidCaps?.supported_resolutions?.length ? vidCaps.supported_resolutions : ['720p', '1080p'];
+            const aspects = vidCaps?.supported_aspect_ratios?.length ? vidCaps.supported_aspect_ratios : ['16:9', '9:16', '1:1'];
+            const durations = vidCaps?.supported_durations?.length ? vidCaps.supported_durations : [4, 6, 8];
+            const sizeVal = `${vidNode.videoResolution ?? resolutions[0]} · ${vidNode.videoAspect ?? aspects[0]}`;
+            const sizeOpts: string[] = [];
+            for (const r of resolutions) for (const a of aspects) sizeOpts.push(`${r} · ${a}`);
+            if (!sizeOpts.includes(sizeVal)) sizeOpts.unshift(sizeVal);
+            const durVal = vidNode.videoDuration ?? durations[0];
+            return (
+              <div className="seg" title="Video parameters">
+                <label>
+                  Size
+                  <select
+                    value={sizeVal}
+                    onChange={(e) => {
+                      const [resolution, aspect] = e.target.value.split(' · ');
+                      ctl.updateSelected({ videoResolution: resolution, videoAspect: aspect });
+                    }}
+                  >
+                    {sizeOpts.map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Seconds
+                  <select value={String(durVal)} onChange={(e) => ctl.updateSelected({ videoDuration: Number(e.target.value) })}>
+                    {durations.map((d) => (
+                      <option key={d} value={d}>
+                        {d}s
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {vidCaps?.generate_audio !== false && (
+                  <button
+                    className={vidNode.videoAudio ? 'active' : ''}
+                    title="Generate audio (if the model supports it)"
+                    onClick={() => ctl.updateSelected({ videoAudio: !vidNode.videoAudio })}
+                  >
+                    ♪
+                  </button>
+                )}
+              </div>
+            );
+          })()}
         {sel.length >= 2 && (
           <>
             <div className="seg">

@@ -37,6 +37,11 @@ interface BaseObj {
   locked?: boolean;
   groupId?: string | null;
   parentId?: string | null; // frame containment
+  // vid: node params (only used on a video AI node)
+  videoResolution?: string;
+  videoAspect?: string;
+  videoDuration?: number;
+  videoAudio?: boolean;
 }
 
 export interface StrokeObj extends BaseObj {
@@ -123,6 +128,16 @@ export interface ImageObj extends BaseObj {
   radius: number;
 }
 
+export interface VideoObj extends BaseObj {
+  type: 'video';
+  w: number;
+  h: number;
+  blobId: string; // 'pending-…' until the generated video lands
+  opacity: number;
+  radius: number;
+  videoJobId?: string; // OpenRouter job id, kept so a poll can resume after reload
+}
+
 export interface ConnectorEnd {
   objectId?: string | null;
   anchor?: AnchorSide;
@@ -169,6 +184,7 @@ export type SlateObj =
   | StickyObj
   | TextObj
   | ImageObj
+  | VideoObj
   | ConnectorObj
   | IconObj
   | FrameObj;

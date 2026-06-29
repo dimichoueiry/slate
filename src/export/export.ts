@@ -1,4 +1,4 @@
-import type { Box, BoardMeta, ConnectorObj, IconObj, ImageObj, ShapeObj, SlateObj, StickyObj, StrokeObj, TextObj } from '../types';
+import type { Box, BoardMeta, ConnectorObj, IconObj, ImageObj, ShapeObj, SlateObj, StickyObj, StrokeObj, TextObj, VideoObj } from '../types';
 import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
@@ -178,6 +178,18 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       const dataUrl = await blobToDataUrl(blob);
       const rx = img.radius > 0 ? ` clip-path="inset(0 round ${img.radius}px)"` : '';
       return `<image x="${img.x}" y="${img.y}" width="${img.w}" height="${img.h}" opacity="${img.opacity}" href="${dataUrl}"${rx}/>`;
+    }
+    case 'video': {
+      // static SVG can't play video — export a dark poster with a play glyph
+      const v = o as VideoObj;
+      const cx = v.x + v.w / 2;
+      const cy = v.y + v.h / 2;
+      const r = Math.min(v.w, v.h) * 0.12;
+      const rx = v.radius > 0 ? ` rx="${v.radius}" ry="${v.radius}"` : '';
+      return (
+        `<rect x="${v.x}" y="${v.y}" width="${v.w}" height="${v.h}"${rx} fill="#15151a" opacity="${v.opacity}"/>` +
+        `<polygon points="${cx - r * 0.5},${cy - r} ${cx - r * 0.5},${cy + r} ${cx + r},${cy}" fill="#ffffff" opacity="0.85"/>`
+      );
     }
     case 'connector': {
       const c = o as ConnectorObj;
