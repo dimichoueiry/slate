@@ -1,6 +1,6 @@
 {
   "name": "slate-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP bridge that lets a local coding agent (Claude Code or any MCP client) draw on and read from your Slate canvas.",
   "license": "MIT",
   "type": "module",

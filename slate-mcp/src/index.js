@@ -318,7 +318,7 @@ async function handle(msg) {
       reply(id, {
         protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'slate-mcp', version: '0.2.0' },
+        serverInfo: { name: 'slate-mcp', version: '0.3.0' },
       });
       return;
     case 'notifications/initialized':
@@ -355,5 +355,4 @@ rl.on('line', (line) => {
 rl.on('close', () => {
   void bridge.close().then(() => process.exit(0));
 });
-
-process.stderr.write(`[slate-mcp] bridge listening on ws://127.0.0.1:${port} — waiting for a Slate tab\n`);
+// startup mode (leader vs peer) is logged by the bridge itself once elected

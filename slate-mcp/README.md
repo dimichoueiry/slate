@@ -36,6 +36,10 @@ Then open Slate in your browser and ask your agent to draw something. On first u
 
 Everything the agent draws is a normal Slate object: move it, restyle it, and undo any agent action with a single ⌘Z.
 
+## Multiple agent sessions
+
+Run slate-mcp from as many MCP clients as you like (Claude Code, Claude Desktop, Cursor, …) at the same time — they all share your one Slate tab, no disconnecting and reconnecting. The first process to start owns the port and the tab; every later one automatically joins it as a peer, authenticated with the same pairing token. If the owning session exits, a surviving one takes over within a second and the tab reconnects on its own.
+
 ## What the agent can never do
 
 Touch your settings or API keys, delete boards, act while no Slate tab is open, or connect without your one-time pairing confirmation. The bridge binds to `127.0.0.1` only, checks web origins against an allowlist, and authenticates every session with a 256-bit token stored in `~/.slate-mcp/`.

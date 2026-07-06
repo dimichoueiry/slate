@@ -150,7 +150,7 @@ test('auth with a wrong token is rejected; tool calls do not reach an unauthenti
   await bridge.close();
 });
 
-test('a second connection while a tab is paired is turned away as busy', async () => {
+test('a second tab while one is paired is turned away as busy', async () => {
   const { bridge, port } = makeBridge();
   const tab = await connect(port, 'http://localhost:5173');
   tab.send(JSON.stringify({ method: 'hello' }));
@@ -161,6 +161,7 @@ test('a second connection while a tab is paired is turned away as busy', async (
   await nextMessage(tab); // pair.ok
 
   const second = await connect(port, 'http://localhost:5173');
+  second.send(JSON.stringify({ method: 'hello' }));
   const busy = await nextMessage(second);
   assert.equal(busy.method, 'busy');
 
