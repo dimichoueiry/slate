@@ -101,8 +101,8 @@ function serializeObj(o: AnyObj): AnyObj | null {
       return {
         id: o.id,
         type: 'connector',
-        from: o.from?.objectId ? { objectId: o.from.objectId } : { point: o.from?.point },
-        to: o.to?.objectId ? { objectId: o.to.objectId } : { point: o.to?.point },
+        from: o.from?.objectId ? { objectId: o.from.objectId, ...(o.from.anchor ? { anchor: o.from.anchor } : {}) } : { point: o.from?.point },
+        to: o.to?.objectId ? { objectId: o.to.objectId, ...(o.to.anchor ? { anchor: o.to.anchor } : {}) } : { point: o.to?.point },
         label: o.label ?? '',
         routing: o.routing,
         ...(o.createdBy ? { createdBy: o.createdBy } : {}),
@@ -330,10 +330,17 @@ function closestIcons(name: string, n = 5): string[] {
     .map((d) => d.id);
 }
 
+const ANCHOR_SIDES = new Set(['left', 'right', 'top', 'bottom']);
+
 function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: any, field: string) => AnyObj): AnyObj {
-  const end = (e: any, field: string): AnyObj => {
+  const end = (e: any, field: string, anchor: any): AnyObj => {
     if (e && typeof e === 'object') {
-      if (typeof e.ref === 'string' || typeof e.id === 'string') return resolveRef(e.ref ?? e.id, field);
+      if (typeof e.ref === 'string' || typeof e.id === 'string') {
+        const resolved = resolveRef(e.ref ?? e.id, field);
+        if (anchor !== undefined && !ANCHOR_SIDES.has(anchor)) fail(i, `connector "${field}Anchor" must be left|right|top|bottom`);
+        // anchor set → endpoint pinned to that side; omitted → floating (auto re-route)
+        return anchor !== undefined ? { ...resolved, anchor } : resolved;
+      }
       if (isFinite(Number(e.x)) && isFinite(Number(e.y))) return { point: { x: num(e.x, 0, -1e6, 1e6), y: num(e.y, 0, -1e6, 1e6) } };
     }
     fail(i, `connector "${field}" must be {ref}, {id} or {x,y}`);
@@ -346,8 +353,8 @@ function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: an
     z: doc.nextZ(),
     createdBy: 'agent' as const,
     type: 'connector',
-    from: end(spec.from, 'from'),
-    to: end(spec.to, 'to'),
+    from: end(spec.from, 'from', spec.fromAnchor),
+    to: end(spec.to, 'to', spec.toAnchor),
     routing: ROUTINGS.has(spec.routing) ? spec.routing : 'curved',
     stroke: color(spec.stroke, '#1a1a1a'),
     strokeWidth: num(spec.strokeWidth, 2, 0.5, 20),

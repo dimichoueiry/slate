@@ -80,6 +80,8 @@ const objectSpec = {
     endArrow: { type: 'string', enum: ['none', 'triangle'] },
     from: { description: 'Connector start: {"ref":"..."} (object in this call), {"id":"..."} (object already on the board) or {"x":..,"y":..}' },
     to: { description: 'Connector end: same forms as "from"' },
+    fromAnchor: { type: 'string', enum: ['left', 'right', 'top', 'bottom'], description: 'Pin the connector start to a fixed side of the from-object. Omit for automatic (endpoint re-routes as objects move) — usually better for diagrams' },
+    toAnchor: { type: 'string', enum: ['left', 'right', 'top', 'bottom'], description: 'Pin the connector end to a fixed side of the to-object. Omit for automatic' },
     icon: { type: 'string', description: `Icon name from the registry. All names: ${ICON_NAMES.join(' ')}` },
     svg: { type: 'string', description: 'For type:"image" — self-contained SVG markup (viewBox required unless w/h given; max 512 KB; no scripts/external refs)' },
   },

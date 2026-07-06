@@ -108,20 +108,6 @@ export function anchorPoint(b: Box, side: AnchorSide): Vec {
   }
 }
 
-export function nearestAnchor(b: Box, p: Vec): AnchorSide {
-  const sides: AnchorSide[] = ['left', 'right', 'top', 'bottom'];
-  let best: AnchorSide = 'left';
-  let bestD = Infinity;
-  for (const s of sides) {
-    const d = distSq(anchorPoint(b, s), p);
-    if (d < bestD) {
-      bestD = d;
-      best = s;
-    }
-  }
-  return best;
-}
-
 /**
  * Point where a ray from the shape's center toward `target` crosses the shape's
  * actual outline (ellipse rim, polygon edge, box border) — so connector endpoints
@@ -202,17 +188,30 @@ export function connectorEndpoints(
   const fromBox = fromObj ? boundsOf(fromObj, resolve) : null;
   const toBox = toObj ? boundsOf(toObj, resolve) : null;
 
-  // each attached end lands exactly where the line toward the other end crosses
-  // the shape's outline, recomputed live so connectors re-route on any move
-  const refForA: Vec = toBox ? { x: toBox.x + toBox.w / 2, y: toBox.y + toBox.h / 2 } : b;
-  const refForB: Vec = fromBox ? { x: fromBox.x + fromBox.w / 2, y: fromBox.y + fromBox.h / 2 } : a;
+  // an end with a stored anchor is PINNED: it sits on that side and moves
+  // rigidly with the object, exactly where the user snapped it
+  const aPin = fromBox && c.from.anchor && c.from.anchor !== 'center' ? c.from.anchor : null;
+  const bPin = toBox && c.to.anchor && c.to.anchor !== 'center' ? c.to.anchor : null;
+  if (aPin) {
+    a = anchorPoint(fromBox!, aPin);
+    aSide = aPin;
+  }
+  if (bPin) {
+    b = anchorPoint(toBox!, bPin);
+    bSide = bPin;
+  }
 
-  if (fromObj && fromBox) {
+  // a floating end lands exactly where the line toward the other end crosses
+  // the shape's outline, recomputed live so connectors re-route on any move
+  const refForA: Vec = bPin ? b : toBox ? { x: toBox.x + toBox.w / 2, y: toBox.y + toBox.h / 2 } : b;
+  const refForB: Vec = aPin ? a : fromBox ? { x: fromBox.x + fromBox.w / 2, y: fromBox.y + fromBox.h / 2 } : a;
+
+  if (fromObj && fromBox && !aPin) {
     const e = edgePointToward(fromObj, fromBox, refForA);
     a = e.p;
     aSide = e.side;
   }
-  if (toObj && toBox) {
+  if (toObj && toBox && !bPin) {
     const e = edgePointToward(toObj, toBox, refForB);
     b = e.p;
     bSide = e.side;

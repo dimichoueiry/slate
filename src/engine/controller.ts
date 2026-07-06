@@ -32,7 +32,6 @@ import {
   boxContains,
   boxesIntersect,
   boxUnion,
-  nearestAnchor,
   rotatePoint,
   routeConnector,
   snapAngle,
@@ -89,7 +88,7 @@ type Interaction =
       kind: 'connecting';
       id: string;
       from: { objectId?: string | null; anchor?: AnchorSide; point?: Vec };
-      hover: { objectId: string; anchor: AnchorSide } | null;
+      hover: { objectId: string; anchor?: AnchorSide } | null;
       /** set when started from a quick-connect chip: release on empty spawns a connected copy */
       quick?: { sourceId: string; side: AnchorSide };
     }
@@ -1364,8 +1363,9 @@ export class Controller {
           : null;
         let end: ConnectorObj['from'];
         if (hit) {
-          end = { objectId: hit.id, anchor: nearestAnchor(boundsOf(hit, this.doc.resolve), world) };
-          this.hoverAnchors = { objectId: hit.id, box: boundsOf(hit, this.doc.resolve) };
+          const b = boundsOf(hit, this.doc.resolve);
+          end = { objectId: hit.id, anchor: this.anchorNear(b, world) };
+          this.hoverAnchors = { objectId: hit.id, box: b };
         } else {
           let p = world;
           if (e.shiftKey) {
@@ -1390,7 +1390,7 @@ export class Controller {
         let to: ConnectorObj['to'];
         if (hit) {
           const b = boundsOf(hit, this.doc.resolve);
-          const anchor = nearestAnchor(b, world);
+          const anchor = this.anchorNear(b, world);
           to = { objectId: hit.id, anchor };
           it.hover = { objectId: hit.id, anchor };
         } else {
@@ -1793,12 +1793,31 @@ export class Controller {
     return bestFrame;
   }
 
+  /**
+   * Anchor side if `world` is within snap range of one of the object's anchor
+   * dots — attach PINNED to that side. Otherwise undefined — attach floating
+   * (endpoint keeps re-routing toward the other end as objects move).
+   */
+  private anchorNear(b: Box, world: Vec): AnchorSide | undefined {
+    let best: AnchorSide | undefined;
+    let bestD = 14 / this.camera.zoom;
+    for (const side of ['left', 'right', 'top', 'bottom'] as AnchorSide[]) {
+      const p = anchorPoint(b, side);
+      const d = Math.hypot(world.x - p.x, world.y - p.y);
+      if (d <= bestD) {
+        bestD = d;
+        best = side;
+      }
+    }
+    return best;
+  }
+
   private beginConnector(world: Vec, tool: 'line' | 'connector', allowAttach = true) {
     const ui = useUI.getState();
     const hit = allowAttach ? this.findAttachTarget(world) : null;
     let from: ConnectorObj['from'];
     if (hit) {
-      from = { objectId: hit.id, anchor: nearestAnchor(boundsOf(hit, this.doc.resolve), world) };
+      from = { objectId: hit.id, anchor: this.anchorNear(boundsOf(hit, this.doc.resolve), world) };
     } else {
       from = { point: world };
     }
@@ -1979,19 +1998,26 @@ export class Controller {
       ctx.setLineDash([]);
     }
 
-    // anchor hints for connector tool
+    // anchor hints for connector tool — the snapped (pinned) dot draws bigger
     if (this.hoverAnchors || (it.kind === 'connecting' && it.hover)) {
       const targetId = it.kind === 'connecting' && it.hover ? it.hover.objectId : this.hoverAnchors?.objectId;
       const target = targetId ? this.doc.get(targetId) : null;
       if (target) {
+        let active: AnchorSide | undefined;
+        if (it.kind === 'connecting') active = it.hover?.anchor;
+        else if (it.kind === 'endpointing') {
+          const c = this.doc.get(it.id) as ConnectorObj | undefined;
+          const end = it.end === 'from' ? c?.from : c?.to;
+          if (end && end.objectId === targetId) active = end.anchor;
+        }
         const b = boundsOf(target, this.doc.resolve);
-        ctx.fillStyle = '#3c78ff';
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
         for (const side of ['left', 'right', 'top', 'bottom'] as AnchorSide[]) {
           const p = this.worldToScreenPt(anchorPoint(b, side));
+          ctx.fillStyle = side === active ? '#1a5cff' : '#3c78ff';
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, side === active ? 7 : 4, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         }
