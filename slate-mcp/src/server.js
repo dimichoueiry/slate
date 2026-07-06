@@ -23,7 +23,12 @@ export class NoTabError extends Error {
   }
 }
 
-const DEFAULT_ORIGINS = [/^https?:\/\/localhost(:\d+)?$/, /^https?:\/\/127\.0\.0\.1(:\d+)?$/];
+const DEFAULT_ORIGINS = [
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  // the official deployed Slate (PRD §8.3: official domain + localhost)
+  /^https:\/\/slate-iota-lac\.vercel\.app$/,
+];
 
 export function originAllowed(origin, extra = []) {
   // non-browser clients send no Origin; they're local processes, same trust as us
