@@ -189,3 +189,40 @@ test('a paired token from a previous session authenticates directly', async () =
   again.close();
   await bridge.close();
 });
+
+// ---- Bridge v1.2: get_selection (PRD v1.2 §3.6 + §6 version skew) ----
+
+test('get_selection is never forwarded to an unauthenticated tab', async () => {
+  const { bridge, port } = makeBridge();
+  const tab = await connect(port, 'http://localhost:5173');
+  tab.send(JSON.stringify({ method: 'hello' }));
+  let forwarded = false;
+  tab.on('message', (d) => {
+    if (JSON.parse(String(d)).method === 'get_selection') forwarded = true;
+  });
+  await assert.rejects(bridge.callTab('get_selection', {}), PairingRequiredError);
+  assert.equal(forwarded, false);
+  tab.close();
+  await bridge.close();
+});
+
+test('version skew: an old tab answering "Unknown method" surfaces that error verbatim', async () => {
+  const { bridge, port } = makeBridge();
+  const tab = await connect(port, 'http://localhost:5173');
+  tab.send(JSON.stringify({ method: 'hello' }));
+  const pairReq = nextMessage(tab);
+  const code = await bridge.callTab('x', {}).catch((e) => e.code);
+  await pairReq;
+  tab.send(JSON.stringify({ method: 'pair.complete', params: { code } }));
+  await nextMessage(tab); // pair.ok
+
+  // an old tab has no get_selection handler and replies like bridge.ts does
+  tab.on('message', (d) => {
+    const msg = JSON.parse(String(d));
+    if (msg.method === 'get_selection') tab.send(JSON.stringify({ id: msg.id, error: { message: 'Unknown method "get_selection"' } }));
+  });
+  await assert.rejects(bridge.callTab('get_selection', {}), /Unknown method "get_selection"/);
+
+  tab.close();
+  await bridge.close();
+});

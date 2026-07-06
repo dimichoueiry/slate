@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // slate-mcp — MCP server (stdio) that lets a coding agent draw on and read
 // from a Slate canvas. Speaks newline-delimited JSON-RPC 2.0 on stdio to the
-// MCP client and forwards the nine bridge tools to the Slate tab over a
+// MCP client and forwards the bridge tools to the Slate tab over a
 // localhost WebSocket (see server.js). Zero cloud, zero telemetry.
 
 import { createInterface } from 'node:readline';
@@ -33,7 +33,7 @@ const allowedOrigins = [
 
 const bridge = createBridge({ port, allowedOrigins, configPath: defaultConfigPath() });
 
-// ---------- tool definitions (PRD §7 — exactly nine) ----------
+// ---------- tool definitions (PRD §7 + v1.1 §5 + v1.2 §5 — exactly thirteen) ----------
 
 const LAYOUT_GUIDE = [
   'Layout guidance: think like someone drawing on a whiteboard.',
@@ -95,7 +95,7 @@ const TOOLS = [
   {
     name: 'read_board',
     description:
-      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames. Objects with "runnable": true are live AI nodes (executable via run_node). Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
+      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames. Objects with "runnable": true are live AI nodes (executable via run_node). On the currently open board, objects the user has selected carry "selected": true. Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -104,6 +104,12 @@ const TOOLS = [
       },
       required: ['boardId'],
     },
+  },
+  {
+    name: 'get_selection',
+    description:
+      'What the user currently has SELECTED on the open board — the canvas equivalent of pointing. Call this when the user\'s instruction says "this", "these", "that", "selected", "what I picked", or otherwise points at objects without naming them. Call it at instruction time, not preemptively — the selection changes as the user works. Returns the open boardId/boardName, the full selected objects (same shape as read_board, so a follow-up read_board is usually unnecessary before update_objects/delete_objects), and their combined bounding box (useful for placing new objects next to the selection). An empty selection is not an error — ask the user to select the objects they mean.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'get_node_output',

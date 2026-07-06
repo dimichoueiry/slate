@@ -1,4 +1,4 @@
-// Tab-side implementations of the nine MCP bridge tools (PRD §7).
+// Tab-side implementations of the MCP bridge tools (PRD §7, v1.1 §5, v1.2 §5).
 // All mutations funnel through the doc command model as one transaction per
 // call, so every agent action is a single undo step — exactly like aiEdit.ts.
 
@@ -87,6 +87,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
   const base: AnyObj = { id: o.id, type: o.type, x: r(o.x), y: r(o.y) };
   if (o.parentId) base.frameId = o.parentId;
   if (o.createdBy) base.createdBy = o.createdBy;
+  if (o.locked) base.locked = true;
   switch (o.type) {
     case 'sticky':
       return { ...base, w: r(o.w), h: r(o.h), color: o.color, text: o.text, ...(o.file ? { upload: { name: o.file.name, kind: o.file.kind, rows: o.file.rows } } : {}), runnable: isAINode(o) };
@@ -105,6 +106,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
         label: o.label ?? '',
         routing: o.routing,
         ...(o.createdBy ? { createdBy: o.createdBy } : {}),
+        ...(o.locked ? { locked: true } : {}),
       };
     case 'icon':
       return { ...base, w: r(o.w), h: r(o.h), icon: o.icon, color: o.color };
@@ -144,6 +146,11 @@ export async function read_board(params: AnyObj): Promise<AnyObj> {
   // full object list, never truncated (data-integrity rule)
   const objects = objs.map(serializeObj).filter(Boolean) as AnyObj[];
   objects.sort((a, b) => (a.type === 'connector' ? 1 : 0) - (b.type === 'connector' ? 1 : 0));
+  // live selection marker — only meaningful (and only stamped) on the open board (PRD v1.2 §5.2)
+  const cur = getActiveCtl();
+  if (cur && cur.boardId === boardId && cur.ctl.selection?.size) {
+    for (const o of objects) if (cur.ctl.selection.has(o.id)) o.selected = true;
+  }
   return { board: { id: meta.id, name: meta.name }, objectCount: objects.length, objects };
 }
 
@@ -180,6 +187,32 @@ export async function get_node_output(params: AnyObj): Promise<AnyObj> {
   if (!node) throw new BridgeError(`No object "${objectId}" on board "${boardId}"`);
   if (!isAINode(node)) throw new BridgeError(`Object "${objectId}" is not a runnable node`);
   return outputOf(objs, objectId);
+}
+
+/**
+ * Snapshot of the user's live selection on the open board (PRD v1.2 §5.1).
+ * Read-only, no input: selection is a property of the open tab, so this also
+ * answers "which board?". Never switches boards, never touches history.
+ */
+export async function get_selection(): Promise<AnyObj> {
+  const cur = getActiveCtl();
+  if (!cur) throw new BridgeError('No board is open in the Slate tab — ask the user to open one');
+  const { ctl, boardId } = cur;
+  const meta = await db.boards.get(boardId);
+  const objs = [...ctl.selection].map((id: string) => ctl.doc.get(id)).filter(Boolean) as AnyObj[];
+  // same serialization as read_board; anything it can't shape still comes back
+  // as a stub — a selection of N must never return fewer than N (data-integrity)
+  const selection = objs.map(
+    (o) => serializeObj(o) ?? { id: o.id, type: o.type, x: Math.round(o.x ?? 0), y: Math.round(o.y ?? 0) },
+  );
+  const result: AnyObj = { boardId, boardName: meta?.name ?? '', count: selection.length, selection };
+  if (!objs.length) {
+    result.hint = 'Nothing is selected — ask the user to select the objects they mean.';
+  } else {
+    const b = boxUnion(objs.map((o) => aabbOf(o as any, ctl.doc.resolve)));
+    result.bounds = { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) };
+  }
+  return result;
 }
 
 // ---------- write tools ----------
@@ -734,11 +767,12 @@ export async function add_upload(params: AnyObj): Promise<AnyObj> {
   };
 }
 
-// ---------- dispatcher (capability ceiling: exactly these twelve methods) ----------
+// ---------- dispatcher (capability ceiling: exactly these thirteen methods) ----------
 
 export const METHODS: Record<string, (params: AnyObj) => Promise<any>> = {
   list_boards,
   read_board,
+  get_selection,
   get_node_output,
   create_board,
   add_objects,

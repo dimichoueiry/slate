@@ -1,7 +1,7 @@
 // WebSocket client for the slate-mcp local bridge. The tab connects OUT to
 // ws://127.0.0.1:<port> (allowed from an https page because localhost is a
 // trustworthy origin), authenticates with the pairing token, and serves the
-// nine bridge methods (PRD §8.1–8.3). Holds no board data itself.
+// bridge methods (PRD §8.1–8.3). Holds no board data itself.
 
 import { create } from 'zustand';
 import { METHODS, BridgeError } from './methods';
