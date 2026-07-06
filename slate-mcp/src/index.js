@@ -7,6 +7,8 @@
 import { createInterface } from 'node:readline';
 import { createBridge, PairingRequiredError, NoTabError } from './server.js';
 import { defaultConfigPath } from './pairing.js';
+import { checkSvg } from './svg.js';
+import { ICON_NAMES } from './icons.js';
 
 // ---------- CLI args ----------
 
@@ -48,10 +50,17 @@ const NODE_GUIDE = [
   'Chains of wired nodes form flows that run in dependency order.',
 ].join(' ');
 
+const GRAPHICS_GUIDE = [
+  'ICONS: {type:"icon", icon:"database", x, y, w?, color?} places a crisp vector icon from the registry (see the icon property for all names).',
+  'CUSTOM SVG: {type:"image", svg:"<svg viewBox=\\"0 0 W H\\">…</svg>", x, y, w?, h?} renders SVG you author — logos, illustrations, mini-charts.',
+  'SVG rules: single <svg> root with a viewBox; inline styles only; no scripts, event handlers, external hrefs/fonts/images (rejected); avoid pure-white or pure-black fills so it reads on light AND dark canvases.',
+  'After drawing, call focus_on with the returned ids so the user sees the result.',
+].join(' ');
+
 const objectSpec = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['sticky', 'text', 'shape', 'frame', 'connector'] },
+    type: { type: 'string', enum: ['sticky', 'text', 'shape', 'frame', 'connector', 'icon', 'image'] },
     ref: { type: 'string', description: 'Optional handle so connectors in this same call can reference this object via {"ref": "..."}' },
     x: { type: 'number' },
     y: { type: 'number' },
@@ -71,6 +80,8 @@ const objectSpec = {
     endArrow: { type: 'string', enum: ['none', 'triangle'] },
     from: { description: 'Connector start: {"ref":"..."} (object in this call), {"id":"..."} (object already on the board) or {"x":..,"y":..}' },
     to: { description: 'Connector end: same forms as "from"' },
+    icon: { type: 'string', description: `Icon name from the registry. All names: ${ICON_NAMES.join(' ')}` },
+    svg: { type: 'string', description: 'For type:"image" — self-contained SVG markup (viewBox required unless w/h given; max 512 KB; no scripts/external refs)' },
   },
   required: ['type'],
 };
@@ -115,7 +126,7 @@ const TOOLS = [
   {
     name: 'add_objects',
     description:
-      `Add a batch of objects (stickies, text, shapes, frames, connectors) to a board in ONE call — one call is one undo step and the objects animate in. ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
+      `Add a batch of objects (stickies, text, shapes, frames, connectors, icons, custom SVG graphics) to a board in ONE call — one call is one undo step and the objects animate in. ${GRAPHICS_GUIDE} ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -177,6 +188,49 @@ const TOOLS = [
     description: 'Poll a long-running node started by run_node. Returns status and, when done, the output.',
     inputSchema: { type: 'object', properties: { runId: { type: 'string' } }, required: ['runId'] },
   },
+  {
+    name: 'render_board',
+    description:
+      'SEE the board: render it (or a region) to a PNG image you can look at. Use this to check your own layout after drawing (fix overlaps/misalignment), and to read the user\'s freehand ink — pen circles, arrows and annotations are invisible to read_board but visible here. The accompanying text gives the world-coordinate mapping (region + scale) so positions in the image convert back to board coordinates.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        region: {
+          description: 'Optional: {"x","y","w","h"} world rect, or {"objectIds":[...]} to frame specific objects. Defaults to everything on the board.',
+        },
+        maxDimension: { type: 'number', description: 'Long-edge pixel cap for the PNG (default 1568, max 4096)' },
+      },
+      required: ['boardId'],
+    },
+  },
+  {
+    name: 'focus_on',
+    description:
+      "Pan/zoom the user's viewport to frame the given objects (smooth 400ms animation). Call after add_objects so the user watches the result appear. Rate-limited to one move per second — excess calls return {coalesced:true} without moving. Never modifies the board.",
+    inputSchema: {
+      type: 'object',
+      properties: { boardId: { type: 'string' }, objectIds: { type: 'array', items: { type: 'string' } } },
+      required: ['boardId', 'objectIds'],
+    },
+  },
+  {
+    name: 'add_upload',
+    description:
+      'Create a real Slate upload node from text file content you have (csv, txt, json, md) — e.g. a CSV from the repo. The FULL content is stored (analytics nodes read every row; nothing is truncated) and the node can be wired into business:/extract:/chart: flows. Max 20 MB; larger files must be dropped into Slate by the user. Not for binary formats (no PDF).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        boardId: { type: 'string' },
+        filename: { type: 'string', description: 'Name with extension, e.g. "sales.csv" — the extension picks the parser' },
+        content: { type: 'string', description: 'The complete file content, verbatim' },
+        kind: { type: 'string', enum: ['csv', 'text', 'json', 'markdown'], description: 'Optional override when the filename has no extension' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+      },
+      required: ['boardId', 'filename', 'content'],
+    },
+  },
 ];
 
 const TOOL_NAMES = new Set(TOOLS.map((t) => t.name));
@@ -195,14 +249,48 @@ function toolText(id, text, isError = false) {
   reply(id, { content: [{ type: 'text', text }], isError });
 }
 
+const SLOW_TOOLS = new Set(['render_board', 'add_upload']);
+
 async function handleToolCall(id, name, args) {
   if (!TOOL_NAMES.has(name)) {
     replyError(id, -32602, `Unknown tool "${name}"`);
     return;
   }
-  const timeoutMs = name === 'run_node' ? (Number(args?.timeoutSeconds) > 0 ? Number(args.timeoutSeconds) * 1000 + 10_000 : 70_000) : 30_000;
+  // authoritative SVG safety check happens here (tested in svg.test.js);
+  // the tab re-checks cheaply at the WS boundary
+  if (name === 'add_objects' && Array.isArray(args?.objects)) {
+    for (let i = 0; i < args.objects.length; i++) {
+      const spec = args.objects[i];
+      if (spec?.type === 'image') {
+        const check = checkSvg(spec.svg);
+        if (!check.ok) {
+          toolText(id, `objects[${i}]: ${check.reason}`, true);
+          return;
+        }
+      }
+    }
+  }
+  const timeoutMs =
+    name === 'run_node'
+      ? Number(args?.timeoutSeconds) > 0
+        ? Number(args.timeoutSeconds) * 1000 + 10_000
+        : 70_000
+      : SLOW_TOOLS.has(name)
+        ? 60_000
+        : 30_000;
   try {
     const result = await bridge.callTab(name, args ?? {}, timeoutMs);
+    if (name === 'render_board' && result?.imageBase64) {
+      const { imageBase64, mimeType, ...meta } = result;
+      reply(id, {
+        content: [
+          { type: 'image', data: imageBase64, mimeType: mimeType || 'image/png' },
+          { type: 'text', text: `Rendered world region x=${meta.region.x} y=${meta.region.y} w=${meta.region.w} h=${meta.region.h} at scale ${meta.scale} (${meta.pixelWidth}x${meta.pixelHeight}px). To convert image pixels to board coordinates: world = region.xy + pixel/scale.` },
+        ],
+        isError: false,
+      });
+      return;
+    }
     toolText(id, JSON.stringify(result, null, 2));
   } catch (e) {
     if (e instanceof PairingRequiredError) {
@@ -222,7 +310,7 @@ async function handle(msg) {
       reply(id, {
         protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'slate-mcp', version: '0.1.0' },
+        serverInfo: { name: 'slate-mcp', version: '0.2.0' },
       });
       return;
     case 'notifications/initialized':

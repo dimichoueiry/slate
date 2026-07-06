@@ -3,12 +3,18 @@
 // call, so every agent action is a single undo step — exactly like aiEdit.ts.
 
 import { nanoid } from 'nanoid';
-import { db, listBoards, createBoard, loadBoardObjects, listProjects } from '../store/db';
+import { db, listBoards, createBoard, loadBoardObjects, listProjects, putBlob } from '../store/db';
 import { textBlockSize } from '../engine/text';
 import { clampHeight } from '../engine/sticky';
+import { ICONS } from '../engine/icons';
+import { aabbOf, boxUnion } from '../engine/geometry';
+import { cameraToFit } from '../engine/camera';
+import { exportPng, exportBounds } from '../export/export';
+import { readUpload, uploadLabel } from '../ui/upload';
 import { runAINode, isAINode } from '../ui/ainodes';
 import { getActiveCtl, waitForBoard } from './registry';
 import { layoutLayered, layoutGrid, type LayoutItem, type LayoutEdge } from './layout';
+import { checkSvg, svgNaturalSize, withExplicitSize } from './svgCheck';
 
 type AnyObj = Record<string, any>;
 
@@ -240,9 +246,55 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
     }
     case 'frame':
       return { ...base, z: -doc.nextZ(), type: 'frame', name: str(spec.name, 'Frame'), w: num(spec.w, 800, 40, 20000), h: num(spec.h, 500, 40, 20000) };
+    case 'icon': {
+      const name = str(spec.icon);
+      if (!ICONS.some((d) => d.id === name)) fail(i, `no icon "${name}" — closest: ${closestIcons(name).join(', ')}`);
+      const w = num(spec.w, 48, 12, 1024);
+      return { ...base, type: 'icon', icon: name, w, h: num(spec.h, w, 12, 1024), color: color(spec.color, '#1a1a1a'), opacity: 1 };
+    }
+    case 'image': {
+      const check = checkSvg(spec.svg);
+      if (!check.ok) fail(i, check.reason);
+      const natural = svgNaturalSize(spec.svg);
+      if (!natural && !(spec.w && spec.h)) fail(i, 'svg needs a viewBox (or explicit w/h in the spec) so it can be sized');
+      let w = num(spec.w, natural?.w ?? 300, 8, 4000);
+      let h = num(spec.h, natural?.h ?? 300, 8, 4000);
+      // canvas-sanity cap on DISPLAY size only — the full svg source is stored
+      const long = Math.max(w, h);
+      if (long > 1600) {
+        w = Math.round((w * 1600) / long);
+        h = Math.round((h * 1600) / long);
+      }
+      // blobId filled in by add_objects after validation (blob storage is async)
+      return { ...base, type: 'image', w, h, blobId: '', opacity: 1, radius: 0, _svg: withExplicitSize(spec.svg, w, h) };
+    }
     default:
-      fail(i, `unknown type "${spec.type}" — use sticky|text|shape|frame|connector`);
+      fail(i, `unknown type "${spec.type}" — use sticky|text|shape|frame|connector|icon|image`);
   }
+}
+
+/** Closest icon names for a typo/guess — substring hits first, then edit distance. */
+function closestIcons(name: string, n = 5): string[] {
+  const q = name.toLowerCase();
+  const dist = (a: string, b: string): number => {
+    const dp = Array.from({ length: a.length + 1 }, (_, i) => i);
+    for (let j = 1; j <= b.length; j++) {
+      let prev = dp[0]++;
+      for (let i = 1; i <= a.length; i++) {
+        const cur = dp[i];
+        dp[i] = Math.min(dp[i] + 1, dp[i - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = cur;
+      }
+    }
+    return dp[a.length];
+  };
+  return ICONS.map((d) => ({
+    id: d.id,
+    score: d.id.includes(q) || q.includes(d.id) || d.tags?.includes(q) ? 0 : dist(d.id, q),
+  }))
+    .sort((a, b) => a.score - b.score)
+    .slice(0, n)
+    .map((d) => d.id);
 }
 
 function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: any, field: string) => AnyObj): AnyObj {
@@ -336,6 +388,14 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
       const o = byRef.get(it.key)!;
       o.x = it.x!;
       o.y = it.y!;
+    }
+  }
+
+  // ---- store agent-authored SVGs as blobs (async, so before the transaction) ----
+  for (const o of bodies) {
+    if (o.type === 'image' && o._svg) {
+      o.blobId = await putBlob(new Blob([o._svg], { type: 'image/svg+xml' }));
+      delete o._svg;
     }
   }
 
@@ -512,7 +572,169 @@ export async function get_run_status(params: AnyObj): Promise<AnyObj> {
   return { status: 'done', output: outputOf(objs, run.objectId) };
 }
 
-// ---------- dispatcher (capability ceiling: exactly these nine methods) ----------
+// ---------- senses: render + camera (PRD v1.1 §5.3–5.4) ----------
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result ?? '').split(',')[1] ?? '');
+    r.onerror = () => reject(r.error ?? new Error('read failed'));
+    r.readAsDataURL(blob);
+  });
+}
+
+export async function render_board(params: AnyObj): Promise<AnyObj> {
+  const boardId = str(params?.boardId);
+  if (!boardId) throw new BridgeError('boardId is required');
+  const ctl = await ensureBoardOpen(boardId);
+  const doc = ctl.doc;
+
+  let box: AnyObj | null = null;
+  const region = params?.region;
+  if (region && Array.isArray(region.objectIds)) {
+    const objs = region.objectIds.map((id: any) => doc.get(String(id))).filter(Boolean);
+    if (!objs.length) throw new BridgeError('none of the given objectIds exist on this board');
+    const b = boxUnion(objs.map((o: AnyObj) => aabbOf(o as any, doc.resolve)));
+    box = { x: b.x - 32, y: b.y - 32, w: b.w + 64, h: b.h + 64 };
+  } else if (region && isFinite(Number(region.w)) && isFinite(Number(region.h))) {
+    box = {
+      x: num(region.x, 0, -1e6, 1e6),
+      y: num(region.y, 0, -1e6, 1e6),
+      w: num(region.w, 100, 1, 2e6),
+      h: num(region.h, 100, 1, 2e6),
+    };
+  } else {
+    box = exportBounds(doc);
+    if (!box) throw new BridgeError('the board is empty — nothing to render');
+  }
+
+  const maxDim = num(params?.maxDimension, 1568, 64, 4096);
+  const scale = Math.min(4, maxDim / Math.max(box!.w, box!.h));
+  const blob = await exportPng(doc, box as any, scale, false);
+  const imageBase64 = await blobToBase64(blob);
+  return {
+    mimeType: 'image/png',
+    imageBase64,
+    // world-coordinate mapping so what the agent SEES converts back to board space
+    region: { x: Math.round(box!.x), y: Math.round(box!.y), w: Math.round(box!.w), h: Math.round(box!.h) },
+    scale: Number(scale.toFixed(4)),
+    pixelWidth: Math.max(1, Math.round(box!.w * scale)),
+    pixelHeight: Math.max(1, Math.round(box!.h * scale)),
+  };
+}
+
+let lastFocusAt = 0;
+let focusAnim: number | null = null;
+
+export async function focus_on(params: AnyObj): Promise<AnyObj> {
+  const boardId = str(params?.boardId);
+  if (!boardId) throw new BridgeError('boardId is required');
+  const ids: any[] = Array.isArray(params?.objectIds) ? params.objectIds : [];
+  if (!ids.length) throw new BridgeError('objectIds must be a non-empty array');
+  const ctl = await ensureBoardOpen(boardId);
+  const objs = ids.map((id) => ctl.doc.get(String(id))).filter(Boolean);
+  if (!objs.length) throw new BridgeError('none of the given objectIds exist on this board');
+
+  // at most one camera move per second — excess calls coalesce (PRD §5.4)
+  const now = Date.now();
+  if (now - lastFocusAt < 1000) {
+    return { coalesced: true, viewport: { ...ctl.camera } };
+  }
+  lastFocusAt = now;
+
+  const box = boxUnion(objs.map((o: AnyObj) => aabbOf(o as any, ctl.doc.resolve)));
+  const target = cameraToFit(box, ctl.viewW, ctl.viewH, 96);
+  const from = { ...ctl.camera };
+  if (focusAnim !== null) cancelAnimationFrame(focusAnim);
+  const t0 = performance.now();
+  const DUR = 400;
+  const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
+  await new Promise<void>((resolve) => {
+    const step = (t: number) => {
+      const k = ease(Math.min(1, (t - t0) / DUR));
+      ctl.setCamera({
+        x: from.x + (target.x - from.x) * k,
+        y: from.y + (target.y - from.y) * k,
+        zoom: from.zoom + (target.zoom - from.zoom) * k,
+      });
+      if (k < 1) focusAnim = requestAnimationFrame(step);
+      else {
+        focusAnim = null;
+        resolve();
+      }
+    };
+    focusAnim = requestAnimationFrame(step);
+  });
+  return { viewport: { ...ctl.camera } };
+}
+
+// ---------- pipeline: uploads from the agent's environment (PRD v1.1 §5.5) ----------
+
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const UPLOAD_KIND_EXT: Record<string, string> = { csv: 'csv', text: 'txt', json: 'json', markdown: 'md' };
+
+export async function add_upload(params: AnyObj): Promise<AnyObj> {
+  const boardId = str(params?.boardId);
+  if (!boardId) throw new BridgeError('boardId is required');
+  let filename = str(params?.filename).trim();
+  const content = params?.content;
+  if (!filename) throw new BridgeError('filename is required');
+  if (typeof content !== 'string' || !content) throw new BridgeError('content must be a non-empty string');
+  if (new TextEncoder().encode(content).length > MAX_UPLOAD_BYTES) {
+    // a stated, LOUD limit — never silent truncation (data-integrity rule)
+    throw new BridgeError('file too large for the bridge (20 MB max) — ask the user to drop it into Slate directly so no data is lost');
+  }
+  if (/\.pdf$/i.test(filename) || params?.kind === 'pdf') {
+    throw new BridgeError('binary formats are not supported over the bridge — text formats only (csv, txt, json, md)');
+  }
+  const kind = str(params?.kind);
+  if (kind && !UPLOAD_KIND_EXT[kind]) throw new BridgeError(`unknown kind "${kind}" — use csv|text|json|markdown`);
+  if (!/\.[a-z0-9]+$/i.test(filename)) filename += `.${UPLOAD_KIND_EXT[kind] || 'txt'}`;
+
+  const ctl = await ensureBoardOpen(boardId);
+  // reuse the app's own upload parser so preview caps, row counts and blob
+  // storage are byte-identical to a hand-dropped file (PRD end-condition 7)
+  const file = new File([content], filename, { type: kind === 'csv' ? 'text/csv' : 'text/plain' });
+  const upload = await readUpload(file);
+
+  const cam = ctl.camera ?? { x: 0, y: 0, zoom: 1 };
+  const x = num(params?.x, Math.round(cam.x + (ctl.viewW ?? 1200) / 4 / (cam.zoom || 1)), -1e6, 1e6);
+  const y = num(params?.y, Math.round(cam.y + (ctl.viewH ?? 800) / 4 / (cam.zoom || 1)), -1e6, 1e6);
+  const text = uploadLabel(upload);
+  const w = 260;
+  const m = textBlockSize(text, 18, w - 24, 500);
+  const node = {
+    id: nid(),
+    type: 'sticky' as const,
+    x,
+    y,
+    rotation: 0,
+    z: ctl.doc.nextZ(),
+    createdBy: 'agent' as const,
+    w,
+    h: clampHeight(m.h + 24),
+    color: STICKY_DEFAULT,
+    text,
+    fontSize: 18,
+    file: upload,
+  };
+  ctl.doc.begin();
+  try {
+    ctl.doc.set(node);
+  } finally {
+    ctl.doc.commit();
+  }
+  return {
+    objectId: node.id,
+    kind: upload.kind,
+    rows: upload.rows ?? null,
+    // complete = analytics read EVERY row: either nothing was capped, or the
+    // full file is in the blob store
+    complete: !upload.truncated || !!upload.blobId,
+  };
+}
+
+// ---------- dispatcher (capability ceiling: exactly these twelve methods) ----------
 
 export const METHODS: Record<string, (params: AnyObj) => Promise<any>> = {
   list_boards,
@@ -524,4 +746,7 @@ export const METHODS: Record<string, (params: AnyObj) => Promise<any>> = {
   delete_objects,
   run_node,
   get_run_status,
+  render_board,
+  focus_on,
+  add_upload,
 };

@@ -27,6 +27,11 @@ Then open Slate in your browser and ask your agent to draw something. On first u
 | `run_node` | Run a Slate AI node (`ai:`, `chart:`, `img:`, …) like pressing ▶ |
 | `get_node_output` | Read a node's last output |
 | `get_run_status` | Poll a slow run (video, deep research) |
+| `render_board` | **See** the board as a PNG — check its own layout, read your freehand ink ("improve what I circled") |
+| `focus_on` | Pan/zoom your viewport to its work (smooth, rate-limited) |
+| `add_upload` | Pipe a CSV/text file from its environment into a real upload node — full-fidelity, wireable into `business:`/`chart:` flows |
+
+`add_objects` also places **icons** (340-name built-in registry) and **agent-authored SVG graphics** (sanitized: no scripts, no external references).
 
 Everything the agent draws is a normal Slate object: move it, restyle it, and undo any agent action with a single ⌘Z.
 
