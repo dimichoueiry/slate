@@ -14,8 +14,9 @@ import {
 
 const pill: React.CSSProperties = {
   position: 'fixed',
-  right: 16,
-  bottom: 16,
+  right: 12,
+  // the bottom-right corner stacks: zoom bar (12) → usage meter (56) → this
+  bottom: 100,
   zIndex: 60,
   display: 'flex',
   alignItems: 'center',
