@@ -53,6 +53,17 @@ export function configureImageLoading(
   onBitmapReady = onReady;
 }
 
+// Browsers refuse to decode SVG that lacks an xmlns on the root; blobs saved
+// before the bridge injected it would stay gray forever — patch them on read.
+async function withSvgNamespace(blob: Blob): Promise<Blob> {
+  if (!blob.type.includes('svg')) return blob;
+  const text = await blob.text();
+  const root = text.match(/<svg\b[^>]*>/i)?.[0];
+  if (!root || /\bxmlns\s*=/i.test(root)) return blob;
+  const patched = text.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  return new Blob([patched], { type: blob.type });
+}
+
 async function loadViaImgTag(blob: Blob): Promise<HTMLImageElement> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -76,6 +87,7 @@ export function getBitmap(blobId: string): CachedImage | null {
       bitmapCache.set(blobId, 'missing');
       return;
     }
+    blob = await withSvgNamespace(blob);
     try {
       const bmp = await createImageBitmap(blob);
       bitmapCache.set(blobId, bmp);

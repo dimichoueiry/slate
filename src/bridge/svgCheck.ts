@@ -55,10 +55,17 @@ export function svgNaturalSize(svg: string): { w: number; h: number } | null {
   return w && h ? { w, h } : null;
 }
 
-/** Ensure the root has explicit width/height so every decode path sizes it. */
+/**
+ * Ensure the root has explicit width/height so every decode path sizes it,
+ * and an xmlns — browsers refuse to decode namespace-less SVG as an image.
+ */
 export function withExplicitSize(svg: string, w: number, h: number): string {
   return svg.replace(/<svg\b([^>]*)>/i, (_m, attrs: string) => {
     let a = attrs.replace(/\s(width|height)\s*=\s*["'][^"']*["']/gi, '');
+    if (!/\bxmlns\s*=/i.test(a)) a += ' xmlns="http://www.w3.org/2000/svg"';
+    if (/\bxlink:href\s*=/i.test(svg) && !/\bxmlns:xlink\s*=/i.test(a)) {
+      a += ' xmlns:xlink="http://www.w3.org/1999/xlink"';
+    }
     return `<svg${a} width="${w}" height="${h}">`;
   });
 }
