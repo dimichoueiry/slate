@@ -21,7 +21,7 @@ Then open Slate in your browser and ask your agent to draw something. On first u
 | `list_boards` | List your boards |
 | `read_board` | Read every object on a board — including your hand edits |
 | `create_board` | Create and open a new board |
-| `add_objects` | Draw a batch of stickies/shapes/text/frames/connectors (one undo step, animates in; optional auto-layout) |
+| `add_objects` | Draw a batch of stickies/shapes/text/frames/connectors (one undo step, animates in; optional auto-layout). A sticky whose first line starts with `ai:`, `img:`, `search:`, … is a live runnable AI node — the agent can build entire flows |
 | `update_objects` | Edit text, colors, positions |
 | `delete_objects` | Delete objects (never boards) |
 | `run_node` | Run a Slate AI node (`ai:`, `chart:`, `img:`, …) like pressing ▶ |

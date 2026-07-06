@@ -40,6 +40,14 @@ const LAYOUT_GUIDE = [
   'Use shape (roundedRect) + short label text for components, stickies for notes/explanations, frames to group sections, connectors with labels for relationships.',
 ].join(' ');
 
+const NODE_GUIDE = [
+  'RUNNABLE AI NODES: a sticky or text object whose FIRST LINE starts with a prefix IS a live AI node the user (or run_node) can execute — you can create them with this tool.',
+  'Prefixes: "ai:" (generate text), "img:" (generate an image), "vid:" (generate a video), "web:" (scrape wired URLs), "search:" (web search with citations), "research:" (deep research agent), "extract:" (extract a table), "chart:" (make a chart), "business:" (analytics over wired CSV uploads), "data:" (HTTP fetch), "condition:"/"if:" (yes/no branch), "interval:"/"every:" (re-run on a timer), "fix:" (improve a prompt).',
+  'Example sticky text: "ai: rephrase the wired greeting in a friendly tone".',
+  'WIRING: connectors INTO a node are its inputs (their text/images feed the prompt); objects a node points AT are its outputs (results are written there — wire an empty sticky as the output, or let the run spawn one).',
+  'Chains of wired nodes form flows that run in dependency order.',
+].join(' ');
+
 const objectSpec = {
   type: 'object',
   properties: {
@@ -49,7 +57,7 @@ const objectSpec = {
     y: { type: 'number' },
     w: { type: 'number' },
     h: { type: 'number' },
-    text: { type: 'string', description: 'Label/content for sticky, text and shape objects' },
+    text: { type: 'string', description: 'Label/content for sticky, text and shape objects. Start the first line with an AI prefix ("ai:", "img:", "search:", …) to make the object a runnable AI node.' },
     name: { type: 'string', description: 'Frame title' },
     shape: { type: 'string', enum: ['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram'] },
     color: { type: 'string', description: 'Hex color — sticky background or text color' },
@@ -76,7 +84,7 @@ const TOOLS = [
   {
     name: 'read_board',
     description:
-      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames. Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
+      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames. Objects with "runnable": true are live AI nodes (executable via run_node). Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -107,7 +115,7 @@ const TOOLS = [
   {
     name: 'add_objects',
     description:
-      `Add a batch of objects (stickies, text, shapes, frames, connectors) to a board in ONE call — one call is one undo step and the objects animate in. ${LAYOUT_GUIDE}`,
+      `Add a batch of objects (stickies, text, shapes, frames, connectors) to a board in ONE call — one call is one undo step and the objects animate in. ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -153,7 +161,7 @@ const TOOLS = [
   {
     name: 'run_node',
     description:
-      'Run a runnable AI node on the board (same as the user pressing ▶). Waits up to timeoutSeconds (default 60) and returns the output; slow nodes (video, deep research) return a runId to poll with get_run_status.',
+      'Run a runnable AI node on the board (same as the user pressing ▶) — including nodes you just created with add_objects. Waits up to timeoutSeconds (default 60) and returns the output; slow nodes (video, deep research) return a runId to poll with get_run_status.',
     inputSchema: {
       type: 'object',
       properties: {
