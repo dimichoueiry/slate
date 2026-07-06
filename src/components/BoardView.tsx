@@ -16,6 +16,7 @@ import TopBar from './TopBar';
 import NotesPanel from './NotesPanel';
 import IconTray from './IconTray';
 import { stopAllSchedules, resumeVideoJobs } from '../ui/ainodes';
+import { registerCtl, unregisterCtl } from '../bridge/registry';
 import { isUploadable, readUpload, uploadLabel } from '../ui/upload';
 import { UPLOAD_ACCEPT } from '../ui/aiNodeButtons';
 import CommandPalette from './CommandPalette';
@@ -87,6 +88,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       useUI.getState().syncCanvasInk(!!meta.canvasDark);
       autosave = startAutosave(controller.doc, boardId);
       setLoaded(true);
+      registerCtl(controller, boardId); // expose the live doc to the MCP bridge
       resumeVideoJobs(controller); // resume any video jobs that were still rendering
     })();
 
@@ -103,6 +105,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
 
     return () => {
       cancelled = true;
+      unregisterCtl(controller);
       stopAllSchedules(); // don't let interval/timer nodes keep ticking after leaving the board
       ro.disconnect();
       // final flush + thumbnail

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useBridge } from '../bridge/bridge';
 import {
   activeProvider,
   DEFAULT_IMAGE_MODEL,
@@ -123,6 +124,7 @@ const CSS = `
 
 export default function SettingsPanel() {
   const [open, setOpen] = useState(false);
+  const bridgeStatus = useBridge((s) => s.status);
   const [key, setKey] = useState('');
   const [savedKey, setSavedKey] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -393,6 +395,24 @@ export default function SettingsPanel() {
             <input placeholder={DEFAULT_OLLAMA_URL} value={ollamaUrl} onChange={(e) => setOllamaUrlState(e.target.value)} />
             <label>Model</label>
             <input placeholder={DEFAULT_OLLAMA_MODEL} value={ollamaModel} onChange={(e) => setOllamaModelState(e.target.value)} />
+
+            <h3>Connect your agent (MCP)</h3>
+            <div className="slate-model-count" style={{ marginBottom: 6 }}>
+              Let Claude Code (or any MCP client) draw on and read from your canvas. Runs entirely on your
+              machine — Slate connects to it over localhost.
+              {bridgeStatus === 'connected' ? ' Status: ⚡ connected.' : ' Status: not connected.'}
+            </div>
+            <label>Add to Claude Code</label>
+            <input
+              readOnly
+              value="claude mcp add slate -- npx slate-mcp"
+              onFocus={(e) => e.currentTarget.select()}
+              style={{ fontFamily: 'monospace' }}
+            />
+            <div className="slate-model-count">
+              Then ask your agent to draw — a pairing code appears on first use. Objects the agent creates are
+              normal objects: move them, edit them, undo them.
+            </div>
 
             <h3>Brand kits</h3>
             <div className="settings-kits">

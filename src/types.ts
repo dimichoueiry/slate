@@ -37,6 +37,8 @@ interface BaseObj {
   locked?: boolean;
   groupId?: string | null;
   parentId?: string | null; // frame containment
+  /** provenance marker — objects created via the MCP agent bridge (PRD §7.3) */
+  createdBy?: 'agent';
   // vid: node params (only used on a video AI node)
   videoResolution?: string;
   videoAspect?: string;
