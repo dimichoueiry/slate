@@ -1138,6 +1138,16 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
     doc.commit();
     return;
   }
+  if (query.length > TAVILY_QUERY_MAX) {
+    for (const id of outIds)
+      setText(
+        ctl,
+        id,
+        `⚠ Query is ${query.length} characters — the search engine caps queries at ${TAVILY_QUERY_MAX}. Shorten it, or use an "ask:" node, which handles long questions and wired-in context.`
+      );
+    doc.commit();
+    return;
+  }
   for (const id of outIds) setText(ctl, id, '⏳ searching…');
   doc.commit();
 
@@ -1166,6 +1176,60 @@ async function executeSearch(ctl: AnyObj, node: AnyObj) {
 
 // ---------- ask: answered web search (search → LLM synthesis with citations) ----------
 
+// Tavily rejects search queries longer than 400 characters, so long questions
+// (e.g. a wired-in context node) must be distilled into short queries first.
+const TAVILY_QUERY_MAX = 400;
+
+interface WebResult {
+  title?: string;
+  url?: string;
+  content?: string;
+}
+
+/** Ask the LLM to turn a long question + context into 1–3 short search queries. */
+async function distillSearchQueries(question: string): Promise<string[]> {
+  const raw = await chat(
+    [
+      {
+        role: 'system',
+        content:
+          'You turn a question (possibly with a lot of pasted context) into web search queries. ' +
+          `Reply with ONLY a JSON array of 1–3 search query strings, each under ${TAVILY_QUERY_MAX} characters. ` +
+          'Queries must be self-contained and focused — what you would type into a search engine to answer the question.',
+      },
+      { role: 'user', content: question },
+    ],
+    { temperature: 0.2 }
+  );
+  const cleaned = raw.replace(/```(?:json)?/gi, '').trim();
+  let queries: string[] = [];
+  try {
+    const arr = JSON.parse(cleaned.slice(cleaned.indexOf('['), cleaned.lastIndexOf(']') + 1));
+    if (Array.isArray(arr)) queries = arr.map((q) => String(q).trim()).filter(Boolean);
+  } catch {
+    queries = cleaned
+      .split('\n')
+      .map((l) => l.replace(/^[-*\d.)"\s]+|["\s,]+$/g, '').trim())
+      .filter(Boolean);
+  }
+  queries = queries.filter((q) => q.length <= TAVILY_QUERY_MAX).slice(0, 3);
+  if (queries.length === 0) throw new Error('Could not derive search queries from the question — try shortening it.');
+  return queries;
+}
+
+/** Run one Tavily search via /api/search, tracking credit usage. */
+async function runWebSearch(query: string): Promise<{ results: WebResult[]; answer: string }> {
+  const res = await fetch('/api/search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `search failed (${res.status})`);
+  if (data?.usage?.credits) useUI.getState().addUsage({ tavilyCredits: data.usage.credits });
+  return { results: data?.results ?? [], answer: String(data?.answer ?? '') };
+}
+
 async function executeAsk(ctl: AnyObj, node: AnyObj) {
   const doc = ctl.doc;
   const typed = promptSource(node).replace(RUN, '').trim();
@@ -1182,16 +1246,32 @@ async function executeAsk(ctl: AnyObj, node: AnyObj) {
   doc.commit();
 
   try {
-    const res = await fetch('/api/search', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ query: question }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || `search failed (${res.status})`);
-    if (data?.usage?.credits) useUI.getState().addUsage({ tavilyCredits: data.usage.credits });
-    const results: { title?: string; url?: string; content?: string }[] = data?.results ?? [];
-    if (results.length === 0 && !data?.answer) throw new Error('No web results found for that question.');
+    // Perplexity-style: the search engine only ever sees short queries; the
+    // full question (with any wired-in context) still drives the final answer.
+    let queries = [question];
+    if (question.length > TAVILY_QUERY_MAX) {
+      doc.begin();
+      for (const id of outIds) setText(ctl, id, '⏳ turning the question into search queries…');
+      doc.commit();
+      queries = await distillSearchQueries(question);
+      doc.begin();
+      for (const id of outIds) setText(ctl, id, `⏳ searching the web (${queries.length} ${queries.length === 1 ? 'query' : 'queries'})…`);
+      doc.commit();
+    }
+
+    const searches = await Promise.all(queries.map(runWebSearch));
+    const seen = new Set<string>();
+    const results: WebResult[] = [];
+    for (const s of searches) {
+      for (const r of s.results) {
+        const key = r.url || r.title || '';
+        if (seen.has(key)) continue;
+        seen.add(key);
+        results.push(r);
+      }
+    }
+    const tavilyAnswers = searches.map((s) => s.answer).filter(Boolean).join('\n');
+    if (results.length === 0 && !tavilyAnswers) throw new Error('No web results found for that question.');
 
     const context = results
       .map((r, i) => `[${i + 1}] ${r.title || r.url}\nURL: ${r.url}\n${(r.content || '').slice(0, 1500)}`)
@@ -1207,7 +1287,7 @@ async function executeAsk(ctl: AnyObj, node: AnyObj) {
           role: 'system',
           content: getBasePrompt('search'),
         },
-        { role: 'user', content: `QUESTION: ${question}\n\nWEB RESULTS:\n${context || data?.answer || '(none)'}` },
+        { role: 'user', content: `QUESTION: ${question}\n\nWEB RESULTS:\n${context || tavilyAnswers || '(none)'}` },
       ],
       { temperature: 0.3 }
     );
