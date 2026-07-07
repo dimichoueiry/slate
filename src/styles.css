@@ -1079,6 +1079,26 @@ button { font-family: inherit; }
   line-height: 1.6;
 }
 
+/* data-safety status row (persist / auto-backup) */
+.durability {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: -32px 0 32px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.durability.warn {
+  color: var(--text);
+  background: rgba(255, 176, 32, 0.12);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.durability .chrome-btn { font-size: 12px; }
+.durability .chrome-btn.subtle { opacity: 0.7; }
+
 .board-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));

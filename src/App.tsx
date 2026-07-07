@@ -6,6 +6,7 @@ import BoardView from './components/BoardView';
 import SettingsPanel from './settings/SettingsPanel';
 import BridgeUI from './bridge/BridgeUI';
 import { startBridge } from './bridge/bridge';
+import { initDurability } from './store/durability';
 
 // marketing landing — lazy so it never weighs down the canvas bundle
 const Landing = lazy(() => import('./landing/Landing'));
@@ -30,7 +31,10 @@ export default function App() {
 
   // connect to a local slate-mcp bridge if one is running (no-op otherwise)
   useEffect(() => {
-    if (route.view !== 'welcome') startBridge();
+    if (route.view !== 'welcome') {
+      startBridge();
+      initDurability();
+    }
   }, [route.view]);
 
   if (route.view === 'welcome') {

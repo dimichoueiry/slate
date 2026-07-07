@@ -33,6 +33,13 @@ export interface PromptDef {
   createdAt: number;
 }
 
+/** Tiny key-value row for app-level state that must live in IndexedDB (e.g. the
+ *  auto-backup directory handle — FileSystemHandle survives only in IDB). */
+interface KvRow {
+  key: string;
+  value: unknown;
+}
+
 class SlateDB extends Dexie {
   boards!: EntityTable<BoardMeta, 'id'>;
   objects!: EntityTable<ObjectRow, 'id'>;
@@ -41,6 +48,7 @@ class SlateDB extends Dexie {
   prompts!: EntityTable<PromptDef, 'id'>;
   brandKits!: EntityTable<BrandKit, 'id'>;
   projects!: EntityTable<Project, 'id'>;
+  kv!: EntityTable<KvRow, 'key'>;
 
   constructor() {
     super('slate');
@@ -78,6 +86,16 @@ class SlateDB extends Dexie {
       prompts: 'id, createdAt',
       brandKits: 'id, createdAt',
       projects: 'id, createdAt',
+    });
+    this.version(6).stores({
+      boards: 'id, updatedAt, projectId',
+      objects: 'id, boardId',
+      blobs: 'id',
+      components: 'id, createdAt',
+      prompts: 'id, createdAt',
+      brandKits: 'id, createdAt',
+      projects: 'id, createdAt',
+      kv: 'key',
     });
   }
 }

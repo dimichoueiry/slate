@@ -16,7 +16,8 @@ import {
   setProjectKit,
   updateBoardMeta,
 } from '../store/db';
-import { importSlateFile } from '../export/export';
+import { importAnySlateFile, exportArchive, exportSlateFileById, downloadBlob } from '../export/export';
+import { useDurability, enableAutoBackup, regrantAutoBackup, disableAutoBackup } from '../store/durability';
 import { openBoard } from '../App';
 import { BRAND_PRESETS } from '../engine/brandPresets';
 import { nanoid } from 'nanoid';
@@ -97,11 +98,20 @@ export default function Home() {
   const onImport = async (file: File | undefined) => {
     if (!file) return;
     try {
-      const board = await importSlateFile(file);
-      openBoard(board.id);
+      const result = await importAnySlateFile(file);
+      if (result.kind === 'board') openBoard(result.board.id);
+      else {
+        alert(`Restored ${result.boards} board${result.boards === 1 ? '' : 's'} and ${result.projects} project${result.projects === 1 ? '' : 's'} from the archive.`);
+        refresh();
+      }
     } catch (err) {
       alert(`Import failed: ${err instanceof Error ? err.message : err}`);
     }
+  };
+
+  const onExportAll = async () => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadBlob(await exportArchive(), `slate-all-${stamp}.slate`);
   };
 
   const all = boards ?? [];
@@ -127,6 +137,9 @@ export default function Home() {
         <button className="chrome-btn" style={{ marginLeft: 8 }} onClick={() => fileRef.current?.click()}>
           Import .slate
         </button>
+        <button className="chrome-btn" style={{ marginLeft: 6 }} title="Download every board, project and asset as one backup file" onClick={() => void onExportAll()}>
+          ⬇ Export all
+        </button>
         <button className="chrome-btn" style={{ marginLeft: 6 }} onClick={onNewProject}>
           ＋ New project
         </button>
@@ -138,6 +151,8 @@ export default function Home() {
           onChange={(e) => onImport(e.target.files?.[0])}
         />
       </p>
+
+      <DurabilityBanner />
 
       {showOnboarding && (
         <div className="onboard-card">
@@ -234,6 +249,53 @@ export default function Home() {
   );
 }
 
+/**
+ * One quiet row about data safety. Loud only when something is actually wrong:
+ * the browser refused persistent storage, or backups stopped working.
+ */
+function DurabilityBanner() {
+  const { persisted, backup, lastBackupAt, backupError } = useDurability();
+
+  const atRisk = persisted === false;
+  if (!atRisk && backup === 'unsupported') return null; // nothing actionable to say
+
+  return (
+    <div className={`durability ${atRisk || backup === 'needs-permission' || backupError ? 'warn' : ''}`}>
+      {atRisk && (
+        <span>
+          ⚠ Your browser treats Slate's data as evictable — it can be deleted without warning.{' '}
+          {backup === 'ok' ? 'Auto-backup has you covered.' : 'Export or set up auto-backup.'}
+        </span>
+      )}
+      {backup === 'off' && (
+        <span>
+          🛟 Back up automatically to a folder on your disk —{' '}
+          <button className="chrome-btn" onClick={() => void enableAutoBackup()}>
+            Choose backup folder
+          </button>
+        </span>
+      )}
+      {backup === 'needs-permission' && (
+        <span>
+          🛟 Backups paused after browser restart —{' '}
+          <button className="chrome-btn" onClick={() => void regrantAutoBackup()}>
+            Resume backups
+          </button>
+        </span>
+      )}
+      {backup === 'ok' && (
+        <span>
+          🛟 Auto-backup on{lastBackupAt ? ` · last ${new Date(lastBackupAt).toLocaleTimeString()}` : ''}{' '}
+          <button className="chrome-btn subtle" title="Stop writing backups (existing files stay)" onClick={() => void disableAutoBackup()}>
+            turn off
+          </button>
+        </span>
+      )}
+      {backupError && <span>⚠ Last backup failed: {backupError}</span>}
+    </div>
+  );
+}
+
 function BoardCard({ board: b, projects, refresh }: { board: BoardMeta; projects: Project[]; refresh: () => void }) {
   return (
     <div className="board-card" onClick={() => openBoard(b.id)}>
@@ -291,6 +353,15 @@ function BoardCard({ board: b, projects, refresh }: { board: BoardMeta; projects
           }}
         >
           ⧉
+        </button>
+        <button
+          title="Export as .slate file"
+          onClick={async () => {
+            const out = await exportSlateFileById(b.id);
+            if (out) downloadBlob(out.blob, `${out.name}.slate`);
+          }}
+        >
+          ⬇
         </button>
         <button
           title="Delete"

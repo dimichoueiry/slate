@@ -269,48 +269,101 @@ interface SlateFile {
   blobs: Record<string, string>; // blobId -> dataURL
 }
 
-export async function exportSlateFile(meta: BoardMeta, doc: Doc): Promise<Blob> {
-  const objects = doc.allSorted();
+/** Everything on this machine in one file — boards, projects, kits, components, prompts, blobs. */
+export interface SlateArchive {
+  format: 'slate-archive';
+  version: 1;
+  exportedAt: number;
+  boards: { meta: BoardMeta; objects: SlateObj[] }[];
+  projects: unknown[];
+  brandKits: unknown[];
+  components: unknown[];
+  prompts: unknown[];
+  blobs: Record<string, string>; // blobId -> dataURL
+}
+
+/** Every blob id an object references — image, ready video, upload full-file content. */
+function blobIdsOf(o: SlateObj): string[] {
+  const ids: string[] = [];
+  if ((o.type === 'image' || o.type === 'video') && o.blobId && !String(o.blobId).startsWith('pending-')) ids.push(o.blobId);
+  const file = (o as { file?: { blobId?: string } }).file;
+  if (file?.blobId) ids.push(file.blobId);
+  return ids;
+}
+
+/** blobId -> dataURL for every blob the objects reference. Nothing is dropped. */
+async function collectBlobs(objects: SlateObj[]): Promise<Record<string, string>> {
   const blobs: Record<string, string> = {};
   for (const o of objects) {
-    if (o.type === 'image') {
-      const blob = await getBlob(o.blobId);
-      if (blob) blobs[o.blobId] = await blobToDataUrl(blob);
+    for (const id of blobIdsOf(o)) {
+      if (blobs[id]) continue;
+      const blob = await getBlob(id);
+      if (blob) blobs[id] = await blobToDataUrl(blob);
     }
   }
+  return blobs;
+}
+
+export async function exportSlateFile(meta: BoardMeta, doc: Doc): Promise<Blob> {
+  return buildSlateFile(meta, doc.allSorted());
+}
+
+/** Export a board straight from IndexedDB — no live doc needed (works from Home). */
+export async function exportSlateFileById(boardId: string): Promise<{ blob: Blob; name: string } | null> {
+  const meta = await db.boards.get(boardId);
+  if (!meta) return null;
+  const rows = await db.objects.where('boardId').equals(boardId).toArray();
+  return { blob: await buildSlateFile(meta, rows.map((r) => r.data)), name: meta.name };
+}
+
+async function buildSlateFile(meta: BoardMeta, objects: SlateObj[]): Promise<Blob> {
   const file: SlateFile = {
     format: 'slate',
     version: 1,
     board: { name: meta.name, viewport: meta.viewport },
     objects,
-    blobs,
+    blobs: await collectBlobs(objects),
   };
   return new Blob([JSON.stringify(file)], { type: 'application/json' });
+}
+
+/** Rewrites an imported object's blob references to the freshly-stored blob ids. */
+function remapBlobIds(o: SlateObj, blobIdMap: Map<string, string>) {
+  if ((o.type === 'image' || o.type === 'video') && blobIdMap.has(o.blobId)) o.blobId = blobIdMap.get(o.blobId)!;
+  const file = (o as { file?: { blobId?: string } }).file;
+  if (file?.blobId && blobIdMap.has(file.blobId)) file.blobId = blobIdMap.get(file.blobId)!;
 }
 
 export async function importSlateFile(file: File): Promise<BoardMeta> {
   const data = JSON.parse(await file.text()) as SlateFile;
   if (data.format !== 'slate') throw new Error('Not a .slate file');
+  const blobIdMap = await restoreBlobs(data.blobs);
   const board = await createBoard(data.board.name || file.name.replace(/\.slate$/, ''));
   await db.boards.update(board.id, { viewport: data.board.viewport });
+  await restoreBoardObjects(board.id, data.objects ?? [], blobIdMap);
+  return board;
+}
 
-  // re-store blobs under fresh ids
+/** Re-store blobs under fresh ids; returns old id -> new id. */
+async function restoreBlobs(blobs: Record<string, string> | undefined): Promise<Map<string, string>> {
   const blobIdMap = new Map<string, string>();
-  for (const [oldId, dataUrl] of Object.entries(data.blobs ?? {})) {
+  for (const [oldId, dataUrl] of Object.entries(blobs ?? {})) {
     const blob = await (await fetch(dataUrl)).blob();
     blobIdMap.set(oldId, await putBlob(blob));
   }
-  const objects = (data.objects ?? []).map((o) => {
+  return blobIdMap;
+}
+
+/** Clone objects under fresh ids into `boardId`, remapping refs (connectors, parents, blobs). */
+async function restoreBoardObjects(boardId: string, source: SlateObj[], blobIdMap: Map<string, string>) {
+  const objects = source.map((o) => {
     const clone = structuredClone(o);
     clone.id = nanoid(8);
-    if (clone.type === 'image' && blobIdMap.has(clone.blobId)) {
-      clone.blobId = blobIdMap.get(clone.blobId)!;
-    }
+    remapBlobIds(clone, blobIdMap);
     return clone;
   });
-  // remap connector references + parent/group ids
   const idMap = new Map<string, string>();
-  data.objects.forEach((orig, i) => idMap.set(orig.id, objects[i].id));
+  source.forEach((orig, i) => idMap.set(orig.id, objects[i].id));
   for (const o of objects) {
     if (o.parentId) o.parentId = idMap.get(o.parentId) ?? null;
     if (o.type === 'connector') {
@@ -318,8 +371,85 @@ export async function importSlateFile(file: File): Promise<BoardMeta> {
       if (o.to.objectId) o.to.objectId = idMap.get(o.to.objectId) ?? undefined;
     }
   }
-  await db.objects.bulkPut(objects.map((o) => ({ id: `${board.id}:${o.id}`, boardId: board.id, data: o })));
-  return board;
+  await db.objects.bulkPut(objects.map((o) => ({ id: `${boardId}:${o.id}`, boardId, data: o })));
+}
+
+// ---------- whole-workspace archive (backup / migration between machines & origins) ----------
+
+export async function exportArchive(): Promise<Blob> {
+  const [boards, projects, brandKits, components, prompts] = await Promise.all([
+    db.boards.toArray(),
+    db.projects.toArray(),
+    db.brandKits.toArray(),
+    db.components.toArray(),
+    db.prompts.toArray(),
+  ]);
+  const withObjects = await Promise.all(
+    boards.map(async (meta) => ({
+      meta,
+      objects: (await db.objects.where('boardId').equals(meta.id).toArray()).map((r) => r.data),
+    })),
+  );
+  // components carry objects too (their blobs must survive a restore)
+  const allObjects = [
+    ...withObjects.flatMap((b) => b.objects),
+    ...components.flatMap((c) => c.objects ?? []),
+  ];
+  const archive: SlateArchive = {
+    format: 'slate-archive',
+    version: 1,
+    exportedAt: Date.now(),
+    boards: withObjects,
+    projects,
+    brandKits,
+    components,
+    prompts,
+    blobs: await collectBlobs(allObjects),
+  };
+  return new Blob([JSON.stringify(archive)], { type: 'application/json' });
+}
+
+/** Restore an archive alongside existing data — nothing is overwritten; everything gets fresh ids. */
+export async function importArchive(file: File): Promise<{ boards: number; projects: number }> {
+  const data = JSON.parse(await file.text()) as SlateArchive;
+  if (data.format !== 'slate-archive') throw new Error('Not a Slate archive');
+  const blobIdMap = await restoreBlobs(data.blobs);
+
+  const projectIdMap = new Map<string, string>();
+  for (const p of (data.projects ?? []) as { id: string; name?: string }[]) {
+    const fresh = { ...p, id: nanoid(10) };
+    projectIdMap.set(p.id, fresh.id);
+    await db.projects.put(fresh as never);
+  }
+  for (const k of (data.brandKits ?? []) as { id: string }[]) await db.brandKits.put({ ...k, id: nanoid(10) } as never);
+  for (const c of (data.components ?? []) as { id: string; objects?: SlateObj[] }[]) {
+    const clone = structuredClone(c);
+    clone.id = nanoid(10);
+    for (const o of clone.objects ?? []) remapBlobIds(o, blobIdMap);
+    await db.components.put(clone as never);
+  }
+  for (const p of (data.prompts ?? []) as { id: string }[]) await db.prompts.put({ ...p, id: nanoid(10) } as never);
+
+  for (const b of data.boards ?? []) {
+    const meta: BoardMeta = {
+      ...b.meta,
+      id: nanoid(10),
+      projectId: b.meta.projectId ? projectIdMap.get(b.meta.projectId) ?? null : null,
+    };
+    await db.boards.put(meta);
+    await restoreBoardObjects(meta.id, b.objects ?? [], blobIdMap);
+  }
+  return { boards: (data.boards ?? []).length, projects: (data.projects ?? []).length };
+}
+
+/** Import either a single .slate board or a whole archive; dispatch on the format field. */
+export async function importAnySlateFile(file: File): Promise<{ kind: 'board'; board: BoardMeta } | { kind: 'archive'; boards: number; projects: number }> {
+  const text = await file.text();
+  const format = (JSON.parse(text) as { format?: string }).format;
+  // re-wrap so each importer can parse independently (files are small enough to re-read)
+  const clone = new File([text], file.name, { type: file.type });
+  if (format === 'slate-archive') return { kind: 'archive', ...(await importArchive(clone)) };
+  return { kind: 'board', board: await importSlateFile(clone) };
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
