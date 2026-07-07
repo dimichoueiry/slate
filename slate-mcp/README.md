@@ -9,7 +9,7 @@ Everything runs on your machine: the agent talks to this bridge over stdio, and 
 ## Setup
 
 ```sh
-claude mcp add slate -- npx @dimichoueiry/slate-mcp
+claude mcp add slate -- npx @dchoueiry/slate-mcp
 ```
 
 Then open Slate in your browser and ask your agent to draw something. On first use the agent shows you a 4-digit pairing code — type it into the dialog that appears in Slate. That's it; the pairing persists.

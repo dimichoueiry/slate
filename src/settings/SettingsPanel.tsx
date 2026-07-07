@@ -405,7 +405,7 @@ export default function SettingsPanel() {
             <label>Add to Claude Code</label>
             <input
               readOnly
-              value="claude mcp add slate -- npx @dimichoueiry/slate-mcp"
+              value="claude mcp add slate -- npx @dchoueiry/slate-mcp"
               onFocus={(e) => e.currentTarget.select()}
               style={{ fontFamily: 'monospace' }}
             />
