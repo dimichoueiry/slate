@@ -1,6 +1,14 @@
 {
-  "name": "slate-mcp",
+  "name": "@dimichoueiry/slate-mcp",
   "version": "0.3.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dimichoueiry/slate.git",
+    "directory": "slate-mcp"
+  },
   "description": "MCP bridge that lets a local coding agent (Claude Code or any MCP client) draw on and read from your Slate canvas.",
   "license": "MIT",
   "type": "module",
