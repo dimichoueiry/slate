@@ -102,6 +102,15 @@ class SlateDB extends Dexie {
 
 export const db = new SlateDB();
 
+// When another tab (e.g. one running a newer deploy) upgrades the schema, this
+// tab's connection gets force-closed and every query starts failing — which the
+// UI used to render as an EMPTY board list, indistinguishable from data loss.
+// Reload instead: the tab comes back on the new code with the data intact.
+db.on('versionchange', () => {
+  db.close();
+  location.reload();
+});
+
 export async function listBoards(): Promise<BoardMeta[]> {
   const boards = await db.boards.toArray();
   return boards.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt);

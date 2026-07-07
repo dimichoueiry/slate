@@ -36,12 +36,15 @@ export default function Home() {
       return true;
     }
   });
+  const [dbError, setDbError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = () => {
-    void listBoards().then(setBoards);
-    void listProjects().then(setProjects);
-    void listBrandKits().then(setKits);
+    // a failed read must NEVER render as an empty board list — that reads as
+    // "all my boards got deleted" when the truth is "couldn't open storage"
+    listBoards().then(setBoards, (e) => setDbError(String(e?.message ?? e)));
+    void listProjects().then(setProjects).catch(() => undefined);
+    void listBrandKits().then(setKits).catch(() => undefined);
   };
   useEffect(() => {
     refresh();
@@ -119,6 +122,26 @@ export default function Home() {
 
   const theme = useUI((s) => s.theme);
   const toggleTheme = useUI((s) => s.toggleTheme);
+
+  if (dbError) {
+    return (
+      <div className="home">
+        <h1>
+          <span className="logo">▱</span> Slate
+        </h1>
+        <div className="durability warn" style={{ margin: '24px 0', maxWidth: 720 }}>
+          <span>
+            ⚠ Slate couldn't open its local storage — your boards are <b>not deleted</b>, this tab just lost its
+            connection (usually after an update in another tab).{' '}
+            <button className="chrome-btn" onClick={() => location.reload()}>
+              Reload to reconnect
+            </button>
+          </span>
+          <span style={{ opacity: 0.7, fontSize: 12 }}>({dbError})</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="home">
