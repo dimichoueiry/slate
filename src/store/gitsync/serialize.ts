@@ -218,6 +218,41 @@ export async function serializeWorkspace(): Promise<Serialized> {
 
 const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
+// ---------- README index (human-browsable mirror of the dashboard) ----------
+
+/**
+ * The repo's front page: the dashboard structure (projects → boards) rendered
+ * as markdown. Files stay keyed by immutable board id (renames/moves never
+ * churn files); this index is where humans browse.
+ */
+export async function buildReadme(): Promise<string> {
+  const [boards, projects] = await Promise.all([db.boards.toArray(), db.projects.toArray()]);
+  const byUpdated = (a: BoardMeta, b: BoardMeta) => b.updatedAt - a.updatedAt;
+  const line = (b: BoardMeta) =>
+    `- [${escapeMd(b.name)}](slate/boards/${b.id}.json) — updated ${new Date(b.updatedAt).toISOString().slice(0, 10)}`;
+
+  const parts: string[] = [
+    '# Slate boards',
+    '',
+    '_Synced by [Slate](https://github.com/dimichoueiry/slate). This index is regenerated on every sync — edits to it will be overwritten._',
+    '',
+  ];
+  const general = boards.filter((b) => !b.projectId).sort(byUpdated);
+  if (general.length) {
+    parts.push('## General', '', ...general.map(line), '');
+  }
+  for (const p of projects.sort((a, b) => a.createdAt - b.createdAt)) {
+    const inProject = boards.filter((b) => b.projectId === p.id).sort(byUpdated);
+    parts.push(`## ${escapeMd(p.name)}`, '', ...(inProject.length ? inProject.map(line) : ['_no boards yet_']), '');
+  }
+  if (!boards.length) parts.push('_No boards yet._', '');
+  return parts.join('\n');
+}
+
+function escapeMd(s: string): string {
+  return s.replace(/([\\`*_[\]<>])/g, '\\$1');
+}
+
 export function parseWorkspaceFile(json: string): WorkspaceFile {
   const data = JSON.parse(json) as WorkspaceFile;
   if (data.format !== 'slate-git-workspace') throw new Error('Not a valid Slate workspace file');

@@ -16,6 +16,7 @@ import { GitClient, GitSyncError, textToBytes, bytesToText, type GitSyncConfig }
 import {
   applyRemoteBoard,
   applyRemoteWorkspace,
+  buildReadme,
   hashText,
   parseBoardFile,
   parseWorkspaceFile,
@@ -45,6 +46,8 @@ interface BoardSyncState {
 interface SyncState {
   boards: Record<string, BoardSyncState>;
   workspace?: BoardSyncState;
+  /** the generated README.md board index at the repo root */
+  readme?: BoardSyncState;
   /** board ids deleted locally whose repo file still needs deleting */
   pendingDeletes: Record<string, true>;
   /** content hashes known to exist in the repo (assets are immutable) */
@@ -223,9 +226,32 @@ async function flushBoard(boardId: string): Promise<void> {
     }
   }
   dirtyBoards.delete(boardId);
+  await updateReadme();
   useGitSync.setState({ lastSyncAt: Date.now() });
   await persistState();
   refreshStatus();
+}
+
+/**
+ * The README.md at the repo root mirrors the dashboard (projects → boards) so
+ * the repo is browsable by humans; the id-keyed files stay rename-proof. Ours
+ * always wins a conflict — the file is generated, there's nothing to preserve.
+ */
+async function updateReadme(): Promise<void> {
+  if (!client) return;
+  const md = await buildReadme();
+  const hash = await hashText(md);
+  if (state.readme?.pushedHash === hash) return;
+  const put = (sha: string | null) => client!.putFile('README.md', textToBytes(md), 'slate: update board index', sha);
+  try {
+    const sha = await put(state.readme?.remoteSha ?? null);
+    state.readme = { pushedHash: hash, remoteSha: sha };
+  } catch (e) {
+    if (!(e instanceof GitSyncError) || (e.kind !== 'conflict' && e.kind !== 'not-found')) throw e;
+    const fresh = await client.getFile('README.md');
+    const sha = await put(fresh?.sha ?? null);
+    state.readme = { pushedHash: hash, remoteSha: sha };
+  }
 }
 
 /**
@@ -295,6 +321,7 @@ async function flushWorkspace(): Promise<void> {
     }
   }
   workspaceDirty = false;
+  await updateReadme();
   useGitSync.setState({ lastSyncAt: Date.now() });
   await persistState();
   refreshStatus();
@@ -319,6 +346,7 @@ async function flushDelete(boardId: string): Promise<void> {
   }
   delete state.pendingDeletes[boardId];
   delete state.boards[boardId];
+  await updateReadme();
   useGitSync.setState({ lastSyncAt: Date.now() });
   await persistState();
   refreshStatus();
@@ -462,6 +490,7 @@ async function catchUp(): Promise<void> {
       : { pushedHash: '', remoteSha: remoteWs.sha };
   }
   await flushWorkspace();
+  await updateReadme(); // flushWorkspace skips it when the workspace is unchanged, but pulled boards still change the index
 
   useGitSync.setState({ lastSyncAt: Date.now() });
   await persistState();
