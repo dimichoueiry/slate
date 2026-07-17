@@ -7,6 +7,8 @@ import SettingsPanel from './settings/SettingsPanel';
 import BridgeUI from './bridge/BridgeUI';
 import { startBridge } from './bridge/bridge';
 import { initDurability } from './store/durability';
+import { initGitSync } from './store/gitsync/engine';
+import GitSyncIndicator from './components/GitSyncIndicator';
 
 // marketing landing — lazy so it never weighs down the canvas bundle
 const Landing = lazy(() => import('./landing/Landing'));
@@ -34,6 +36,7 @@ export default function App() {
     if (route.view !== 'welcome') {
       startBridge();
       initDurability();
+      initGitSync();
     }
   }, [route.view]);
 
@@ -52,6 +55,8 @@ export default function App() {
       <SettingsPanel />
       {/* MCP agent bridge indicator + pairing dialog */}
       <BridgeUI />
+      {/* Git sync status pill (only when a repo is connected) */}
+      <GitSyncIndicator />
     </>
   );
 }

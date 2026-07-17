@@ -3,6 +3,7 @@ import { goHome } from '../App';
 import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
 import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit } from '../store/db';
+import { pullBoardOnOpen } from '../store/gitsync/engine';
 import { useUI } from '../store/ui';
 import { setCanvasDark } from '../store/theme';
 import type { ToolId } from '../types';
@@ -72,6 +73,9 @@ export default function BoardView({ boardId }: { boardId: string }) {
     let cancelled = false;
 
     (async () => {
+      // bring in the repo version first if git sync is on and it moved (no-op otherwise;
+      // errors surface on the sync indicator and never block opening)
+      await pullBoardOnOpen(boardId).catch(() => undefined);
       const meta = await db.boards.get(boardId);
       if (!meta) {
         goHome();

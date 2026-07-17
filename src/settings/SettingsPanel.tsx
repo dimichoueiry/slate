@@ -29,6 +29,7 @@ import {
 import type { BrandKit } from '../types';
 import { listBrandKits, getDefaultKitId, setDefaultKitId } from '../store/db';
 import { BrandKitEditor, blankKit } from '../components/BrandKit';
+import GitSyncSettings from './GitSyncSettings';
 import {
   BASE_PROMPT_LABELS,
   DEFAULT_BASE_PROMPTS,
@@ -413,6 +414,8 @@ export default function SettingsPanel() {
               Then ask your agent to draw — a pairing code appears on first use. Objects the agent creates are
               normal objects: move them, edit them, undo them.
             </div>
+
+            <GitSyncSettings />
 
             <h3>Brand kits</h3>
             <div className="settings-kits">
