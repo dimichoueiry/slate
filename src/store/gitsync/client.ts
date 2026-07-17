@@ -77,7 +77,10 @@ export class GitClient {
   constructor(private cfg: GitSyncConfig) {}
 
   private url(path: string): string {
-    return `${apiBase(this.cfg.host)}/repos/${this.cfg.owner}/${this.cfg.repo}/${path}`;
+    const repo = `${apiBase(this.cfg.host)}/repos/${this.cfg.owner}/${this.cfg.repo}`;
+    // no trailing slash on the bare-repo URL — GitHub 404s it (which the
+    // browser reports as a failed CORS preflight, masking the real cause)
+    return path ? `${repo}/${path}` : repo;
   }
 
   private async request(path: string, init?: RequestInit): Promise<Response> {
