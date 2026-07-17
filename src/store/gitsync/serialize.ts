@@ -53,7 +53,9 @@ export async function hashText(text: string): Promise<string> {
 
 /** JSON.stringify with recursively sorted keys — deterministic across machines. */
 export function stableStringify(value: unknown): string {
-  return JSON.stringify(sortKeys(value));
+  // pretty-printed so the repo files are actually readable and diffable on
+  // GitHub — the size cost mostly disappears under git's own compression
+  return JSON.stringify(sortKeys(value), null, 2);
 }
 
 function sortKeys(value: unknown): unknown {
@@ -106,8 +108,12 @@ async function collectAssets(objects: SlateObj[]): Promise<{ refs: Record<string
 // ---------- board ----------
 
 export async function serializeBoard(boardId: string): Promise<Serialized | null> {
-  const meta = await db.boards.get(boardId);
-  if (!meta) return null;
+  const full = await db.boards.get(boardId);
+  if (!full) return null;
+  // thumb is a regenerated preview PNG (data URL): derived cache, not user
+  // data. Inlining it would swamp the file and commit churn on every close.
+  const meta: BoardMeta = { ...full };
+  delete meta.thumb;
   const rows = await db.objects.where('boardId').equals(boardId).toArray();
   const objects = rows.map((r) => r.data).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const { refs, assets } = await collectAssets(objects);
@@ -144,7 +150,10 @@ export async function applyRemoteBoard(
     if (blobPuts.length) await db.blobs.bulkPut(blobPuts);
     await db.objects.where('boardId').equals(boardId).delete();
     await db.objects.bulkPut(data.objects.map((o) => ({ id: `${boardId}:${o.id}`, boardId, data: o })));
-    await db.boards.put(data.meta);
+    // repo files carry no thumb (derived cache) — keep the local one so the
+    // dashboard preview survives a pull; it regenerates on next open anyway
+    const local = await db.boards.get(boardId);
+    await db.boards.put(data.meta.thumb || !local?.thumb ? data.meta : { ...data.meta, thumb: local.thumb });
   });
 }
 
