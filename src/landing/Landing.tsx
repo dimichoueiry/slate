@@ -96,6 +96,9 @@ export default function Landing() {
             Slate
           </button>
           <div className="lp-nav-links">
+            <a href="#agent" onClick={jump('agent')}>
+              Your agent
+            </a>
             <a href="#how" onClick={jump('how')}>
               How it works
             </a>
@@ -104,9 +107,6 @@ export default function Landing() {
             </a>
             <a href="#features" onClick={jump('features')}>
               Features
-            </a>
-            <a href="#agent" onClick={jump('agent')}>
-              Your agent
             </a>
           </div>
           <button className="lp-btn lp-btn-primary lp-btn-sm lp-nav-cta" onClick={open}>
@@ -148,6 +148,71 @@ export default function Landing() {
           </motion.div>
 
           <HeroDashboard />
+        </div>
+      </section>
+
+      {/* your agent can draw — right after the hero: a headline capability */}
+      <section className="lp-section" id="agent">
+        <div className="lp-wrap">
+          <Reveal>
+            <div className="lp-sec-head">
+              <p className="lp-kicker">MCP built in</p>
+              <h2 className="lp-h2">Your coding agent can draw here.</h2>
+              <p className="lp-sec-lede">
+                Slate ships with an MCP bridge. One command connects Claude Code — or any MCP client —
+                and your agent can sketch architectures, diagram plans and read your canvas, live,
+                while you watch.
+              </p>
+            </div>
+          </Reveal>
+          <Reveal delay={0.08}>
+            <div className="lp-agent-cmd">
+              <span className="lp-agent-prompt">$</span>
+              <code>{MCP_CMD}</code>
+              <button className="lp-agent-copy" onClick={copyCmd} aria-label="Copy command">
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+          </Reveal>
+          <div className="lp-steps">
+            {[
+              {
+                t: 'It draws where you look',
+                b: (
+                  <>
+                    Ask your agent for a diagram and it appears on your open board — stickies, shapes,
+                    wired flows. All normal objects: move them, edit them, undo them.
+                  </>
+                ),
+              },
+              {
+                t: 'It sees what you see',
+                b: (
+                  <>
+                    The agent can read the board, ask what you've selected, even render the canvas as an
+                    image to check its own layout. Select something and say "make these blue."
+                  </>
+                ),
+              },
+              {
+                t: 'Local and paired',
+                b: (
+                  <>
+                    The bridge runs only on your machine (<code>127.0.0.1</code>), locked with a one-time
+                    pairing code. Nothing is ever exposed to the internet.
+                  </>
+                ),
+              },
+            ].map((s, i) => (
+              <Reveal key={s.t} delay={i * 0.08}>
+                <div className="lp-step">
+                  <div className="lp-step-num">0{i + 1}</div>
+                  <h3>{s.t}</h3>
+                  <p>{s.b}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -267,71 +332,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* your agent can draw */}
-      <section className="lp-section" id="agent">
-        <div className="lp-wrap">
-          <Reveal>
-            <div className="lp-sec-head">
-              <p className="lp-kicker">MCP built in</p>
-              <h2 className="lp-h2">Your coding agent can draw here.</h2>
-              <p className="lp-sec-lede">
-                Slate ships with an MCP bridge. One command connects Claude Code — or any MCP client —
-                and your agent can sketch architectures, diagram plans and read your canvas, live,
-                while you watch.
-              </p>
-            </div>
-          </Reveal>
-          <Reveal delay={0.08}>
-            <div className="lp-agent-cmd">
-              <span className="lp-agent-prompt">$</span>
-              <code>{MCP_CMD}</code>
-              <button className="lp-agent-copy" onClick={copyCmd} aria-label="Copy command">
-                {copied ? 'Copied ✓' : 'Copy'}
-              </button>
-            </div>
-          </Reveal>
-          <div className="lp-steps">
-            {[
-              {
-                t: 'It draws where you look',
-                b: (
-                  <>
-                    Ask your agent for a diagram and it appears on your open board — stickies, shapes,
-                    wired flows. All normal objects: move them, edit them, undo them.
-                  </>
-                ),
-              },
-              {
-                t: 'It sees what you see',
-                b: (
-                  <>
-                    The agent can read the board, ask what you've selected, even render the canvas as an
-                    image to check its own layout. Select something and say "make these blue."
-                  </>
-                ),
-              },
-              {
-                t: 'Local and paired',
-                b: (
-                  <>
-                    The bridge runs only on your machine (<code>127.0.0.1</code>), locked with a one-time
-                    pairing code. Nothing is ever exposed to the internet.
-                  </>
-                ),
-              },
-            ].map((s, i) => (
-              <Reveal key={s.t} delay={i * 0.08}>
-                <div className="lp-step">
-                  <div className="lp-step-num">0{i + 1}</div>
-                  <h3>{s.t}</h3>
-                  <p>{s.b}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* final CTA */}
       <section className="lp-final">
         <div className="lp-wrap">
@@ -358,6 +358,9 @@ export default function Landing() {
             Slate
           </button>
           <div className="lp-footer-links">
+            <a href="#agent" onClick={jump('agent')}>
+              Your agent
+            </a>
             <a href="#how" onClick={jump('how')}>
               How it works
             </a>
@@ -366,9 +369,6 @@ export default function Landing() {
             </a>
             <a href="#features" onClick={jump('features')}>
               Features
-            </a>
-            <a href="#agent" onClick={jump('agent')}>
-              Your agent
             </a>
           </div>
           <span>Built entirely on MIT-licensed open source.</span>
