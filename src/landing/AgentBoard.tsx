@@ -152,7 +152,7 @@ export default function AgentBoard({ onBack }: { onBack: () => void }) {
     const maxY = Math.max(...rs.map((r) => r.y + r.h));
     const padX = 64;
     const padTop = 70;
-    const padBottom = 110; // room for the prompt bar
+    const padBottom = 158; // room for the prompt bar floating above the zoom row
     const w = maxX - minX;
     const h = maxY - minY;
     const scale = clamp(Math.min((size.w - 2 * padX) / w, (size.h - padTop - padBottom) / h), 0.4, 1);

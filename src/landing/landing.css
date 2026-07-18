@@ -2132,7 +2132,10 @@
 .lp-ask {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  /* floats ABOVE the zoom/minimap chrome band so they never collide,
+     whatever the board width (the coach bar gets away with bottom:12 only
+     because it's a compact single row) */
+  bottom: 64px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -2140,7 +2143,7 @@
   width: min(440px, calc(100% - 32px));
   padding: 10px 12px;
   border-radius: 14px;
-  z-index: 5;
+  z-index: 34;
 }
 .lp-ask-chip {
   align-self: flex-start;
