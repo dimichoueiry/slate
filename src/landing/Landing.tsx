@@ -144,6 +144,9 @@ export default function Landing() {
               <span>
                 <Svg d={ICON.infinity} size={16} /> Never runs out of page
               </span>
+              <span>
+                <Svg d={ICON.brand} size={16} /> Your agent can draw
+              </span>
             </div>
           </motion.div>
 

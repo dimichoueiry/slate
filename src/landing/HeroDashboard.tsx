@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { goHome } from '../App';
 import BoardShowcase from './BoardShowcase';
+import AgentBoard from './AgentBoard';
 import RunnableBoard, { type RScene } from './RunnableBoard';
 import { cobblestoneScene, kidDrawingScene, youtubeScene } from './examples';
 
@@ -28,7 +29,7 @@ type Scene = {
   id: string;
   name: string;
   date: string;
-  kind?: 'growth' | 'runnable' | 'static';
+  kind?: 'growth' | 'runnable' | 'static' | 'agent';
   runnable?: RScene;
   objects: SObj[];
   wires: SWire[];
@@ -44,6 +45,25 @@ const estH = (o: SObj) =>
       : 30 + (o.body ? o.body.split('\n').length : 0) * 13;
 
 const SCENES: Scene[] = [
+  {
+    id: 'agent',
+    name: 'Ask your agent',
+    date: 'now',
+    kind: 'agent',
+    objects: [
+      { id: 'ag', x: 20, y: 30, w: 120, color: '#FFD6A5', title: 'Claude Code' },
+      { id: 'mc', x: 180, y: 30, w: 130, kind: 'node', color: '#FFE066', body: 'mcp: bridge' },
+      { id: 'ap', x: 350, y: 30, w: 140, color: '#A8D8EA', title: 'Browser tab', body: 'the app' },
+      { id: 'db', x: 350, y: 170, w: 140, color: '#B5EAD7', title: 'IndexedDB', body: 'local' },
+      { id: 'gh', x: 530, y: 170, w: 130, kind: 'out', title: 'GitHub', body: 'yours' },
+    ],
+    wires: [
+      { from: 'ag', to: 'mc' },
+      { from: 'mc', to: 'ap' },
+      { from: 'ap', to: 'db' },
+      { from: 'db', to: 'gh', dashed: true },
+    ],
+  },
   {
     id: 'growth',
     name: 'Growth board',
@@ -366,7 +386,7 @@ export default function HeroDashboard() {
                   >
                     <div className="lp-dash-thumb">
                       <Thumb scene={s} />
-                      {(s.kind === 'growth' || s.kind === 'runnable') && (
+                      {(s.kind === 'growth' || s.kind === 'runnable' || s.kind === 'agent') && (
                         <span className="lp-dash-live">▶ Try it</span>
                       )}
                     </div>
@@ -388,7 +408,9 @@ export default function HeroDashboard() {
             exit={{ opacity: 0, transition: { duration: 0.16 } }}
             transition={{ duration: 0.45, ease: E }}
           >
-            {scene.kind === 'growth' ? (
+            {scene.kind === 'agent' ? (
+              <AgentBoard onBack={() => setOpen(null)} />
+            ) : scene.kind === 'growth' ? (
               <BoardShowcase onBack={() => setOpen(null)} />
             ) : scene.kind === 'runnable' && scene.runnable ? (
               <RunnableBoard scene={scene.runnable} onBack={() => setOpen(null)} />
