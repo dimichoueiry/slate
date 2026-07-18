@@ -139,13 +139,10 @@ export default function Landing() {
             </div>
             <div className="lp-hero-tags">
               <span>
-                <Svg d={ICON.shield} size={16} /> Runs offline
-              </span>
-              <span>
-                <Svg d={ICON.infinity} size={16} /> Never runs out of page
-              </span>
-              <span>
                 <Svg d={ICON.brand} size={16} /> Your agent can draw
+              </span>
+              <span>
+                <Svg d={ICON.link} size={16} /> AI-native workflows, straight from your board
               </span>
             </div>
           </motion.div>
