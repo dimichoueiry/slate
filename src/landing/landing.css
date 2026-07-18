@@ -2131,12 +2131,15 @@
 /* ---- "Ask your agent" board: the docked prompt bar simulation ---- */
 .lp-ask {
   position: absolute;
-  left: 50%;
+  /* centered with auto margins, NOT translateX — this is a framer-motion
+     element, and its y-animation owns the transform property outright */
+  left: 0;
+  right: 0;
+  margin: 0 auto;
   /* floats ABOVE the zoom/minimap chrome band so they never collide,
      whatever the board width (the coach bar gets away with bottom:12 only
      because it's a compact single row) */
   bottom: 64px;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -2208,7 +2211,8 @@
   flex-direction: row;
   align-items: center;
   gap: 10px;
-  width: auto;
+  /* left:0/right:0 + margin:auto would stretch width:auto — pin to content */
+  width: fit-content;
   max-width: calc(100% - 32px);
   font-size: 12.5px;
   color: var(--chrome-fg);
