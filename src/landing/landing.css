@@ -2074,3 +2074,56 @@
     animation: none;
   }
 }
+
+/* ---- "your agent can draw" — the MCP connect command ---- */
+.lp-agent-cmd {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 620px;
+  margin: 0 auto 56px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  box-shadow: inset 2px 0 0 var(--ac), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.lp-agent-prompt {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  color: var(--faint);
+  user-select: none;
+}
+.lp-agent-cmd code {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 13.5px;
+  color: var(--ac-hi);
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lp-agent-copy {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  background: var(--surface-2);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.lp-agent-copy:hover {
+  background: var(--surface-hover);
+  border-color: var(--ac);
+}
+@media (max-width: 640px) {
+  .lp-agent-cmd {
+    margin-bottom: 40px;
+  }
+  .lp-agent-cmd code {
+    font-size: 12px;
+  }
+}
