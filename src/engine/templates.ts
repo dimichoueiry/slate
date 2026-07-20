@@ -339,4 +339,84 @@ export const TEMPLATES: TemplateDef[] = [
       ];
     },
   },
+  {
+    id: 'character-generation',
+    name: 'Character generation',
+    description: 'Describe a character once → 8 pose cards, each generating one on-model pixel sprite.',
+    build: () => {
+      const head = label(0, 0, 'Character generation — one prompt, one sprite');
+      const brief = sticky(
+        0,
+        60,
+        'CHARACTER + STYLE BRIEF — wired into every pose card →\n\n== CHARACTER (replace with yours) ==\nA young knight hero: cyan rounded helmet, light-blue chest armor over a navy bodysuit, dark navy gloves and boots, round wooden shield with an iron rim, a short broadsword with an orange hilt. Determined face, big expressive eyes.\n\n== STYLE (edit once, applies to all) ==\n16-bit pixel art, SNES-era feel: chunky 2–3 px outlines, limited 16-color palette with cel shading, no anti-aliasing, subtle dithering, clean readable silhouette, heroic 2:3 head-to-body proportions.',
+        '#BFDBFE',
+        320,
+        430
+      );
+      const howTo = sticky(
+        0,
+        520,
+        'HOW TO USE\n\n1. Edit the blue brief so it describes YOUR character.\n2. Press ▶ on any teal pose card — it generates ONE sprite beside the card.\n3. Rerun to reroll. For the next animation frame, edit only the card’s last POSE line and run again.\n\nStronger likeness: drop your reference image on the board and wire it INTO each pose card — anything wired in is fed to the generator.',
+        '#FDE68A',
+        320,
+        330
+      );
+
+      const POSE_PROMPT =
+        'img: ONE pixel-art game sprite of the wired character, in the wired style, exactly one full-body character centered on a plain white background, no text, no grid.\n\nPOSE — ';
+      const poses = [
+        'IDLE: standing upright and relaxed, facing right, feet shoulder-width apart, arms at sides, sword sheathed.',
+        'WALK frame 1: mid-stride walking to the right, right foot forward, arms swinging naturally, relaxed pace.',
+        'RUN frame 1: full sprint to the right, body leaning forward, both knees bent high, arms pumping.',
+        'JUMP: airborne, knees tucked up, one arm raised, facing right, clearly off the ground.',
+        'ATTACK: mid sword-swing to the right, blade arcing overhead, shield arm tucked back, wide action stance.',
+        'BLOCK: crouched guard stance facing right, shield raised in front covering the torso, sword held low behind.',
+        'HURT: recoiling from a hit, knocked back to the left, eyes squeezed shut, arms flailing, off balance.',
+        'VICTORY: facing the viewer, sword raised triumphantly overhead, other fist on hip, big happy grin.',
+      ];
+      const cards = poses.map((p, i) =>
+        sticky(380 + (i % 4) * 320, 60 + Math.floor(i / 4) * 320, POSE_PROMPT + p, '#99F6E4', 290, 290)
+      );
+      return [head, brief, howTo, ...cards, ...cards.map((c) => connect(brief, c))];
+    },
+  },
+  {
+    id: 'animation-strips',
+    name: 'Animation strips',
+    description: 'One character brief → runnable cards that each generate a full animation sprite strip.',
+    build: () => {
+      const head = label(0, 0, 'Animation strips — one run, one movement sheet');
+      const brief = sticky(
+        0,
+        60,
+        'CHARACTER + STYLE BRIEF — wired into every strip card →\n\n== CHARACTER (replace with yours) ==\nA young knight hero: cyan rounded helmet, light-blue chest armor over a navy bodysuit, dark navy gloves and boots, round wooden shield with an iron rim, a short broadsword with an orange hilt. Determined face, big expressive eyes.\n\n== STYLE (edit once, applies to all) ==\n16-bit pixel art, SNES-era feel: chunky 2–3 px outlines, limited 16-color palette with cel shading, no anti-aliasing, subtle dithering, clean readable silhouette, heroic 2:3 head-to-body proportions.',
+        '#BFDBFE',
+        320,
+        430
+      );
+      const howTo = sticky(
+        0,
+        520,
+        'HOW TO USE\n\n1. Edit the blue brief to YOUR character. Wire your reference image into each card for a stronger likeness.\n2. Press ▶ on a card — one run = one full strip.\n3. Frame counts are editable: change “EXACTLY 6 frames” to 8 for smoother cycles.\n\nReality check: strips are rarely perfectly grid-aligned — expect to re-slice in a sprite editor (Aseprite, Piskel). If one frame breaks character, reroll or patch in a single pose.',
+        '#FDE68A',
+        320,
+        360
+      );
+
+      const strip = (frames: number, movement: string) =>
+        `img: A pixel-art animation sprite sheet of the wired character, in the wired style: EXACTLY ${frames} frames of the same character in one single horizontal row, all frames identical in size and proportions, evenly spaced as equal invisible cells, plain white background, no grid lines, no borders, no text, no numbers.\n\nMOVEMENT — ${movement}`;
+      const movements: [number, string][] = [
+        [6, 'WALK CYCLE (loops): 1 right foot forward touching ground · 2 weight on right leg, body at its lowest · 3 legs passing together, body rising · 4 left foot forward touching ground · 5 weight on left leg, body lowest · 6 legs passing, body rising. Arms swing opposite the legs, slight up-down bob.'],
+        [6, 'RUN CYCLE (loops): 1 push-off with a deep forward lean · 2 airborne, legs split wide mid-stride · 3 right foot lands, knee bent · 4 push-off again · 5 airborne, legs swapped · 6 left foot lands. Fists pumping opposite the legs; more lean and longer stride than a walk.'],
+        [5, 'JUMP ARC (plays once): 1 crouch, knees bent deep in anticipation · 2 launch, body stretched tall, arms thrown up · 3 apex, knees tucked under · 4 falling, legs reaching down, arms raised · 5 landing crouch, absorbing the impact.'],
+        [4, 'SWORD ATTACK (plays once): 1 windup, sword pulled back over the shoulder, shield tucked · 2 swing, blade arcing overhead · 3 follow-through, blade fully down in front, body twisted into it · 4 recover back to guard stance.'],
+        [4, 'HURT & KNOCKDOWN (plays once): 1 impact flinch, head snapped back · 2 knocked backward, off balance, arms flailing · 3 falling, body tilted, feet leaving the ground · 4 down on the ground, dazed.'],
+        [4, 'IDLE BREATHING (loops, subtle): 1 neutral stance · 2 inhale, chest and shoulders rise slightly · 3 peak of the breath, head one pixel higher · 4 settle back to neutral. Keep the changes between frames tiny — this loop should feel calm.'],
+      ];
+      const cards = movements.map(([frames, movement], i) =>
+        sticky(380 + (i % 2) * 500, 60 + Math.floor(i / 2) * 330, strip(frames, movement), '#99F6E4', 470, 310)
+      );
+      return [head, brief, howTo, ...cards, ...cards.map((c) => connect(brief, c))];
+    },
+  },
 ];
