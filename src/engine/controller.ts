@@ -1889,10 +1889,19 @@ export class Controller {
         s.size = Math.max(0.5, s.size * (Math.abs(sx) + Math.abs(sy)) / 2);
       } else if (next.type === 'text') {
         const t = next as TextObj;
-        t.fontSize = Math.max(6, t.fontSize * Math.abs(sy));
-        const m = textBlockSize(t.text || ' ', t.fontSize, t.fixedWidth ? nw : undefined, 400, t.fontFamily);
-        t.w = t.fixedWidth ? nw : m.w;
-        t.h = m.h;
+        if (it.origins.size === 1) {
+          const width = Math.max(8, nw);
+          const m = textBlockSize(t.text || ' ', t.fontSize, width, 400, t.fontFamily);
+          t.fixedWidth = true;
+          t.w = width;
+          t.h = Math.max(8, m.h);
+          if (handle.includes('n')) t.y = fy - t.h;
+        } else {
+          t.fontSize = Math.max(6, t.fontSize * Math.abs(sy));
+          const m = textBlockSize(t.text || ' ', t.fontSize, t.fixedWidth ? nw : undefined, 400, t.fontFamily);
+          t.w = t.fixedWidth ? nw : m.w;
+          t.h = m.h;
+        }
       } else if ('w' in next && 'h' in next) {
         (next as ShapeObj).w = Math.max(8, nw);
         (next as ShapeObj).h = Math.max(8, nh);
