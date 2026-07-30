@@ -92,7 +92,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
     case 'sticky':
       return { ...base, w: r(o.w), h: r(o.h), color: o.color, text: o.text, ...(o.file ? { upload: { name: o.file.name, kind: o.file.kind, rows: o.file.rows } } : {}), runnable: isAINode(o) };
     case 'text':
-      return { ...base, w: r(o.w), h: r(o.h), fontSize: o.fontSize, color: o.color, text: o.text, runnable: isAINode(o) };
+      return { ...base, w: r(o.w), h: r(o.h), fontSize: o.fontSize, color: o.color, text: o.text, fixedWidth: !!o.fixedWidth, runnable: isAINode(o) };
     case 'shape':
       return { ...base, w: r(o.w), h: r(o.h), shape: o.shape, fill: o.fill, stroke: o.stroke, text: o.text, textColor: o.textColor };
     case 'frame':
@@ -255,8 +255,11 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const text = str(spec.text);
       if (!text) fail(i, 'text objects need a non-empty "text"');
       const fontSize = num(spec.fontSize, 20, 6, 200);
-      const m = textBlockSize(text, fontSize);
-      return { ...base, type: 'text', text, color: color(spec.color, '#1a1a1a'), fontSize, w: m.w, h: clampHeight(m.h), fixedWidth: false };
+      const fixedWidth = spec.fixedWidth === true || spec.w !== undefined;
+      const wrapW = fixedWidth ? num(spec.w, 320, 8, 4000) : undefined;
+      const m = textBlockSize(text, fontSize, wrapW, 400, spec.fontFamily);
+      const h = spec.h !== undefined ? num(spec.h, m.h, 8, 20000) : clampHeight(m.h);
+      return { ...base, type: 'text', text, color: color(spec.color, '#1a1a1a'), fontSize, w: fixedWidth ? wrapW : m.w, h, fixedWidth };
     }
     case 'shape': {
       if (spec.shape !== undefined && !SHAPES.has(spec.shape)) fail(i, `unknown shape "${spec.shape}" — use ${[...SHAPES].join('|')}`);
@@ -465,7 +468,7 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 const EDITABLE: Record<string, Set<string>> = {
   sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h']),
   shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'x', 'y', 'w', 'h']),
-  text: new Set(['text', 'color', 'fontSize', 'x', 'y']),
+  text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth']),
   connector: new Set(['label', 'stroke', 'strokeWidth', 'dash']),
   icon: new Set(['color', 'strokeWidth', 'x', 'y']),
   frame: new Set(['name', 'x', 'y', 'w', 'h']),
@@ -508,6 +511,9 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         } else if (k === 'dash') {
           if (DASHES.has(v as string)) patch[k] = v;
           else rejected.push(k);
+        } else if (k === 'fixedWidth') {
+          if (typeof v === 'boolean') patch[k] = v;
+          else rejected.push(k);
         } else if (k === 'text' || k === 'label' || k === 'name') {
           if (typeof v === 'string') patch[k] = v;
           else rejected.push(k);
@@ -522,10 +528,13 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
       }
       // keep text-bearing objects sized to their content, like aiEdit does
       const t = target as AnyObj;
-      if (t.type === 'text' && (patch.text !== undefined || patch.fontSize !== undefined)) {
-        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, t.fixedWidth ? t.w : undefined, 400, t.fontFamily);
-        patch.w = t.fixedWidth ? t.w : m.w;
-        patch.h = m.h;
+      if (t.type === 'text' && (patch.text !== undefined || patch.fontSize !== undefined || patch.w !== undefined || patch.fixedWidth !== undefined)) {
+        const fixedWidth = patch.fixedWidth ?? (patch.w !== undefined ? true : t.fixedWidth);
+        const wrapW = fixedWidth ? (patch.w ?? t.w) : undefined;
+        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, wrapW, 400, t.fontFamily);
+        patch.fixedWidth = fixedWidth;
+        patch.w = fixedWidth ? wrapW : m.w;
+        if (patch.h === undefined) patch.h = m.h;
       }
       if (t.type === 'sticky' && (patch.text !== undefined || patch.fontSize !== undefined)) {
         const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, 500, t.fontFamily);

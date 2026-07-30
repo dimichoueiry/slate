@@ -57,6 +57,12 @@ const GRAPHICS_GUIDE = [
   'After drawing, call focus_on with the returned ids so the user sees the result.',
 ].join(' ');
 
+const TEXT_GUIDE = [
+  'TEXT BOXES: type:"text" without w is natural-width label text.',
+  'Set w (or fixedWidth:true) for paragraph/wrapped text; Slate keeps fontSize unchanged, wraps to that width, and grows h automatically unless you explicitly provide h.',
+  'Use wrapped text for multi-line explanations, captions, and longer labels instead of making tiny scaled text.',
+].join(' ');
+
 const objectSpec = {
   type: 'object',
   properties: {
@@ -67,6 +73,7 @@ const objectSpec = {
     w: { type: 'number' },
     h: { type: 'number' },
     text: { type: 'string', description: 'Label/content for sticky, text and shape objects. Start the first line with an AI prefix ("ai:", "img:", "search:", …) to make the object a runnable AI node.' },
+    fixedWidth: { type: 'boolean', description: 'Text only: true makes this a wrapped text box. Supplying w for type:"text" also enables wrapping automatically.' },
     name: { type: 'string', description: 'Frame title' },
     shape: { type: 'string', enum: ['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram'] },
     color: { type: 'string', description: 'Hex color — sticky background or text color' },
@@ -134,7 +141,7 @@ const TOOLS = [
   {
     name: 'add_objects',
     description:
-      `Add a batch of objects (stickies, text, shapes, frames, connectors, icons, custom SVG graphics) to a board in ONE call — one call is one undo step and the objects animate in. ${GRAPHICS_GUIDE} ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
+      `Add a batch of objects (stickies, text, shapes, frames, connectors, icons, custom SVG graphics) to a board in ONE call — one call is one undo step and the objects animate in. ${TEXT_GUIDE} ${GRAPHICS_GUIDE} ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -151,7 +158,7 @@ const TOOLS = [
   },
   {
     name: 'update_objects',
-    description: 'Update existing objects (text, colors, position, size, labels). One call is one undo step. Only text/style/geometry props are editable.',
+    description: 'Update existing objects (text, colors, position, size, labels). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Only text/style/geometry props are editable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -318,7 +325,7 @@ async function handle(msg) {
       reply(id, {
         protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'slate-mcp', version: '0.3.0' },
+        serverInfo: { name: 'slate-mcp', version: '0.3.1' },
       });
       return;
     case 'notifications/initialized':
