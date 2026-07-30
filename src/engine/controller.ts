@@ -592,24 +592,36 @@ export class Controller {
     const objs = this.selectedObjects();
     if (objs.length === 0) return;
     const all = this.doc.allSorted();
+    const selected = new Set(objs.map((o) => o.id));
+    const applyOrder = (ordered: SlateObj[]) => {
+      const zSlots = all.map((o) => o.z);
+      for (let i = 0; i < ordered.length; i++) {
+        const o = ordered[i]!;
+        const z = zSlots[i]!;
+        if (o.z !== z) this.doc.update(o.id, { z });
+      }
+    };
     this.doc.begin();
     if (mode === 'front') {
-      for (const o of objs) this.doc.update(o.id, { z: this.doc.nextZ() });
+      applyOrder([...all.filter((o) => !selected.has(o.id)), ...all.filter((o) => selected.has(o.id))]);
     } else if (mode === 'back') {
-      const minZ = all.length ? all[0].z : 0;
-      let z = minZ - objs.length - 1;
-      for (const o of objs) this.doc.update(o.id, { z: z++ });
-    } else {
-      const dir = mode === 'forward' ? 1 : -1;
-      for (const o of objs) {
-        const idx = all.findIndex((a) => a.id === o.id);
-        const swap = all[idx + dir];
-        if (swap && !this.selection.has(swap.id)) {
-          const oz = o.z;
-          this.doc.update(o.id, { z: swap.z });
-          this.doc.update(swap.id, { z: oz });
+      applyOrder([...all.filter((o) => selected.has(o.id)), ...all.filter((o) => !selected.has(o.id))]);
+    } else if (mode === 'forward') {
+      const ordered = [...all];
+      for (let i = ordered.length - 2; i >= 0; i--) {
+        if (selected.has(ordered[i]!.id) && !selected.has(ordered[i + 1]!.id)) {
+          [ordered[i], ordered[i + 1]] = [ordered[i + 1]!, ordered[i]!];
         }
       }
+      applyOrder(ordered);
+    } else {
+      const ordered = [...all];
+      for (let i = 1; i < ordered.length; i++) {
+        if (selected.has(ordered[i]!.id) && !selected.has(ordered[i - 1]!.id)) {
+          [ordered[i - 1], ordered[i]] = [ordered[i]!, ordered[i - 1]!];
+        }
+      }
+      applyOrder(ordered);
     }
     this.doc.commit();
   }

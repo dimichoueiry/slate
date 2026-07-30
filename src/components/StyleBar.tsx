@@ -541,8 +541,8 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
           </label>
         )}
         <div className="seg">
-          <button title="Bring to front (⌘⇧])" onClick={() => ctl.reorderSelection('front')}>⏫</button>
-          <button title="Send to back (⌘⇧[)" onClick={() => ctl.reorderSelection('back')}>⏬</button>
+          <button title="Bring forward one layer (⌘])" onClick={() => ctl.reorderSelection('forward')}>↑</button>
+          <button title="Send backward one layer (⌘[)" onClick={() => ctl.reorderSelection('backward')}>↓</button>
         </div>
         <button className="chrome-btn" onClick={() => ctl.toggleLockSelection()}>
           {anyLocked ? 'Unlock' : 'Lock'}
