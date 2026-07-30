@@ -49,6 +49,10 @@ interface UIState {
   notesOpen: boolean;
   iconTrayOpen: boolean;
   paletteOpen: boolean;
+  revealMode: boolean;
+  presenting: boolean;
+  presentationStep: number;
+  presentationStepStartedAt: number;
   localAiModel: string;
   localAiSystemPrompt: string;
 
@@ -162,6 +166,10 @@ export const useUI = create<UIState>((setState) => ({
   notesOpen: false,
   iconTrayOpen: false,
   paletteOpen: false,
+  revealMode: false,
+  presenting: false,
+  presentationStep: 0,
+  presentationStepStartedAt: Date.now(),
   localAiModel: 'qwen2.5:3b',
   localAiSystemPrompt:
     'You are a concise writing assistant for a visual canvas. Keep answers practical and structured.',

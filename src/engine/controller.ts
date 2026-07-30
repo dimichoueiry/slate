@@ -11,6 +11,7 @@ import type {
   StrokeObj,
   TextObj,
   ToolId,
+  RevealEffect,
   UploadFile,
   Vec,
 } from '../types';
@@ -43,6 +44,15 @@ import { snapBox, snapToGrid, type SnapResult } from './snap';
 import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
 import { clampHeight, clampLayout, pointInClampChip, stickyWidthFor } from './sticky';
+import {
+  collectRevealSteps,
+  DEFAULT_REVEAL_DURATION,
+  DEFAULT_REVEAL_EFFECT,
+  explicitRevealStep,
+  revealDelayOf,
+  revealDurationOf,
+  revealStepOf,
+} from './reveal';
 import { useUI } from '../store/ui';
 import { inkForCanvas } from '../store/theme';
 import { saveComponent, type ComponentDef } from '../store/db';
@@ -180,6 +190,10 @@ export class Controller {
     this.sceneDirty = true;
   };
 
+  markOverlayDirty = () => {
+    this.overlayDirty = true;
+  };
+
   onCamera(fn: () => void): () => void {
     this.cameraListeners.add(fn);
     return () => this.cameraListeners.delete(fn);
@@ -209,17 +223,43 @@ export class Controller {
 
   private loop() {
     if (this.disposed) return;
+    const state = useUI.getState();
+    if (state.presenting && this.presentationAnimationActive(state.presentationStep, state.presentationStepStartedAt)) {
+      this.sceneDirty = true;
+    }
     if (this.sceneDirty) {
       this.sceneDirty = false;
       const ui = useUI.getState();
-      const grid: GridSettings = { mode: ui.gridMode };
-      drawScene(this.sceneCtx, this.doc, this.camera, this.viewW, this.viewH, this.dpr, grid, ui.editingTextId);
+      const grid: GridSettings = { mode: ui.presenting ? 'none' : ui.gridMode };
+      const presentation = ui.presenting
+        ? { step: ui.presentationStep, stepStartedAt: ui.presentationStepStartedAt }
+        : null;
+      drawScene(
+        this.sceneCtx,
+        this.doc,
+        this.camera,
+        this.viewW,
+        this.viewH,
+        this.dpr,
+        grid,
+        ui.editingTextId,
+        presentation
+      );
     }
     if (this.overlayDirty) {
       this.overlayDirty = false;
       this.drawOverlay();
     }
     this.rafId = requestAnimationFrame(this.loop);
+  }
+
+  private presentationAnimationActive(step: number, startedAt: number): boolean {
+    const elapsed = Date.now() - startedAt;
+    for (const o of this.doc.all()) {
+      if (revealStepOf(o, this.doc.resolve) !== step) continue;
+      if (elapsed <= revealDelayOf(o.reveal) + revealDurationOf(o.reveal) + 80) return true;
+    }
+    return false;
   }
 
   // ---------- coordinate helpers ----------
@@ -647,6 +687,92 @@ export class Controller {
     this.doc.commit();
   }
 
+  revealSteps(): number[] {
+    return collectRevealSteps(this.doc.all(), this.doc.resolve);
+  }
+
+  nextRevealStep(): number {
+    const steps = this.revealSteps();
+    return steps.length ? Math.max(...steps) + 1 : 1;
+  }
+
+  setSelectedRevealStep(step: number | null) {
+    const objs = this.selectedObjects().filter((o) => !o.locked);
+    if (objs.length === 0) return;
+    const cleanStep = typeof step === 'number' && Number.isFinite(step) ? Math.max(1, Math.round(step)) : null;
+    const updates = objs.map((o) => {
+      const next = structuredClone(o);
+      if (cleanStep === null) {
+        delete next.reveal;
+      } else {
+        next.reveal = {
+          step: cleanStep,
+          effect: next.reveal?.effect ?? DEFAULT_REVEAL_EFFECT,
+          durationMs: next.reveal?.durationMs ?? DEFAULT_REVEAL_DURATION,
+          delayMs: next.reveal?.delayMs,
+        };
+      }
+      return next;
+    });
+    this.doc.begin();
+    this.doc.setMany(updates);
+    this.doc.commit();
+    this.sceneDirty = true;
+    this.overlayDirty = true;
+  }
+
+  setSelectedRevealEffect(effect: RevealEffect) {
+    const objs = this.selectedObjects().filter((o) => !o.locked);
+    if (objs.length === 0) return;
+    const fallbackStep = this.nextRevealStep();
+    const updates = objs.map((o) => {
+      const next = structuredClone(o);
+      next.reveal = {
+        step: explicitRevealStep(next) ?? fallbackStep,
+        effect,
+        durationMs: next.reveal?.durationMs ?? DEFAULT_REVEAL_DURATION,
+        delayMs: next.reveal?.delayMs,
+      };
+      return next;
+    });
+    this.doc.begin();
+    this.doc.setMany(updates);
+    this.doc.commit();
+    this.sceneDirty = true;
+    this.overlayDirty = true;
+  }
+
+  setSelectedRevealDuration(durationMs: number) {
+    const objs = this.selectedObjects().filter((o) => !o.locked);
+    if (objs.length === 0) return;
+    const duration = Math.max(0, Math.round(durationMs));
+    const fallbackStep = this.nextRevealStep();
+    const updates = objs.map((o) => {
+      const next = structuredClone(o);
+      next.reveal = {
+        step: explicitRevealStep(next) ?? fallbackStep,
+        effect: next.reveal?.effect ?? DEFAULT_REVEAL_EFFECT,
+        durationMs: duration,
+        delayMs: next.reveal?.delayMs,
+      };
+      return next;
+    });
+    this.doc.begin();
+    this.doc.setMany(updates);
+    this.doc.commit();
+    this.sceneDirty = true;
+    this.overlayDirty = true;
+  }
+
+  selectRevealStep(step: number) {
+    const ids = this.doc
+      .allSorted()
+      .filter((o) => explicitRevealStep(o) === step)
+      .map((o) => o.id);
+    this.selection = new Set(ids);
+    this.syncSelection();
+  }
+
   /** Set font size on selected text-bearing objects, re-measuring text bounds. */
   setSelectedFontSize(size: number) {
     this.doc.begin();
@@ -858,6 +984,7 @@ export class Controller {
   // ---------- pointer input ----------
 
   handlePointerDown(e: PointerEvent) {
+    if (useUI.getState().presenting) return;
     this.overlay.setPointerCapture(e.pointerId);
     const screen = this.toScreen(e);
     this.pointers.set(e.pointerId, { id: e.pointerId, type: e.pointerType, screen });
@@ -2048,6 +2175,8 @@ export class Controller {
       }
     }
 
+    if (ui.revealMode && !ui.presenting) this.drawRevealBadges(ctx);
+
     // selection box + handles
     if (this.selection.size > 0 && ui.editingTextId === null) {
       const objs = this.selectedObjects();
@@ -2137,6 +2266,40 @@ export class Controller {
           }
         }
       }
+    }
+  }
+
+  private drawRevealBadges(ctx: CanvasRenderingContext2D) {
+    for (const o of this.doc.allSorted()) {
+      const step = explicitRevealStep(o);
+      if (step === null) continue;
+      const b = aabbOf(o, this.doc.resolve);
+      const tl = this.worldToScreenPt({ x: b.x, y: b.y });
+      const label = String(step);
+      const w = Math.max(24, label.length * 8 + 16);
+      const h = 22;
+      const x = tl.x - 8;
+      const y = tl.y - 10;
+      const selected = this.selection.has(o.id);
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.28)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = selected ? '#7c3aed' : 'rgba(26, 26, 30, 0.94)';
+      ctx.strokeStyle = selected ? '#ffffff' : 'rgba(255,255,255,0.82)';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 11);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 12px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + w / 2, y + h / 2 + 0.5);
+      ctx.restore();
     }
   }
 

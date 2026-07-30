@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
-import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type Routing } from '../types';
+import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type RevealEffect, type Routing } from '../types';
 import { ensureVideoModels, cachedVideoModelInfo, getVideoModel, type VideoModelInfo } from '../ai/llm';
 import FloatingPanel from './FloatingPanel';
+import {
+  DEFAULT_REVEAL_DURATION,
+  DEFAULT_REVEAL_EFFECT,
+  explicitRevealStep,
+  REVEAL_DURATIONS,
+  REVEAL_EFFECTS,
+} from '../engine/reveal';
 
 const FONT_SIZES = [12, 14, 16, 20, 24, 32, 40, 56, 72, 96];
 
@@ -208,11 +215,87 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (hasSel) {
     const types = new Set(selObjs.map((o) => o.type));
     const single = selObjs.length === 1 ? selObjs[0] : null;
+    const revealSteps = selObjs.map((o) => explicitRevealStep(o));
+    const revealStepMixed = new Set(revealSteps.map((step) => step ?? 0)).size > 1;
+    const revealStep = revealStepMixed ? null : revealSteps[0];
+    const revealEffects = selObjs.map((o) => o.reveal?.effect ?? DEFAULT_REVEAL_EFFECT);
+    const revealEffectMixed = new Set(revealEffects).size > 1;
+    const revealEffect = revealEffectMixed ? '' : revealEffects[0];
+    const revealDurations = selObjs.map((o) => o.reveal?.durationMs ?? DEFAULT_REVEAL_DURATION);
+    const revealDurationMixed = new Set(revealDurations).size > 1;
+    const revealDuration = revealDurationMixed ? '' : String(revealDurations[0]);
     const anyLocked = selObjs.some((o) => o.locked);
     const allOneGroup =
       selObjs.length >= 2 && !!selObjs[0].groupId && selObjs.every((o) => o.groupId === selObjs[0].groupId);
     return (
       <FloatingPanel id="stylebar" className="stylebar">
+        {ui.revealMode && (
+          <div className="reveal-style-controls">
+            <span className="reveal-style-label">Reveal</span>
+            <button
+              title="Previous reveal step"
+              onClick={() => ctl.setSelectedRevealStep(revealStep ? Math.max(1, revealStep - 1) : ctl.nextRevealStep())}
+            >
+              -
+            </button>
+            <input
+              className="reveal-step-input"
+              type="number"
+              min={1}
+              value={revealStepMixed ? '' : revealStep ?? ''}
+              placeholder={revealStepMixed ? 'Mixed' : '-'}
+              title="Reveal step"
+              onChange={(e) => {
+                const raw = e.target.value;
+                ctl.setSelectedRevealStep(raw === '' ? null : Number(raw));
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+            <button
+              title="Next reveal step"
+              onClick={() => ctl.setSelectedRevealStep(revealStep ? revealStep + 1 : ctl.nextRevealStep())}
+            >
+              +
+            </button>
+            <select
+              className="font-select reveal-select"
+              value={revealEffect}
+              title="Reveal effect"
+              onChange={(e) => ctl.setSelectedRevealEffect(e.target.value as RevealEffect)}
+            >
+              {revealEffectMixed && (
+                <option value="" disabled>
+                  Mixed
+                </option>
+              )}
+              {REVEAL_EFFECTS.map((effect) => (
+                <option key={effect.id} value={effect.id}>
+                  {effect.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="font-select reveal-select"
+              value={revealDuration}
+              title="Reveal speed"
+              onChange={(e) => ctl.setSelectedRevealDuration(Number(e.target.value))}
+            >
+              {revealDurationMixed && (
+                <option value="" disabled>
+                  Mixed
+                </option>
+              )}
+              {REVEAL_DURATIONS.map((duration) => (
+                <option key={duration.ms} value={duration.ms}>
+                  {duration.label}
+                </option>
+              ))}
+            </select>
+            <button className="chrome-btn" title="Clear reveal step" onClick={() => ctl.setSelectedRevealStep(null)}>
+              Clear
+            </button>
+          </div>
+        )}
         {(types.has('stroke') || types.has('text') || types.has('icon')) && (
           <ColorControl
             label="Color"

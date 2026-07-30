@@ -129,6 +129,14 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           ◐
         </button>
+        <button
+          className="chrome-btn"
+          title="Reveal mode"
+          style={{ background: ui.revealMode ? 'var(--accent)' : undefined }}
+          onClick={() => ui.set({ revealMode: !ui.revealMode, presenting: false, presentationStep: 0 })}
+        >
+          Reveal
+        </button>
         {flows.length > 0 && (
           <button
             className="chrome-btn"

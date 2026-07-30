@@ -23,6 +23,7 @@ function parsePath(path: string): Route {
 
 export default function App() {
   const route = useUI((s) => s.route);
+  const presenting = useUI((s) => s.presenting);
 
   useEffect(() => {
     const apply = () => useUI.getState().set({ route: parsePath(location.pathname) });
@@ -51,12 +52,16 @@ export default function App() {
   return (
     <>
       {route.view === 'board' ? <BoardView key={route.boardId} boardId={route.boardId} /> : <Home />}
-      {/* global settings (AI providers) — available on every screen */}
-      <SettingsPanel />
-      {/* MCP agent bridge indicator + pairing dialog */}
-      <BridgeUI />
-      {/* Git sync status pill (only when a repo is connected) */}
-      <GitSyncIndicator />
+      {!presenting && (
+        <>
+          {/* global settings (AI providers) — available on every screen */}
+          <SettingsPanel />
+          {/* MCP agent bridge indicator + pairing dialog */}
+          <BridgeUI />
+          {/* Git sync status pill (only when a repo is connected) */}
+          <GitSyncIndicator />
+        </>
+      )}
     </>
   );
 }

@@ -21,6 +21,7 @@ import { PEN_CONFIGS, strokePath } from './ink';
 import { fontString, lineHeight, wrapText } from './text';
 import { clampLayout, type ClampLayout, type ClampObj } from './sticky';
 import { fontStack } from '../types';
+import { revealDelayOf, revealDurationOf, revealEffectOf, revealStepOf } from './reveal';
 import rough from 'roughjs';
 
 const roughGenerator = rough.generator();
@@ -203,6 +204,11 @@ export interface GridSettings {
   mode: 'dots' | 'lines' | 'none';
 }
 
+export interface PresentationRenderState {
+  step: number;
+  stepStartedAt: number;
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   doc: Doc,
@@ -211,7 +217,8 @@ export function drawScene(
   viewH: number,
   dpr: number,
   grid: GridSettings,
-  editingId?: string | null
+  editingId?: string | null,
+  presentation?: PresentationRenderState | null
 ) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, viewW, viewH);
@@ -235,8 +242,11 @@ export function drawScene(
   const objs = doc.visible(cullBox);
   const lod = camera.zoom < 0.08; // far-out LOD: boxes only
   for (const o of objs) {
+    const reveal = presentation ? presentationVisual(o, doc, camera.zoom, presentation) : null;
+    if (reveal && !reveal.visible) continue;
     if (lod && o.type !== 'frame') {
-      drawLodPlaceholder(ctx, o, doc);
+      if (reveal) drawLodPlaceholderWithReveal(ctx, o, doc, reveal);
+      else drawLodPlaceholder(ctx, o, doc);
       continue;
     }
     if (o.id === editingId) {
@@ -251,7 +261,8 @@ export function drawScene(
         continue;
       }
     }
-    drawObject(ctx, o, doc, camera.zoom);
+    if (reveal) drawObjectWithReveal(ctx, o, doc, camera.zoom, reveal);
+    else drawObject(ctx, o, doc, camera.zoom);
   }
 }
 
@@ -259,6 +270,27 @@ function drawLodPlaceholder(ctx: CanvasRenderingContext2D, o: SlateObj, doc: Doc
   const b = boundsOf(o, doc.resolve);
   ctx.fillStyle = 'rgba(120,120,130,0.35)';
   ctx.fillRect(b.x, b.y, Math.max(b.w, 1), Math.max(b.h, 1));
+}
+
+function drawLodPlaceholderWithReveal(
+  ctx: CanvasRenderingContext2D,
+  o: SlateObj,
+  doc: Doc,
+  visual: RevealVisual
+) {
+  ctx.save();
+  ctx.globalAlpha *= visual.opacity;
+  if (visual.dx || visual.dy) ctx.translate(visual.dx, visual.dy);
+  if (visual.scale !== 1) {
+    const b = boundsOf(o, doc.resolve);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(visual.scale, visual.scale);
+    ctx.translate(-cx, -cy);
+  }
+  drawLodPlaceholder(ctx, o, doc);
+  ctx.restore();
 }
 
 export function drawObject(ctx: CanvasRenderingContext2D, o: SlateObj, doc: Doc, zoom: number) {
@@ -301,6 +333,80 @@ export function drawObject(ctx: CanvasRenderingContext2D, o: SlateObj, doc: Doc,
       break;
   }
   ctx.restore();
+}
+
+interface RevealVisual {
+  visible: boolean;
+  opacity: number;
+  scale: number;
+  dx: number;
+  dy: number;
+}
+
+function presentationVisual(
+  o: SlateObj,
+  doc: Doc,
+  zoom: number,
+  presentation: PresentationRenderState
+): RevealVisual | null {
+  const step = revealStepOf(o, doc.resolve);
+  if (step === null) return null;
+  if (presentation.step < step) return { visible: false, opacity: 0, scale: 1, dx: 0, dy: 0 };
+  if (presentation.step > step) return null;
+
+  const delay = revealDelayOf(o.reveal);
+  const duration = revealDurationOf(o.reveal);
+  const elapsed = Date.now() - presentation.stepStartedAt - delay;
+  if (elapsed < 0) return { visible: false, opacity: 0, scale: 1, dx: 0, dy: 0 };
+  const t = duration <= 0 ? 1 : clamp01(elapsed / duration);
+  if (t >= 1) return null;
+
+  const eased = easeOutCubic(t);
+  const effect = revealEffectOf(o.reveal);
+  const px = 24 / Math.max(zoom, 0.01);
+  const visual: RevealVisual = { visible: true, opacity: eased, scale: 1, dx: 0, dy: 0 };
+
+  if (effect === 'none') {
+    visual.opacity = 1;
+  } else if (effect === 'pop') {
+    visual.scale = 0.92 + 0.08 * eased;
+  } else if (effect === 'slide-up') {
+    visual.dy = (1 - eased) * px;
+  } else if (effect === 'slide-left') {
+    visual.dx = (1 - eased) * px;
+  }
+
+  return visual;
+}
+
+function drawObjectWithReveal(
+  ctx: CanvasRenderingContext2D,
+  o: SlateObj,
+  doc: Doc,
+  zoom: number,
+  visual: RevealVisual
+) {
+  ctx.save();
+  ctx.globalAlpha *= visual.opacity;
+  if (visual.dx || visual.dy) ctx.translate(visual.dx, visual.dy);
+  if (visual.scale !== 1) {
+    const b = boundsOf(o, doc.resolve);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(visual.scale, visual.scale);
+    ctx.translate(-cx, -cy);
+  }
+  drawObject(ctx, o, doc, zoom);
+  ctx.restore();
+}
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
 }
 
 function drawGrid(

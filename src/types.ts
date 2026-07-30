@@ -26,6 +26,14 @@ export type DashStyle = 'solid' | 'dashed' | 'dotted';
 export type AnchorSide = 'left' | 'right' | 'top' | 'bottom' | 'center';
 export type Routing = 'straight' | 'elbow' | 'curved';
 export type ArrowHead = 'none' | 'triangle';
+export type RevealEffect = 'pop' | 'fade' | 'slide-up' | 'slide-left' | 'none';
+
+export interface RevealSpec {
+  step: number;
+  effect?: RevealEffect;
+  durationMs?: number;
+  delayMs?: number;
+}
 
 interface BaseObj {
   id: string;
@@ -37,6 +45,8 @@ interface BaseObj {
   locked?: boolean;
   groupId?: string | null;
   parentId?: string | null; // frame containment
+  /** optional presentation reveal timing; omitted objects stay visible during playback */
+  reveal?: RevealSpec;
   /** provenance marker — objects created via the MCP agent bridge (PRD §7.3) */
   createdBy?: 'agent';
   // vid: node params (only used on a video AI node)

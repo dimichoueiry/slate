@@ -28,6 +28,7 @@ import ImageActions from '../ui/imageActions';
 import FrameTitle from '../ui/frameTitle';
 import UsageMeter from './UsageMeter';
 import { exportBounds, exportPng } from '../export/export';
+import RevealControls, { handlePresentationKey } from './RevealControls';
 
 const TOOL_KEYS: Record<string, ToolId> = {
   v: 'select',
@@ -54,6 +55,9 @@ export default function BoardView({ boardId }: { boardId: string }) {
   const readerObjectId = useUI((s) => s.readerObjectId);
   const canvasDark = useUI((s) => s.canvasDark);
   const tool = useUI((s) => s.tool);
+  const revealMode = useUI((s) => s.revealMode);
+  const presenting = useUI((s) => s.presenting);
+  const presentationStep = useUI((s) => s.presentationStep);
 
   // ---------- controller lifecycle ----------
   useEffect(() => {
@@ -88,7 +92,18 @@ export default function BoardView({ boardId }: { boardId: string }) {
       controller.setCamera(meta.viewport);
       const kit = await resolveBoardKit(meta);
       setCanvasDark(!!meta.canvasDark);
-      useUI.getState().set({ boardName: meta.name, selection: [], editingTextId: null, activeBrandKit: kit ?? null, canvasDark: !!meta.canvasDark });
+      useUI.getState().set({
+        boardName: meta.name,
+        selection: [],
+        editingTextId: null,
+        readerObjectId: null,
+        readerOrigin: null,
+        revealMode: false,
+        presenting: false,
+        presentationStep: 0,
+        activeBrandKit: kit ?? null,
+        canvasDark: !!meta.canvasDark,
+      });
       useUI.getState().syncCanvasInk(!!meta.canvasDark);
       autosave = startAutosave(controller.doc, boardId);
       setLoaded(true);
@@ -140,6 +155,11 @@ export default function BoardView({ boardId }: { boardId: string }) {
     ctl?.markSceneDirty();
   }, [ctl, editingTextId]);
 
+  useEffect(() => {
+    ctl?.markSceneDirty();
+    ctl?.markOverlayDirty();
+  }, [ctl, revealMode, presenting, presentationStep]);
+
   // ---------- pointer + wheel wiring ----------
   useEffect(() => {
     if (!ctl) return;
@@ -182,6 +202,8 @@ export default function BoardView({ boardId }: { boardId: string }) {
     const onKeyDown = (e: KeyboardEvent) => {
       const ui = useUI.getState();
       const target = e.target as HTMLElement;
+      if (handlePresentationKey(ctl, e)) return;
+
       const typing =
         ui.editingTextId !== null ||
         target.tagName === 'INPUT' ||
@@ -425,7 +447,9 @@ export default function BoardView({ boardId }: { boardId: string }) {
   }, [ctl]);
 
   const cursor =
-    tool === 'hand'
+    presenting
+      ? 'default'
+      : tool === 'hand'
       ? 'grab'
       : tool === 'pen' || tool === 'eraser'
         ? 'crosshair'
@@ -441,23 +465,28 @@ export default function BoardView({ boardId }: { boardId: string }) {
       <canvas ref={overlayRef} className="layer overlay-canvas" style={{ cursor }} />
       {ctl && loaded && (
         <>
-          <TopBar ctl={ctl} boardId={boardId} />
-          <Toolbar />
-          <StyleBar ctl={ctl} />
-          <ZoomBar ctl={ctl} />
-          <Minimap ctl={ctl} />
-          {editingTextId && <TextEditor key={editingTextId} ctl={ctl} objectId={editingTextId} />}
-          {readerObjectId && <StickyReader key={readerObjectId} ctl={ctl} objectId={readerObjectId} />}
-          <NotesPanel boardId={boardId} ctl={ctl} />
-          <IconTray ctl={ctl} />
-          <CommandPalette ctl={ctl} boardId={boardId} />
-          <AIPanel ctl={ctl} />
-          <RunButtons ctl={ctl} />
-          <DataNodeEditor ctl={ctl} />
-          <ImageActions ctl={ctl} />
-          <FrameTitle ctl={ctl} />
-          <UsageMeter />
-          {ctl.doc.objects.size === 0 && (
+          {!presenting && (
+            <>
+              <TopBar ctl={ctl} boardId={boardId} />
+              <Toolbar />
+              <StyleBar ctl={ctl} />
+              <ZoomBar ctl={ctl} />
+              <Minimap ctl={ctl} />
+              {editingTextId && <TextEditor key={editingTextId} ctl={ctl} objectId={editingTextId} />}
+              {readerObjectId && <StickyReader key={readerObjectId} ctl={ctl} objectId={readerObjectId} />}
+              <NotesPanel boardId={boardId} ctl={ctl} />
+              <IconTray ctl={ctl} />
+              <CommandPalette ctl={ctl} boardId={boardId} />
+              <AIPanel ctl={ctl} />
+              <RunButtons ctl={ctl} />
+              <DataNodeEditor ctl={ctl} />
+              <ImageActions ctl={ctl} />
+              <FrameTitle ctl={ctl} />
+              <UsageMeter />
+            </>
+          )}
+          <RevealControls ctl={ctl} />
+          {!presenting && ctl.doc.objects.size === 0 && (
             <div className="hint">Press P and just draw — or double-click anywhere to type. Scroll to pan, pinch to zoom.</div>
           )}
         </>
