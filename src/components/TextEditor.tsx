@@ -161,6 +161,17 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doCommit(valueRef.current);
   };
 
+  const onBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    if (showSlash) return;
+    const next = e.relatedTarget;
+    if (next instanceof HTMLElement && next.closest('.stylebar')) return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest('.stylebar')) return;
+      doCommit(valueRef.current);
+    }, 0);
+  };
+
   // screen-space placement
   const tl = ctl.worldToScreenPt({ x: obj.x, y: obj.y });
   let style: React.CSSProperties = {
@@ -233,9 +244,7 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
           setSlashSel(0);
         }}
         onKeyDown={onKeyDown}
-        onBlur={() => {
-          if (!showSlash) doCommit(valueRef.current);
-        }}
+        onBlur={onBlur}
         onPointerDown={(e) => e.stopPropagation()}
       />
       {showSlash && (

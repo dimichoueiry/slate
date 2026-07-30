@@ -72,6 +72,18 @@ function Swatches({
   const customColors = useUI((s) => s.customColors);
   const addCustomColor = useUI((s) => s.addCustomColor);
   const removeCustomColor = useUI((s) => s.removeCustomColor);
+  const pickedCustomColor = useRef<string | null>(null);
+
+  const pickCustomColor = (c: string) => {
+    pickedCustomColor.current = c;
+    onPick(c);
+  };
+
+  const savePickedCustomColor = () => {
+    const c = pickedCustomColor.current;
+    pickedCustomColor.current = null;
+    if (c) addCustomColor(c);
+  };
 
   return (
     <>
@@ -108,8 +120,9 @@ function Swatches({
         <input
           type="color"
           value={value.startsWith('#') && value.length === 7 ? value : '#1a1a1a'}
-          onInput={(e) => onPick((e.target as HTMLInputElement).value)}
-          onChange={(e) => addCustomColor(e.target.value)}
+          onInput={(e) => pickCustomColor((e.target as HTMLInputElement).value)}
+          onChange={(e) => pickCustomColor(e.target.value)}
+          onBlur={savePickedCustomColor}
         />
       </label>
     </>
