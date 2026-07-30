@@ -15,6 +15,7 @@ import { runAINode, isAINode } from '../ui/ainodes';
 import { getActiveCtl, waitForBoard } from './registry';
 import { layoutLayered, layoutGrid, type LayoutItem, type LayoutEdge } from './layout';
 import { checkSvg, svgNaturalSize, withExplicitSize } from './svgCheck';
+import type { RevealEffect } from '../types';
 
 type AnyObj = Record<string, any>;
 
@@ -24,6 +25,7 @@ const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const DASHES = new Set(['solid', 'dashed', 'dotted']);
 const SHAPES = new Set(['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram']);
 const ROUTINGS = new Set(['straight', 'elbow', 'curved']);
+const REVEAL_EFFECTS = new Set<RevealEffect>(['pop', 'fade', 'slide-up', 'slide-left', 'none']);
 const STICKY_DEFAULT = '#FFE066';
 
 const num = (v: any, fallback: number, min: number, max: number) => {
@@ -34,6 +36,27 @@ const color = (v: any, fallback: string, allowTransparent = false) =>
   typeof v === 'string' && (HEX.test(v) || (allowTransparent && v === 'transparent')) ? v : fallback;
 const str = (v: any, fallback = '') => (typeof v === 'string' ? v : fallback);
 const nid = () => Math.random().toString(36).slice(2, 10);
+
+function revealSpec(v: any, fallback?: AnyObj | null): AnyObj | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === false) return null;
+  if (!v || typeof v !== 'object') return undefined;
+  const step = Number(v.step ?? fallback?.step);
+  if (!Number.isFinite(step) || step < 1) return undefined;
+  const out: AnyObj = { step: Math.round(step) };
+  if (v.effect !== undefined && REVEAL_EFFECTS.has(v.effect)) out.effect = v.effect;
+  else if (fallback?.effect) out.effect = fallback.effect;
+  if (v.durationMs !== undefined) out.durationMs = num(v.durationMs, fallback?.durationMs ?? 360, 0, 10000);
+  else if (fallback?.durationMs !== undefined) out.durationMs = fallback.durationMs;
+  if (v.delayMs !== undefined) out.delayMs = num(v.delayMs, fallback?.delayMs ?? 0, 0, 60000);
+  else if (fallback?.delayMs !== undefined) out.delayMs = fallback.delayMs;
+  return out;
+}
+
+function serializeReveal(o: AnyObj): AnyObj {
+  const r = revealSpec(o.reveal);
+  return r ? { reveal: r } : {};
+}
 
 // ---------- board access ----------
 
@@ -84,7 +107,7 @@ export async function list_boards(): Promise<AnyObj[]> {
 
 function serializeObj(o: AnyObj): AnyObj | null {
   const r = (n: number) => Math.round(n ?? 0);
-  const base: AnyObj = { id: o.id, type: o.type, x: r(o.x), y: r(o.y) };
+  const base: AnyObj = { id: o.id, type: o.type, x: r(o.x), y: r(o.y), ...serializeReveal(o) };
   if (o.parentId) base.frameId = o.parentId;
   if (o.createdBy) base.createdBy = o.createdBy;
   if (o.locked) base.locked = true;
@@ -105,6 +128,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
         to: o.to?.objectId ? { objectId: o.to.objectId, ...(o.to.anchor ? { anchor: o.to.anchor } : {}) } : { point: o.to?.point },
         label: o.label ?? '',
         routing: o.routing,
+        ...serializeReveal(o),
         ...(o.createdBy ? { createdBy: o.createdBy } : {}),
         ...(o.locked ? { locked: true } : {}),
       };
@@ -242,6 +266,9 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
   const x = num(spec.x, 0, -1e6, 1e6);
   const y = num(spec.y, 0, -1e6, 1e6);
   const base = { id: nid(), x, y, rotation: 0, z: doc.nextZ(), createdBy: 'agent' as const };
+  const reveal = revealSpec(spec.reveal);
+  if (spec.reveal !== undefined && reveal === undefined) fail(i, 'reveal must be {step:number>=1, effect?:pop|fade|slide-up|slide-left|none, durationMs?:number, delayMs?:number} or null');
+  const withReveal = reveal ? { ...base, reveal } : base;
   switch (spec.type) {
     case 'sticky': {
       const text = str(spec.text);
@@ -249,7 +276,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const fontSize = num(spec.fontSize, 18, 8, 96);
       const m = textBlockSize(text || ' ', fontSize, w - 24, 500);
       const h = clampHeight(Math.max(num(spec.h, 180, 40, 4000), m.h + 24));
-      return { ...base, type: 'sticky', w, h, color: color(spec.color, STICKY_DEFAULT), text, fontSize };
+      return { ...withReveal, type: 'sticky', w, h, color: color(spec.color, STICKY_DEFAULT), text, fontSize };
     }
     case 'text': {
       const text = str(spec.text);
@@ -259,12 +286,12 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const wrapW = fixedWidth ? num(spec.w, 320, 8, 4000) : undefined;
       const m = textBlockSize(text, fontSize, wrapW, 400, spec.fontFamily);
       const h = spec.h !== undefined ? num(spec.h, m.h, 8, 20000) : clampHeight(m.h);
-      return { ...base, type: 'text', text, color: color(spec.color, '#1a1a1a'), fontSize, w: fixedWidth ? wrapW : m.w, h, fixedWidth };
+      return { ...withReveal, type: 'text', text, color: color(spec.color, '#1a1a1a'), fontSize, w: fixedWidth ? wrapW : m.w, h, fixedWidth };
     }
     case 'shape': {
       if (spec.shape !== undefined && !SHAPES.has(spec.shape)) fail(i, `unknown shape "${spec.shape}" — use ${[...SHAPES].join('|')}`);
       return {
-        ...base,
+        ...withReveal,
         type: 'shape',
         shape: SHAPES.has(spec.shape) ? spec.shape : 'roundedRect',
         w: num(spec.w, 180, 8, 4000),
@@ -281,12 +308,12 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       };
     }
     case 'frame':
-      return { ...base, z: -doc.nextZ(), type: 'frame', name: str(spec.name, 'Frame'), w: num(spec.w, 800, 40, 20000), h: num(spec.h, 500, 40, 20000) };
+      return { ...withReveal, z: -doc.nextZ(), type: 'frame', name: str(spec.name, 'Frame'), w: num(spec.w, 800, 40, 20000), h: num(spec.h, 500, 40, 20000) };
     case 'icon': {
       const name = str(spec.icon);
       if (!ICONS.some((d) => d.id === name)) fail(i, `no icon "${name}" — closest: ${closestIcons(name).join(', ')}`);
       const w = num(spec.w, 48, 12, 1024);
-      return { ...base, type: 'icon', icon: name, w, h: num(spec.h, w, 12, 1024), color: color(spec.color, '#1a1a1a'), opacity: 1 };
+      return { ...withReveal, type: 'icon', icon: name, w, h: num(spec.h, w, 12, 1024), color: color(spec.color, '#1a1a1a'), opacity: 1 };
     }
     case 'image': {
       const check = checkSvg(spec.svg);
@@ -302,7 +329,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
         h = Math.round((h * 1600) / long);
       }
       // blobId filled in by add_objects after validation (blob storage is async)
-      return { ...base, type: 'image', w, h, blobId: '', opacity: 1, radius: 0, _svg: withExplicitSize(spec.svg, w, h) };
+      return { ...withReveal, type: 'image', w, h, blobId: '', opacity: 1, radius: 0, _svg: withExplicitSize(spec.svg, w, h) };
     }
     default:
       fail(i, `unknown type "${spec.type}" — use sticky|text|shape|frame|connector|icon|image`);
@@ -336,6 +363,8 @@ function closestIcons(name: string, n = 5): string[] {
 const ANCHOR_SIDES = new Set(['left', 'right', 'top', 'bottom']);
 
 function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: any, field: string) => AnyObj): AnyObj {
+  const reveal = revealSpec(spec.reveal);
+  if (spec.reveal !== undefined && reveal === undefined) fail(i, 'reveal must be {step:number>=1, effect?:pop|fade|slide-up|slide-left|none, durationMs?:number, delayMs?:number} or null');
   const end = (e: any, field: string, anchor: any): AnyObj => {
     if (e && typeof e === 'object') {
       if (typeof e.ref === 'string' || typeof e.id === 'string') {
@@ -356,6 +385,7 @@ function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: an
     z: doc.nextZ(),
     createdBy: 'agent' as const,
     type: 'connector',
+    ...(reveal ? { reveal } : {}),
     from: end(spec.from, 'from', spec.fromAnchor),
     to: end(spec.to, 'to', spec.toAnchor),
     routing: ROUTINGS.has(spec.routing) ? spec.routing : 'curved',
@@ -466,12 +496,12 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 
 // per-type editable props, mirroring aiEdit.ts EDITABLE
 const EDITABLE: Record<string, Set<string>> = {
-  sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h']),
-  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'x', 'y', 'w', 'h']),
-  text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth']),
-  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash']),
-  icon: new Set(['color', 'strokeWidth', 'x', 'y']),
-  frame: new Set(['name', 'x', 'y', 'w', 'h']),
+  sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal']),
+  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'x', 'y', 'w', 'h', 'reveal']),
+  text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal']),
+  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'reveal']),
+  icon: new Set(['color', 'strokeWidth', 'x', 'y', 'reveal']),
+  frame: new Set(['name', 'x', 'y', 'w', 'h', 'reveal']),
 };
 const COLOR_PROPS = new Set(['color', 'fill', 'stroke', 'textColor']);
 
@@ -500,6 +530,7 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
       const set = e.patch ?? {};
       const patch: AnyObj = {};
       const rejected: string[] = [];
+      let clearReveal = false;
       for (const [k, v] of Object.entries(set as AnyObj)) {
         if (!allowed.has(k)) {
           rejected.push(k);
@@ -514,6 +545,11 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         } else if (k === 'fixedWidth') {
           if (typeof v === 'boolean') patch[k] = v;
           else rejected.push(k);
+        } else if (k === 'reveal') {
+          const nextReveal = revealSpec(v, (target as AnyObj).reveal);
+          if (nextReveal === null) clearReveal = true;
+          else if (nextReveal) patch.reveal = nextReveal;
+          else rejected.push(k);
         } else if (k === 'text' || k === 'label' || k === 'name') {
           if (typeof v === 'string') patch[k] = v;
           else rejected.push(k);
@@ -522,7 +558,7 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         else if (k === 'x' || k === 'y') patch[k] = num(v, (target as AnyObj)[k], -1e6, 1e6);
         else if (k === 'w' || k === 'h') patch[k] = num(v, (target as AnyObj)[k], 8, 20000);
       }
-      if (!Object.keys(patch).length) {
+      if (!Object.keys(patch).length && !clearReveal) {
         results.push({ id: e.id, ok: false, error: `no applicable props${rejected.length ? ` (rejected: ${rejected.join(', ')})` : ''}` });
         continue;
       }
@@ -540,7 +576,13 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, 500, t.fontFamily);
         patch.h = Math.max(patch.h ?? t.h, m.h + 24);
       }
-      doc.update(e.id, patch);
+      if (clearReveal) {
+        const next = { ...(target as AnyObj), ...patch };
+        delete next.reveal;
+        doc.set(next);
+      } else {
+        doc.update(e.id, patch);
+      }
       results.push({ id: e.id, ok: true, ...(rejected.length ? { rejected } : {}) });
     }
   } finally {

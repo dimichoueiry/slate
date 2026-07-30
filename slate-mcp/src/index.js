@@ -63,6 +63,13 @@ const TEXT_GUIDE = [
   'Use wrapped text for multi-line explanations, captions, and longer labels instead of making tiny scaled text.',
 ].join(' ');
 
+const REVEAL_GUIDE = [
+  'REVEAL MODE: add or update reveal metadata to make objects appear step-by-step in Slate presentations.',
+  'Use reveal:{step:1,effect:"pop"} on objects that should enter first; give multiple objects the same step to reveal them together.',
+  'Effects: pop, fade, slide-up, slide-left, none. durationMs controls speed; delayMs staggers objects within the same step.',
+  'Clear reveal metadata with update_objects patch {reveal:null}.',
+].join(' ');
+
 const objectSpec = {
   type: 'object',
   properties: {
@@ -81,6 +88,17 @@ const objectSpec = {
     stroke: { type: 'string', description: 'Hex border/line color' },
     textColor: { type: 'string' },
     fontSize: { type: 'number' },
+    reveal: {
+      type: 'object',
+      description: 'Presentation reveal metadata. Use {"step":1,"effect":"pop","durationMs":360}; same step means objects reveal together.',
+      properties: {
+        step: { type: 'number', description: 'Reveal step, integer >= 1' },
+        effect: { type: 'string', enum: ['pop', 'fade', 'slide-up', 'slide-left', 'none'] },
+        durationMs: { type: 'number' },
+        delayMs: { type: 'number' },
+      },
+      required: ['step'],
+    },
     dash: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
     label: { type: 'string', description: 'Connector label drawn at its midpoint' },
     routing: { type: 'string', enum: ['straight', 'elbow', 'curved'] },
@@ -104,7 +122,7 @@ const TOOLS = [
   {
     name: 'read_board',
     description:
-      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames. Objects with "runnable": true are live AI nodes (executable via run_node). On the currently open board, objects the user has selected carry "selected": true. Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
+      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames, and reveal metadata for presentation playback. Objects with "runnable": true are live AI nodes (executable via run_node). On the currently open board, objects the user has selected carry "selected": true. Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -141,7 +159,7 @@ const TOOLS = [
   {
     name: 'add_objects',
     description:
-      `Add a batch of objects (stickies, text, shapes, frames, connectors, icons, custom SVG graphics) to a board in ONE call — one call is one undo step and the objects animate in. ${TEXT_GUIDE} ${GRAPHICS_GUIDE} ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
+      `Add a batch of objects (stickies, text, shapes, frames, connectors, icons, custom SVG graphics) to a board in ONE call — one call is one undo step and the objects animate in. ${TEXT_GUIDE} ${REVEAL_GUIDE} ${GRAPHICS_GUIDE} ${NODE_GUIDE} ${LAYOUT_GUIDE}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -158,7 +176,7 @@ const TOOLS = [
   },
   {
     name: 'update_objects',
-    description: 'Update existing objects (text, colors, position, size, labels). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Only text/style/geometry props are editable.',
+    description: 'Update existing objects (text, colors, position, size, labels, reveal metadata). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Set patch.reveal={step,effect?,durationMs?,delayMs?} to stage an object for Reveal Mode; set patch.reveal=null to clear it. Only text/style/geometry/reveal props are editable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -325,7 +343,7 @@ async function handle(msg) {
       reply(id, {
         protocolVersion: typeof params?.protocolVersion === 'string' ? params.protocolVersion : '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'slate-mcp', version: '0.3.1' },
+        serverInfo: { name: 'slate-mcp', version: '0.3.2' },
       });
       return;
     case 'notifications/initialized':
