@@ -996,7 +996,27 @@ export class Controller {
   // ---------- pointer input ----------
 
   handlePointerDown(e: PointerEvent) {
-    if (useUI.getState().presenting) return;
+    // While presenting (reveal playback) the board is view-only, but it should
+    // still pan and pinch-zoom like the normal canvas — no drag panning here is
+    // what makes the board feel "stuck" mid-presentation. Content-editing tools
+    // stay suppressed; every pointer just grabs and moves the camera.
+    if (useUI.getState().presenting) {
+      this.overlay.setPointerCapture(e.pointerId);
+      const screen = this.toScreen(e);
+      this.pointers.set(e.pointerId, { id: e.pointerId, type: e.pointerType, screen });
+      if (e.pointerType === 'touch' && this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()];
+        this.interaction = {
+          kind: 'pinch',
+          lastDist: Math.hypot(a.screen.x - b.screen.x, a.screen.y - b.screen.y),
+          lastCenter: { x: (a.screen.x + b.screen.x) / 2, y: (a.screen.y + b.screen.y) / 2 },
+        };
+        return;
+      }
+      if (this.pointers.size > 1) return;
+      this.interaction = { kind: 'panning', last: screen };
+      return;
+    }
     this.overlay.setPointerCapture(e.pointerId);
     const screen = this.toScreen(e);
     this.pointers.set(e.pointerId, { id: e.pointerId, type: e.pointerType, screen });
