@@ -448,7 +448,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
 
   const cursor =
     presenting
-      ? 'default'
+      ? 'grab'
       : tool === 'hand'
       ? 'grab'
       : tool === 'pen' || tool === 'eraser'
