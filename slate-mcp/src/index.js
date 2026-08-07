@@ -31,7 +31,40 @@ const allowedOrigins = [
   ...(process.env.SLATE_BRIDGE_ORIGINS ? process.env.SLATE_BRIDGE_ORIGINS.split(',') : []),
 ].map((s) => s.trim()).filter(Boolean);
 
-const bridge = createBridge({ port, allowedOrigins, configPath: defaultConfigPath() });
+// `slate-mcp serve` runs a standalone bridge daemon that can also SPAWN a
+// headless Claude Code (`claude -p`) in a repo, on behalf of the Slate tab's
+// agent panel. Plain `slate-mcp` (no subcommand) is the stdio MCP server a
+// coding agent launches to draw on the canvas — it never spawns processes.
+const serveMode = args[0] === 'serve';
+const repo = argValue('--repo') || process.cwd();
+const permissionMode = argValue('--permission-mode') || 'default';
+
+// How the spawned claude reaches Slate to draw AND to ask for permission: it
+// launches THIS same script in stdio mode as its MCP server (a bridge peer).
+const selfMcpConfig = {
+  mcpServers: {
+    slate: { command: process.execPath, args: [process.argv[1], '--port', String(port)] },
+  },
+};
+
+const bridge = createBridge({
+  port,
+  allowedOrigins,
+  configPath: defaultConfigPath(),
+  enableAgent: serveMode,
+  agentDefaults: serveMode
+    ? {
+        cwd: repo,
+        permissionMode,
+        mcpConfig: JSON.stringify(selfMcpConfig),
+        // NOTE: the --permission-prompt-tool request/response contract is not in
+        // the public docs; this uses the established SDK convention (input
+        // {tool_name, input} -> {behavior:'allow'|'deny', ...}). Confirm on the
+        // first real run and adjust request_permission below if claude disagrees.
+        permissionPromptTool: 'mcp__slate__request_permission',
+      }
+    : undefined,
+});
 
 // ---------- tool definitions (PRD §7 + v1.1 §5 + v1.2 §5 — exactly thirteen) ----------
 
@@ -264,6 +297,23 @@ const TOOLS = [
       required: ['boardId', 'filename', 'content'],
     },
   },
+  {
+    // Internal: named via --permission-prompt-tool when the Slate agent panel
+    // spawns claude. Claude calls this to ask the user (in the Slate tab) to
+    // approve or deny a tool use; a human clicks Allow/Deny on the canvas.
+    // Not meant for direct/manual invocation.
+    name: 'request_permission',
+    description:
+      'Internal Slate hook: routes a Claude Code permission prompt to the Slate user for approval. Do not call directly.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool_name: { type: 'string' },
+        input: { type: 'object' },
+      },
+      required: ['tool_name'],
+    },
+  },
 ];
 
 const TOOL_NAMES = new Set(TOOLS.map((t) => t.name));
@@ -287,6 +337,22 @@ const SLOW_TOOLS = new Set(['render_board', 'add_upload']);
 async function handleToolCall(id, name, args) {
   if (!TOOL_NAMES.has(name)) {
     replyError(id, -32602, `Unknown tool "${name}"`);
+    return;
+  }
+  // Permission prompt: ask the Slate user, then answer claude in the shape its
+  // --permission-prompt-tool expects. The user may take a while to click, so we
+  // wait far longer than a normal tool call.
+  if (name === 'request_permission') {
+    try {
+      const decision = await bridge.callTab('permission.ask', args ?? {}, 300_000);
+      const payload = decision?.approved
+        ? { behavior: 'allow', updatedInput: decision.updatedInput ?? args?.input ?? {} }
+        : { behavior: 'deny', message: decision?.message || 'Denied by the Slate user.' };
+      toolText(id, JSON.stringify(payload));
+    } catch (e) {
+      // if we can't reach the tab, fail closed (deny) rather than hang the agent
+      toolText(id, JSON.stringify({ behavior: 'deny', message: `Slate could not confirm permission: ${String(e?.message ?? e)}` }));
+    }
     return;
   }
   // authoritative SVG safety check happens here (tested in svg.test.js);
@@ -363,21 +429,32 @@ async function handle(msg) {
   }
 }
 
-const rl = createInterface({ input: process.stdin, terminal: false });
-rl.on('line', (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-  let msg;
-  try {
-    msg = JSON.parse(trimmed);
-  } catch {
-    return;
-  }
-  void handle(msg).catch((e) => {
-    if (msg.id !== undefined) replyError(msg.id, -32603, String(e?.message ?? e));
+if (serveMode) {
+  // Daemon mode: no MCP client on stdio — just keep the bridge alive so the
+  // Slate tab can pair and drive agent runs against `repo`.
+  process.stderr.write(
+    `[slate-mcp] serve: agent bridge for ${repo} (permission-mode: ${permissionMode}) — open Slate and pair to start chatting\n`,
+  );
+  const shutdown = () => void bridge.close().then(() => process.exit(0));
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+} else {
+  const rl = createInterface({ input: process.stdin, terminal: false });
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let msg;
+    try {
+      msg = JSON.parse(trimmed);
+    } catch {
+      return;
+    }
+    void handle(msg).catch((e) => {
+      if (msg.id !== undefined) replyError(msg.id, -32603, String(e?.message ?? e));
+    });
   });
-});
-rl.on('close', () => {
-  void bridge.close().then(() => process.exit(0));
-});
+  rl.on('close', () => {
+    void bridge.close().then(() => process.exit(0));
+  });
+}
 // startup mode (leader vs peer) is logged by the bridge itself once elected

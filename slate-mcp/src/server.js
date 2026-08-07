@@ -10,6 +10,7 @@
 
 import { WebSocket, WebSocketServer } from 'ws';
 import { loadToken, saveToken, newToken, newPairingCode, tokensEqual } from './pairing.js';
+import { createAgentRunner } from './agent.js';
 
 const PROTOCOL_VERSION = 1;
 const DEFAULT_CALL_TIMEOUT_MS = 30_000;
@@ -63,6 +64,18 @@ function createLeader(opts) {
   const pending = new Map(); // id -> {resolve, reject, timer}
   const peers = new Set(); // authenticated peer slate-mcp sessions
 
+  // Agent capability is opt-in (only `slate-mcp serve` enables it) — a plain
+  // MCP-stdio bridge never gains the power to spawn processes. When enabled, the
+  // runner spawns `claude -p` in agentRepo and pushes stream-json events to the
+  // tab as fire-and-forget `agent.event` notifications.
+  const agentRunner = opts.enableAgent
+    ? createAgentRunner({
+        onEvent: (runId, event) => send(tab, { method: 'agent.event', params: { runId, event } }),
+        log,
+      })
+    : null;
+  const agentDefaults = opts.agentDefaults ?? {};
+
   const wss = new WebSocketServer({
     host,
     port,
@@ -81,6 +94,9 @@ function createLeader(opts) {
   function drop(ws) {
     if (tab === ws) {
       tab = null;
+      // the tab drives the agents; when it goes away, kill any live runs so a
+      // headless claude isn't left running against the repo with no listener
+      agentRunner?.stopAll();
       for (const [id, p] of pending) {
         clearTimeout(p.timer);
         p.reject(new NoTabError());
@@ -198,6 +214,47 @@ function createLeader(opts) {
           );
           return;
         }
+        // ---- agent control (tab -> leader). Only the authed tab may drive an
+        // agent, and only when this bridge was started with agent capability
+        // (`slate-mcp serve`). Output streams back as `agent.event` pushes. ----
+        case 'agent.start': {
+          if (msg.id === undefined) return;
+          if (!agentRunner) {
+            send(ws, { id: msg.id, error: { message: 'Agent capability is not enabled on this bridge — start it with `slate-mcp serve`.', kind: 'no-agent' } });
+            return;
+          }
+          if (ws !== tab) {
+            // not paired yet — bootstrap pairing in this same tab (serve mode has
+            // no tool call to trigger it otherwise), then ask the user to resend
+            if (ws === candidate) {
+              if (!pairing) pairing = { code: newPairingCode(), attempts: MAX_PAIR_ATTEMPTS };
+              send(candidate, { method: 'pair.request' });
+              send(ws, { id: msg.id, error: { message: 'Enter the pairing code shown in Slate, then send your message again.', kind: 'pairing' } });
+            } else {
+              send(ws, { id: msg.id, error: { message: 'This tab is not the active Slate tab.', kind: 'error' } });
+            }
+            return;
+          }
+          const p = msg.params ?? {};
+          const { runId, sessionId, ok } = agentRunner.start({ ...agentDefaults, ...p });
+          send(ws, { id: msg.id, result: { runId, sessionId, ok, cwd: p.cwd ?? agentDefaults.cwd ?? null } });
+          return;
+        }
+        case 'agent.send': {
+          if (msg.id === undefined) return;
+          if (ws !== tab || !agentRunner) return;
+          const { runId, text } = msg.params ?? {};
+          const ok = agentRunner.send(String(runId), String(text ?? ''));
+          send(ws, { id: msg.id, result: { ok } });
+          return;
+        }
+        case 'agent.interrupt': {
+          if (msg.id === undefined) return;
+          if (ws !== tab || !agentRunner) return;
+          const ok = agentRunner.interrupt(String(msg.params?.runId));
+          send(ws, { id: msg.id, result: { ok } });
+          return;
+        }
         default:
           return; // capability ceiling: everything else is ignored
       }
@@ -237,6 +294,7 @@ function createLeader(opts) {
     },
     close: () =>
       new Promise((resolve) => {
+        agentRunner?.stopAll();
         for (const ws of wss.clients) ws.terminate();
         wss.close(() => resolve());
       }),

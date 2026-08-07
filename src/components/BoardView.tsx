@@ -22,6 +22,7 @@ import { isUploadable, readUpload, uploadLabel } from '../ui/upload';
 import { UPLOAD_ACCEPT } from '../ui/aiNodeButtons';
 import CommandPalette from './CommandPalette';
 import AIPanel from '../ai/AIPanel';
+import AgentChatPanel from './AgentChatPanel';
 import RunButtons from '../ui/aiNodeButtons';
 import DataNodeEditor from '../ui/DataNodeEditor';
 import ImageActions from '../ui/imageActions';
@@ -478,6 +479,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
               <IconTray ctl={ctl} />
               <CommandPalette ctl={ctl} boardId={boardId} />
               <AIPanel ctl={ctl} />
+              <AgentChatPanel />
               <RunButtons ctl={ctl} />
               <DataNodeEditor ctl={ctl} />
               <ImageActions ctl={ctl} />

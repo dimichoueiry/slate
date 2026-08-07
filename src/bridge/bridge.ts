@@ -42,6 +42,65 @@ function send(msg: Record<string, any>) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ slateBridge: PROTOCOL_VERSION, ...msg }));
 }
 
+// ---------- tab -> bridge requests (the agent panel drives these) ----------
+// The bridge was originally one-directional: the leader called the tab and the
+// tab replied. The agent panel needs the reverse — the tab asks the leader to
+// start/continue/stop a headless claude — so we keep our own pending map for
+// requests WE initiate and match them to the leader's {id,result} replies.
+
+let nextReqId = 1;
+const outbound = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void; timer: ReturnType<typeof setTimeout> }>();
+
+function call(method: string, params: any, timeoutMs = 15_000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reject(new Error('The Slate bridge is not connected — start it with `slate-mcp serve` in your repo.'));
+      return;
+    }
+    const id = nextReqId++;
+    const timer = setTimeout(() => {
+      outbound.delete(id);
+      reject(new Error(`Bridge did not answer "${method}" in time.`));
+    }, timeoutMs);
+    outbound.set(id, { resolve, reject, timer });
+    send({ id, method, params });
+  });
+}
+
+// ---------- agent event fan-out (leader -> tab pushes) ----------
+
+export interface AgentEventMsg {
+  runId: string;
+  event: any; // a claude stream-json object, or {type:'stderr'|'error'|'closed'}
+}
+type AgentEventListener = (msg: AgentEventMsg) => void;
+const agentListeners = new Set<AgentEventListener>();
+
+export function onAgentEvent(cb: AgentEventListener): () => void {
+  agentListeners.add(cb);
+  return () => agentListeners.delete(cb);
+}
+
+/** Start a headless claude run in the daemon's repo. Resolves with its runId. */
+export function startAgentRun(params: {
+  prompt: string;
+  sessionId?: string | null;
+  permissionMode?: string;
+  allowedTools?: string[];
+}): Promise<{ runId: string; sessionId: string | null; ok: boolean; cwd: string | null }> {
+  return call('agent.start', params);
+}
+
+/** Send the next user turn to a live run. */
+export function sendAgentTurn(runId: string, text: string): Promise<{ ok: boolean }> {
+  return call('agent.send', { runId, text });
+}
+
+/** Interrupt (SIGINT) a live run. */
+export function interruptAgentRun(runId: string): Promise<{ ok: boolean }> {
+  return call('agent.interrupt', { runId });
+}
+
 async function handleToolCall(id: string | number, method: string, params: any) {
   const fn = METHODS[method];
   if (!fn) {
@@ -63,6 +122,21 @@ function onMessage(ev: MessageEvent) {
   try {
     msg = JSON.parse(String(ev.data));
   } catch {
+    return;
+  }
+  // reply to a request WE initiated (agent.start/send/interrupt): {id,result|error}, no method
+  if (msg.method === undefined && msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
+    const p = outbound.get(msg.id);
+    if (!p) return;
+    outbound.delete(msg.id);
+    clearTimeout(p.timer);
+    if (msg.error) p.reject(new Error(msg.error.message ?? 'Bridge error'));
+    else p.resolve(msg.result);
+    return;
+  }
+  // streamed agent output pushed by the leader
+  if (msg.method === 'agent.event') {
+    for (const cb of agentListeners) cb(msg.params as AgentEventMsg);
     return;
   }
   switch (msg.method) {
@@ -107,6 +181,11 @@ function connect() {
   ws.onmessage = onMessage;
   ws.onclose = () => {
     ws = null;
+    for (const [id, p] of outbound) {
+      clearTimeout(p.timer);
+      p.reject(new Error('Lost the bridge connection.'));
+      outbound.delete(id);
+    }
     if (useBridge.getState().status !== 'off') useBridge.setState({ status: 'off', pairRequested: false });
     scheduleRetry();
   };
