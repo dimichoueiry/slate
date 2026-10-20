@@ -117,6 +117,8 @@ export interface StickyObj extends BaseObj {
   text: string;
   fontSize: number;
   fontFamily?: string; // FONTS id
+  /** epoch ms when the note was created; drawn as a small date. Absent on older notes. */
+  createdAt?: number;
   /** present on "upload:" nodes — the uploaded file's extracted content */
   file?: UploadFile;
 }
@@ -259,8 +261,11 @@ export type ToolId =
   | 'text'
   | 'frame';
 
+/** Default sticky paper: warm yellow. */
+export const STICKY_DEFAULT = '#F8DE7E';
+
 export const STICKY_COLORS = [
-  '#FFE066',
+  STICKY_DEFAULT,
   '#FFB3BA',
   '#B5EAD7',
   '#A8D8EA',

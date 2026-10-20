@@ -26,7 +26,7 @@ const DASHES = new Set(['solid', 'dashed', 'dotted']);
 const SHAPES = new Set(['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram']);
 const ROUTINGS = new Set(['straight', 'elbow', 'curved']);
 const REVEAL_EFFECTS = new Set<RevealEffect>(['pop', 'fade', 'slide-up', 'slide-left', 'none']);
-const STICKY_DEFAULT = '#FFE066';
+const STICKY_DEFAULT = '#F8DE7E';
 
 const num = (v: any, fallback: number, min: number, max: number) => {
   const n = Number(v);
@@ -265,7 +265,7 @@ function fail(i: number, msg: string): never {
 function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
   const x = num(spec.x, 0, -1e6, 1e6);
   const y = num(spec.y, 0, -1e6, 1e6);
-  const base = { id: nid(), x, y, rotation: 0, z: doc.nextZ(), createdBy: 'agent' as const };
+  const base = { id: nid(), x, y, rotation: 0, z: doc.nextZ(), createdBy: 'agent' as const, ...(spec.type === 'sticky' ? { createdAt: Date.now() } : {}) };
   const reveal = revealSpec(spec.reveal);
   if (spec.reveal !== undefined && reveal === undefined) fail(i, 'reveal must be {step:number>=1, effect?:pop|fade|slide-up|slide-left|none, durationMs?:number, delayMs?:number} or null');
   const withReveal = reveal ? { ...base, reveal } : base;
@@ -817,6 +817,7 @@ export async function add_upload(params: AnyObj): Promise<AnyObj> {
     color: STICKY_DEFAULT,
     text,
     fontSize: 18,
+    createdAt: Date.now(),
     file: upload,
   };
   ctl.doc.begin();

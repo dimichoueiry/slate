@@ -4,6 +4,7 @@ import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
 import { aabbOf, boundsOf, boxUnion, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
 import { arrowHeadLen, chevronArms, drawObject, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
+import { stickyDateGeom, stickyDateLabel, stickyPaperPath, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
 import { ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
@@ -155,15 +156,25 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'sticky': {
       const s = o as StickyObj;
-      let el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="4" fill="${s.color}"/>`;
+      const d = stickyPaperPath(s);
+      const off = stickyShadowOffset(s);
+      let el = `<path d="${d}" transform="translate(${off} ${off})" fill="${STICKY_SHADOW}"/>`;
+      el += `<path d="${d}" fill="${s.color}"/>`;
       if (s.text) {
         const lines = wrapText(s.text, s.fontSize, s.w - 24, 500, s.fontFamily);
         const lh = lineHeight(s.fontSize);
-        let y = s.y + 12 + s.fontSize * 0.8;
+        const top = s.y + Math.max(12, (s.h - lines.length * lh) / 2);
+        let y = top + s.fontSize * 0.8;
+        const cx = s.x + s.w / 2;
         for (const line of lines) {
-          el += `<text x="${s.x + 12}" y="${y}" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(s.fontFamily))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
+          el += `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(s.fontFamily))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
           y += lh;
         }
+      }
+      const date = stickyDateLabel(s);
+      if (date) {
+        const g = stickyDateGeom(s);
+        el += `<text x="${g.x}" y="${g.y}" text-anchor="end" font-size="${g.size}" font-family="${esc(fontStack('sans'))}" fill="${STICKY_DATE_COLOR}">${esc(date)}</text>`;
       }
       return el;
     }
