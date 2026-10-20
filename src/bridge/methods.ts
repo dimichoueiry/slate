@@ -301,6 +301,8 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
         strokeWidth: num(spec.strokeWidth, 2, 0.5, 20),
         dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
         radius: 12,
+        sketchy: spec.sketchy !== false,
+        seed: Math.floor(Math.random() * 2 ** 31),
         opacity: 1,
         text: str(spec.text),
         textColor: color(spec.textColor, '#1a1a1a'),
@@ -394,6 +396,8 @@ function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: an
     dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
     startArrow: 'none',
     endArrow: spec.endArrow === 'none' ? 'none' : 'triangle',
+    sketchy: spec.sketchy !== false,
+    seed: Math.floor(Math.random() * 2 ** 31),
     opacity: 1,
     label: str(spec.label) || undefined,
   };
@@ -497,9 +501,9 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 // per-type editable props, mirroring aiEdit.ts EDITABLE
 const EDITABLE: Record<string, Set<string>> = {
   sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal']),
-  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'x', 'y', 'w', 'h', 'reveal']),
+  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal']),
   text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal']),
-  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'reveal']),
+  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'sketchy', 'reveal']),
   icon: new Set(['color', 'strokeWidth', 'x', 'y', 'reveal']),
   frame: new Set(['name', 'x', 'y', 'w', 'h', 'reveal']),
 };
@@ -545,6 +549,12 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         } else if (k === 'fixedWidth') {
           if (typeof v === 'boolean') patch[k] = v;
           else rejected.push(k);
+        } else if (k === 'sketchy') {
+          if (typeof v !== 'boolean') rejected.push(k);
+          else {
+            patch[k] = v;
+            if (v && (target as AnyObj).seed === undefined) patch.seed = Math.floor(Math.random() * 2 ** 31);
+          }
         } else if (k === 'reveal') {
           const nextReveal = revealSpec(v, (target as AnyObj).reveal);
           if (nextReveal === null) clearReveal = true;

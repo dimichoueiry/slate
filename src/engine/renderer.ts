@@ -1,4 +1,5 @@
 import type {
+  ArrowHead,
   Box,
   ConnectorObj,
   FrameObj,
@@ -527,6 +528,8 @@ export function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj) {
 }
 
 // ---------- sketchy (roughjs) rendering ----------
+// Tuned to match Excalidraw's "artist" sloppiness: roughness 1, bowing 1,
+// roughjs's default double-pass strokes, solid fills, round caps and joins.
 
 interface SketchyPath {
   d: string;
@@ -537,21 +540,53 @@ interface SketchyPath {
   isBorder: boolean;
 }
 
+/** Stable fallback seed for objects saved without one. */
+function seedOf(o: { id: string; seed?: number }): number {
+  if (o.seed !== undefined) return o.seed;
+  let h = 2166136261;
+  for (let i = 0; i < o.id.length; i++) h = Math.imul(h ^ o.id.charCodeAt(i), 16777619);
+  return (h >>> 0) % 2 ** 31;
+}
+
+function sketchyOptions(seed: number, stroke: string, strokeWidth: number, dash: string, size: { w: number; h: number }) {
+  // small shapes get less roughness, or the jitter swamps them
+  const maxSize = Math.max(size.w, size.h);
+  const minSize = Math.min(size.w, size.h);
+  const roughness = (minSize >= 20 && maxSize >= 50) || minSize >= 15 ? 1 : 1 / (maxSize < 10 ? 3 : 2);
+  return {
+    seed,
+    roughness,
+    bowing: 1,
+    stroke: stroke === 'transparent' ? 'none' : stroke,
+    strokeWidth,
+    // dashes on top of a double pass look like noise
+    disableMultiStroke: dash !== 'solid',
+    preserveVertices: true,
+  };
+}
+
+function toSketchyPaths(drawable: ReturnType<typeof roughGenerator.path>, borderStroke: string): SketchyPath[] {
+  return roughGenerator.toPaths(drawable).map((info) => ({
+    d: info.d,
+    path: new Path2D(info.d),
+    stroke: info.stroke,
+    strokeWidth: info.strokeWidth,
+    fill: info.fill ?? 'none',
+    isBorder: info.stroke === borderStroke,
+  }));
+}
+
 const sketchyCache = new WeakMap<ShapeObj, SketchyPath[]>();
 
 export function sketchyPaths(o: ShapeObj): SketchyPath[] {
   let paths = sketchyCache.get(o);
   if (paths) return paths;
   const opts = {
-    seed: o.seed ?? 7,
-    roughness: 1.4,
-    bowing: 1.2,
-    stroke: o.stroke === 'transparent' ? 'none' : o.stroke,
-    strokeWidth: o.strokeWidth,
+    ...sketchyOptions(seedOf(o), o.stroke, o.strokeWidth, o.dash, o),
     fill: o.fill !== 'transparent' ? o.fill : undefined,
-    fillStyle: 'hachure',
-    hachureGap: Math.max(5, o.strokeWidth * 4),
-    fillWeight: Math.max(0.8, o.strokeWidth / 2),
+    fillStyle: 'solid',
+    hachureGap: o.strokeWidth * 4,
+    fillWeight: o.strokeWidth / 2,
   };
   const { x, y, w, h } = o;
   let drawable;
@@ -562,18 +597,11 @@ export function sketchyPaths(o: ShapeObj): SketchyPath[] {
     case 'roundedRect': {
       const r = Math.min(o.radius, w / 2, h / 2);
       const d = `M${x + r},${y} L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} L${x + r},${y + h} Q${x},${y + h} ${x},${y + h - r} L${x},${y + r} Q${x},${y} ${x + r},${y} Z`;
-      // tame roughness on the corner curves or they come out mangled
-      drawable = roughGenerator.path(d, {
-        ...opts,
-        roughness: 0.8,
-        bowing: 0.7,
-        preserveVertices: true,
-        disableMultiStrokeFill: true,
-      });
+      drawable = roughGenerator.path(d, opts);
       break;
     }
     case 'ellipse':
-      drawable = roughGenerator.ellipse(x + w / 2, y + h / 2, w, h, opts);
+      drawable = roughGenerator.ellipse(x + w / 2, y + h / 2, w, h, { ...opts, curveFitting: 1 });
       break;
     default: {
       const poly = shapePolygon(o.shape, { x, y, w, h });
@@ -583,25 +611,20 @@ export function sketchyPaths(o: ShapeObj): SketchyPath[] {
       );
     }
   }
-  paths = roughGenerator.toPaths(drawable).map((info) => ({
-    d: info.d,
-    path: new Path2D(info.d),
-    stroke: info.stroke,
-    strokeWidth: info.strokeWidth,
-    fill: info.fill ?? 'none',
-    isBorder: info.stroke === o.stroke,
-  }));
+  paths = toSketchyPaths(drawable, o.stroke);
   sketchyCache.set(o, paths);
   return paths;
 }
 
+export type SketchyPathInfo = { d: string; stroke: string; strokeWidth: number; fill: string; isBorder: boolean };
+
 /** Raw path data for SVG export. */
-export function sketchyPathInfos(o: ShapeObj): { d: string; stroke: string; strokeWidth: number; fill: string }[] {
-  return sketchyPaths(o).map(({ d, stroke, strokeWidth, fill }) => ({ d, stroke, strokeWidth, fill }));
+export function sketchyPathInfos(o: ShapeObj): SketchyPathInfo[] {
+  return sketchyPaths(o).map(({ d, stroke, strokeWidth, fill, isBorder }) => ({ d, stroke, strokeWidth, fill, isBorder }));
 }
 
-function drawSketchy(ctx: CanvasRenderingContext2D, o: ShapeObj) {
-  for (const p of sketchyPaths(o)) {
+function strokeSketchyPaths(ctx: CanvasRenderingContext2D, paths: SketchyPath[], dash: string, width: number) {
+  for (const p of paths) {
     if (p.fill && p.fill !== 'none') {
       ctx.fillStyle = p.fill;
       ctx.fill(p.path);
@@ -610,11 +633,16 @@ function drawSketchy(ctx: CanvasRenderingContext2D, o: ShapeObj) {
       ctx.strokeStyle = p.stroke;
       ctx.lineWidth = p.strokeWidth;
       ctx.lineCap = 'round';
-      applyDash(ctx, p.isBorder ? o.dash : 'solid', o.strokeWidth);
+      ctx.lineJoin = 'round';
+      applyDash(ctx, p.isBorder ? dash : 'solid', width);
       ctx.stroke(p.path);
       ctx.setLineDash([]);
     }
   }
+}
+
+function drawSketchy(ctx: CanvasRenderingContext2D, o: ShapeObj) {
+  strokeSketchyPaths(ctx, sketchyPaths(o), o.dash, o.strokeWidth);
 }
 
 function drawCenteredText(
@@ -782,11 +810,88 @@ export function drawFrame(ctx: CanvasRenderingContext2D, o: FrameObj, zoom: numb
   ctx.restore();
 }
 
+/** Arrowhead arm length for a connector of the given width and path length. */
+export function arrowHeadLen(o: ConnectorObj, pts: Vec[]): number {
+  const base = o.strokeWidth * 4 + 4;
+  if (!o.sketchy) return base;
+  // the chevron is longer, like Excalidraw's, but never more than ~40% of a short arrow
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  return Math.min(o.strokeWidth * 5 + 16, len * 0.4);
+}
+
+/** Point `dist` back along the polyline from its last point, so a head on a curve aims along the curve, not its last tiny segment. */
+function pointBack(pts: Vec[], dist: number): Vec {
+  let left = dist;
+  for (let i = pts.length - 1; i > 0; i--) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    if (d >= left) return { x: b.x + ((a.x - b.x) * left) / d, y: b.y + ((a.y - b.y) * left) / d };
+    left -= d;
+  }
+  return pts[0];
+}
+
+/** Two arm endpoints of an open chevron at `tip`, pointing away from `from`. */
+export function chevronArms(from: Vec, tip: Vec, len: number): [Vec, Vec] {
+  const angle = Math.atan2(tip.y - from.y, tip.x - from.x);
+  const spread = (27 * Math.PI) / 180;
+  return [
+    { x: tip.x - len * Math.cos(angle - spread), y: tip.y - len * Math.sin(angle - spread) },
+    { x: tip.x - len * Math.cos(angle + spread), y: tip.y - len * Math.sin(angle + spread) },
+  ];
+}
+
+const connectorSketchCache = new WeakMap<ConnectorObj, { key: string; paths: SketchyPath[] }>();
+
+/** Rough paths for a sketchy connector: the shaft plus chevron arms. Cached per route. */
+function sketchyConnectorPaths(o: ConnectorObj, pts: Vec[]): SketchyPath[] {
+  const key = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const hit = connectorSketchCache.get(o);
+  if (hit && hit.key === key) return hit.paths;
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const size = { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  const linear = Math.hypot(size.w, size.h) >= 50;
+  const opts = sketchyOptions(seedOf(o), o.stroke, o.strokeWidth, o.dash, linear ? { w: 50, h: 50 } : size);
+  const curved = o.routing === 'curved' && pts.length > 8;
+  // a handful of control points keeps the curve smooth; every sample would wobble
+  const ctrl = curved ? pts.filter((_, i) => i % 6 === 0 || i === pts.length - 1) : pts;
+  const shaft = curved
+    ? roughGenerator.curve(ctrl.map((p) => [p.x, p.y] as [number, number]), opts)
+    : roughGenerator.linearPath(pts.map((p) => [p.x, p.y] as [number, number]), opts);
+  const paths = toSketchyPaths(shaft, o.stroke);
+  const headLen = arrowHeadLen(o, pts);
+  // aim along the drawn curve: roughjs's curve leaves each end along the chord to the next control point
+  const heads: [Vec, Vec][] = [];
+  if (o.endArrow !== 'none') heads.push([pointBack(ctrl, headLen), pts[pts.length - 1]]);
+  if (o.startArrow !== 'none') heads.push([pointBack([...ctrl].reverse(), headLen), pts[0]]);
+  for (const [from, tip] of heads) {
+    for (const arm of chevronArms(from, tip, headLen)) {
+      paths.push(...toSketchyPaths(roughGenerator.line(arm.x, arm.y, tip.x, tip.y, { ...opts, disableMultiStroke: false }), ''));
+    }
+  }
+  connectorSketchCache.set(o, { key, paths });
+  return paths;
+}
+
+/** Raw path data of a sketchy connector, for SVG export. */
+export function sketchyConnectorPathInfos(o: ConnectorObj, pts: Vec[]): SketchyPathInfo[] {
+  return sketchyConnectorPaths(o, pts).map(({ d, stroke, strokeWidth, fill, isBorder }) => ({ d, stroke, strokeWidth, fill, isBorder }));
+}
+
 export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, doc: Doc) {
   const pts = routeConnector(o, doc.resolve);
   if (pts.length < 2) return;
   ctx.save();
   ctx.globalAlpha = o.opacity;
+  if (o.sketchy) {
+    strokeSketchyPaths(ctx, sketchyConnectorPaths(o, pts), o.dash, o.strokeWidth);
+    if (o.label) drawConnectorLabel(ctx, o, pts);
+    ctx.restore();
+    return;
+  }
   ctx.strokeStyle = o.stroke;
   ctx.fillStyle = o.stroke;
   ctx.lineWidth = o.strokeWidth;
@@ -794,44 +899,38 @@ export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, do
   ctx.lineCap = 'round';
   applyDash(ctx, o.dash, o.strokeWidth);
 
-  // shorten ends to make room for arrowheads
-  const headLen = o.strokeWidth * 4 + 4;
+  // shorten ends to make room for arrowheads (an open chevron sits on the shaft)
+  const headLen = arrowHeadLen(o, pts);
   const drawPts = [...pts];
-  if (o.endArrow !== 'none') trimEnd(drawPts, headLen * 0.6);
-  if (o.startArrow !== 'none') trimStart(drawPts, headLen * 0.6);
+  if (o.endArrow === 'triangle') trimEnd(drawPts, headLen * 0.6);
+  if (o.startArrow === 'triangle') trimStart(drawPts, headLen * 0.6);
 
   ctx.beginPath();
   ctx.moveTo(drawPts[0].x, drawPts[0].y);
-  if (o.routing === 'curved' && pts.length > 8) {
-    for (const p of drawPts.slice(1)) ctx.lineTo(p.x, p.y);
-  } else {
-    for (const p of drawPts.slice(1)) ctx.lineTo(p.x, p.y);
-  }
+  for (const p of drawPts.slice(1)) ctx.lineTo(p.x, p.y);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  if (o.endArrow === 'triangle') {
-    drawArrowhead(ctx, pts[pts.length - 2], pts[pts.length - 1], headLen);
-  }
-  if (o.startArrow === 'triangle') {
-    drawArrowhead(ctx, pts[1], pts[0], headLen);
-  }
-  if (o.label) {
-    const mid = polylineMidpoint(pts);
-    const fs = 13;
-    ctx.font = fontString(fs, 500);
-    const tw = ctx.measureText(o.label).width;
-    const padX = 6;
-    const bg = new Path2D();
-    bg.roundRect(mid.x - tw / 2 - padX, mid.y - 10, tw + padX * 2, 20, 6);
-    ctx.fillStyle = '#f3f2ef';
-    ctx.fill(bg);
-    ctx.fillStyle = o.stroke;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(o.label, mid.x, mid.y + 0.5);
-  }
+  if (o.endArrow !== 'none') drawArrowhead(ctx, pts[pts.length - 2], pts[pts.length - 1], headLen, o.endArrow);
+  if (o.startArrow !== 'none') drawArrowhead(ctx, pts[1], pts[0], headLen, o.startArrow);
+  if (o.label) drawConnectorLabel(ctx, o, pts);
   ctx.restore();
+}
+
+function drawConnectorLabel(ctx: CanvasRenderingContext2D, o: ConnectorObj, pts: Vec[]) {
+  const mid = polylineMidpoint(pts);
+  const fs = 13;
+  ctx.font = fontString(fs, 500);
+  const tw = ctx.measureText(o.label!).width;
+  const padX = 6;
+  const bg = new Path2D();
+  bg.roundRect(mid.x - tw / 2 - padX, mid.y - 10, tw + padX * 2, 20, 6);
+  ctx.fillStyle = '#f3f2ef';
+  ctx.fill(bg);
+  ctx.fillStyle = o.stroke;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(o.label!, mid.x, mid.y + 0.5);
 }
 
 function trimEnd(pts: Vec[], by: number) {
@@ -850,7 +949,16 @@ function trimStart(pts: Vec[], by: number) {
   pts[0] = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
-function drawArrowhead(ctx: CanvasRenderingContext2D, from: Vec, tip: Vec, len: number) {
+function drawArrowhead(ctx: CanvasRenderingContext2D, from: Vec, tip: Vec, len: number, kind: ArrowHead) {
+  if (kind === 'chevron') {
+    const [a, b] = chevronArms(from, tip, len);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    return;
+  }
   const angle = Math.atan2(tip.y - from.y, tip.x - from.x);
   const spread = Math.PI / 7;
   ctx.beginPath();

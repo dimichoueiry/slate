@@ -676,8 +676,8 @@ export class Controller {
     // optional props may be absent on older objects, so `in` checks would miss them
     const OPTIONAL: Record<string, Set<string>> = {
       fontFamily: new Set(['text', 'shape', 'sticky']),
-      sketchy: new Set(['shape']),
-      seed: new Set(['shape']),
+      sketchy: new Set(['shape', 'connector']),
+      seed: new Set(['shape', 'connector']),
       strokeWidth: new Set(['icon']),
     };
     this.doc.begin();
@@ -690,7 +690,7 @@ export class Controller {
         if (k in o || OPTIONAL[k]?.has(o.type)) valid[k] = v;
       }
       if (Object.keys(valid).length) {
-        if (valid.sketchy && (o as ShapeObj).seed === undefined) {
+        if (valid.sketchy && (o as ShapeObj | ConnectorObj).seed === undefined) {
           valid.seed = Math.floor(Math.random() * 2 ** 31);
         }
         this.doc.update(o.id, valid as Partial<SlateObj>);
@@ -1236,6 +1236,8 @@ export class Controller {
         startArrow: 'none',
         endArrow: 'triangle',
         opacity: 1,
+        sketchy: ui.sketchy,
+        seed: Math.floor(Math.random() * 2 ** 31),
       };
       this.doc.begin();
       this.doc.set(obj);
@@ -1814,6 +1816,8 @@ export class Controller {
         startArrow: 'none',
         endArrow: 'none',
         opacity: 1,
+        sketchy: ui.sketchy,
+        seed: Math.floor(Math.random() * 2 ** 31),
       };
       this.doc.set(obj);
       return;
@@ -1996,6 +2000,8 @@ export class Controller {
       startArrow: 'none',
       endArrow: tool === 'line' ? 'none' : 'triangle',
       opacity: 1,
+      sketchy: ui.sketchy,
+      seed: Math.floor(Math.random() * 2 ** 31),
     };
     this.doc.begin();
     this.doc.set(obj);

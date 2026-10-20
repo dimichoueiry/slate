@@ -3,7 +3,7 @@ import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
 import { aabbOf, boundsOf, boxUnion, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
-import { drawObject, getBitmap, sketchyPathInfos } from '../engine/renderer';
+import { arrowHeadLen, chevronArms, drawObject, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
 import { db, getBlob, putBlob, createBoard } from '../store/db';
@@ -117,10 +117,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     case 'shape': {
       const s = o as ShapeObj;
       if (s.sketchy) {
-        let el = '';
-        for (const p of sketchyPathInfos(s)) {
-          el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" opacity="${s.opacity}" fill-rule="evenodd"/>`;
-        }
+        let el = sketchySvg(sketchyPathInfos(s), s.dash, s.strokeWidth, s.opacity);
         if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, s.fontFamily);
         return el;
       }
@@ -194,11 +191,17 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     case 'connector': {
       const c = o as ConnectorObj;
       const pts = routeConnector(c, doc.resolve);
-      const d = `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`;
-      let el = `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="${c.strokeWidth}" opacity="${c.opacity}" stroke-linejoin="round" stroke-linecap="round"/>`;
-      const headLen = c.strokeWidth * 4 + 4;
-      if (c.endArrow === 'triangle') el += arrowSvg(pts[pts.length - 2], pts[pts.length - 1], headLen, c.stroke, c.opacity);
-      if (c.startArrow === 'triangle') el += arrowSvg(pts[1], pts[0], headLen, c.stroke, c.opacity);
+      if (pts.length < 2) return '';
+      let el = '';
+      if (c.sketchy) {
+        el = sketchySvg(sketchyConnectorPathInfos(c, pts), c.dash, c.strokeWidth, c.opacity);
+      } else {
+        const d = `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`;
+        el = `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="${c.strokeWidth}" opacity="${c.opacity}" stroke-linejoin="round" stroke-linecap="round"${dashSvg(c.dash, c.strokeWidth)}/>`;
+        const headLen = arrowHeadLen(c, pts);
+        if (c.endArrow !== 'none') el += arrowSvg(pts[pts.length - 2], pts[pts.length - 1], headLen, c, c.endArrow);
+        if (c.startArrow !== 'none') el += arrowSvg(pts[1], pts[0], headLen, c, c.startArrow);
+      }
       if (c.label) {
         const mid = polylineMidpoint(pts);
         const w = c.label.length * 7.5 + 12;
@@ -242,7 +245,29 @@ function centeredTextSvg(
   return el;
 }
 
-function arrowSvg(from: { x: number; y: number }, tip: { x: number; y: number }, len: number, color: string, opacity: number): string {
+/** SVG dash attributes matching applyDash on the canvas. */
+function dashSvg(dash: string, width: number): string {
+  if (dash === 'dashed') return ` stroke-dasharray="${width * 3} ${width * 2.5}"`;
+  if (dash === 'dotted') return ` stroke-dasharray="${width * 0.5} ${width * 2}"`;
+  return '';
+}
+
+/** roughjs paths as SVG, styled like strokeSketchyPaths on the canvas. */
+function sketchySvg(paths: SketchyPathInfo[], dash: string, width: number, opacity: number): string {
+  let el = '';
+  for (const p of paths) {
+    const dashAttr = p.isBorder ? dashSvg(dash, width) : '';
+    el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" fill-rule="evenodd"${dashAttr}/>`;
+  }
+  return el;
+}
+
+function arrowSvg(from: { x: number; y: number }, tip: { x: number; y: number }, len: number, c: ConnectorObj, kind: ConnectorObj['endArrow']): string {
+  const { stroke: color, opacity } = c;
+  if (kind === 'chevron') {
+    const [a, b] = chevronArms(from, tip, len);
+    return `<path d="M${a.x},${a.y}L${tip.x},${tip.y}L${b.x},${b.y}" fill="none" stroke="${color}" stroke-width="${c.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+  }
   const angle = Math.atan2(tip.y - from.y, tip.x - from.x);
   const spread = Math.PI / 7;
   const p1 = { x: tip.x - len * Math.cos(angle - spread), y: tip.y - len * Math.sin(angle - spread) };
