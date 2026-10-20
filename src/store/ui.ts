@@ -151,7 +151,7 @@ export const useUI = create<UIState>((setState) => ({
   strokeWidth: 3,
   dash: 'solid',
   sketchy: true,
-  rounded: false,
+  rounded: true,
 
   routing: 'curved',
   attachEnabled: true,

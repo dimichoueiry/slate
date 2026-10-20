@@ -17,7 +17,7 @@ import { iconPaths } from './icons';
 import type { Camera } from './camera';
 import { visibleWorldRect } from './camera';
 import type { Doc } from './doc';
-import { boundsOf, polylineMidpoint, routeConnector, shapePolygon } from './geometry';
+import { boundsOf, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from './geometry';
 import { PEN_CONFIGS, strokePath } from './ink';
 import { fontString, lineHeight, wrapText } from './text';
 import {
@@ -489,8 +489,7 @@ export function shapePath(o: ShapeObj): Path2D {
       p.rect(x, y, w, h);
       break;
     case 'roundedRect': {
-      const r = Math.min(o.radius, w / 2, h / 2);
-      p.roundRect(x, y, w, h, r);
+      p.roundRect(x, y, w, h, cornerRadius(o));
       break;
     }
     case 'ellipse':
@@ -606,7 +605,7 @@ export function sketchyPaths(o: ShapeObj): SketchyPath[] {
       drawable = roughGenerator.rectangle(x, y, w, h, opts);
       break;
     case 'roundedRect': {
-      const r = Math.min(o.radius, w / 2, h / 2);
+      const r = cornerRadius(o);
       const d = `M${x + r},${y} L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} L${x + r},${y + h} Q${x},${y + h} ${x},${y + h - r} L${x},${y + r} Q${x},${y} ${x + r},${y} Z`;
       drawable = roughGenerator.path(d, opts);
       break;
@@ -866,6 +865,21 @@ export function chevronArms(from: Vec, tip: Vec, len: number): [Vec, Vec] {
   ];
 }
 
+/** SVG path of the cubic bezier that `pts` (evenly sampled in t, count - 1 divisible by 3) was sampled from. */
+function cubicThrough(pts: Vec[]): string | null {
+  const n = pts.length - 1;
+  if (n < 3 || n % 3 !== 0) return null;
+  const a = pts[0];
+  const b = pts[n];
+  const p1 = pts[n / 3]; // B(1/3) = (8a + 12c1 + 6c2 + b) / 27
+  const p2 = pts[(2 * n) / 3]; // B(2/3) = (a + 6c1 + 12c2 + 8b) / 27
+  const r1 = { x: 27 * p1.x - 8 * a.x - b.x, y: 27 * p1.y - 8 * a.y - b.y };
+  const r2 = { x: 27 * p2.x - a.x - 8 * b.x, y: 27 * p2.y - a.y - 8 * b.y };
+  const c1 = { x: (2 * r1.x - r2.x) / 18, y: (2 * r1.y - r2.y) / 18 };
+  const c2 = { x: (2 * r2.x - r1.x) / 18, y: (2 * r2.y - r1.y) / 18 };
+  return `M${a.x} ${a.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`;
+}
+
 const connectorSketchCache = new WeakMap<ConnectorObj, { key: string; paths: SketchyPath[] }>();
 
 /** Rough paths for a sketchy connector: the shaft plus chevron arms. Cached per route. */
@@ -878,18 +892,16 @@ function sketchyConnectorPaths(o: ConnectorObj, pts: Vec[]): SketchyPath[] {
   const size = { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
   const linear = Math.hypot(size.w, size.h) >= 50;
   const opts = sketchyOptions(seedOf(o), o.stroke, o.strokeWidth, o.dash, linear ? { w: 50, h: 50 } : size);
-  const curved = o.routing === 'curved' && pts.length > 8;
-  // a handful of control points keeps the curve smooth; every sample would wobble
-  const ctrl = curved ? pts.filter((_, i) => i % 6 === 0 || i === pts.length - 1) : pts;
-  const shaft = curved
-    ? roughGenerator.curve(ctrl.map((p) => [p.x, p.y] as [number, number]), opts)
+  // one rough cubic, like the clean curve; roughjs's curve() through a few samples kinks at each one
+  const bezier = o.routing === 'curved' ? cubicThrough(pts) : null;
+  const shaft = bezier
+    ? roughGenerator.path(bezier, opts)
     : roughGenerator.linearPath(pts.map((p) => [p.x, p.y] as [number, number]), opts);
   const paths = toSketchyPaths(shaft, o.stroke);
   const headLen = arrowHeadLen(o, pts);
-  // aim along the drawn curve: roughjs's curve leaves each end along the chord to the next control point
   const heads: [Vec, Vec][] = [];
-  if (o.endArrow !== 'none') heads.push([pointBack(ctrl, headLen), pts[pts.length - 1]]);
-  if (o.startArrow !== 'none') heads.push([pointBack([...ctrl].reverse(), headLen), pts[0]]);
+  if (o.endArrow !== 'none') heads.push([pointBack(pts, headLen), pts[pts.length - 1]]);
+  if (o.startArrow !== 'none') heads.push([pointBack([...pts].reverse(), headLen), pts[0]]);
   for (const [from, tip] of heads) {
     for (const arm of chevronArms(from, tip, headLen)) {
       paths.push(...toSketchyPaths(roughGenerator.line(arm.x, arm.y, tip.x, tip.y, { ...opts, disableMultiStroke: false }), ''));

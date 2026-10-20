@@ -79,6 +79,8 @@ export interface ShapeObj extends BaseObj {
   strokeWidth: number;
   dash: DashStyle;
   radius: number; // corner radius for roundedRect
+  /** roundedRect only: ignore `radius` and use Excalidraw's adaptive radius (25% of the short side, max 32) */
+  adaptiveRadius?: boolean;
   opacity: number;
   text: string;
   textColor: string;

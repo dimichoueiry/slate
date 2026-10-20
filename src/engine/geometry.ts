@@ -1,4 +1,4 @@
-import type { Box, SlateObj, Vec, ConnectorObj, AnchorSide } from '../types';
+import type { Box, SlateObj, Vec, ConnectorObj, AnchorSide, ShapeObj } from '../types';
 
 export function boundsOf(o: SlateObj, resolve?: (id: string) => SlateObj | undefined): Box {
   switch (o.type) {
@@ -303,6 +303,12 @@ function elbowRoute(a: Vec, b: Vec, aSide: AnchorSide | null, bSide: AnchorSide 
 }
 
 // ---------- shape outline (for hit tests + svg export) ----------
+
+/** Corner radius a roundedRect is drawn with. Adaptive matches Excalidraw's 'round' edges. */
+export function cornerRadius(o: ShapeObj): number {
+  const r = o.adaptiveRadius ? Math.min(Math.min(o.w, o.h) * 0.25, 32) : o.radius;
+  return Math.min(r, o.w / 2, o.h / 2);
+}
 
 export function shapePolygon(shape: string, b: Box): Vec[] | null {
   switch (shape) {

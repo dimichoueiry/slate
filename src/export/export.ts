@@ -2,7 +2,7 @@ import type { Box, BoardMeta, ConnectorObj, IconObj, ImageObj, ShapeObj, SlateOb
 import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
-import { aabbOf, boundsOf, boxUnion, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
+import { aabbOf, boundsOf, boxUnion, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
 import { arrowHeadLen, chevronArms, drawObject, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
 import { stickyDateGeom, stickyDateLabel, stickyPaperPath, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
@@ -144,7 +144,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       let el = '';
       if (s.shape === 'rect') el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" ${common}/>`;
       else if (s.shape === 'roundedRect')
-        el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${Math.min(s.radius, s.w / 2, s.h / 2)}" ${common}/>`;
+        el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${cornerRadius(s)}" ${common}/>`;
       else if (s.shape === 'ellipse')
         el = `<ellipse cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}" ${common}/>`;
       else {

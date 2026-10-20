@@ -380,7 +380,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
                 <button
                   className={single?.type === 'shape' && single.shape === 'roundedRect' ? 'active' : ''}
                   title="Rounded corners"
-                  onClick={() => ctl.updateSelected({ shape: 'roundedRect' })}
+                  onClick={() => ctl.updateSelected({ shape: 'roundedRect', adaptiveRadius: true })}
                 >
                   <RoundCornerIcon />
                 </button>

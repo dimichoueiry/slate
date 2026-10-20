@@ -682,6 +682,7 @@ export class Controller {
     const OPTIONAL: Record<string, Set<string>> = {
       fontFamily: new Set(['text', 'shape', 'sticky']),
       sketchy: new Set(['shape', 'connector']),
+      adaptiveRadius: new Set(['shape']),
       seed: new Set(['shape', 'connector']),
       strokeWidth: new Set(['icon']),
     };
@@ -690,7 +691,7 @@ export class Controller {
       const valid: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(patch)) {
         // corner toggle only applies to rectangles, not other shape kinds
-        if (k === 'shape' && (o.type !== 'shape' || !['rect', 'roundedRect'].includes((o as ShapeObj).shape)))
+        if ((k === 'shape' || k === 'adaptiveRadius') && (o.type !== 'shape' || !['rect', 'roundedRect'].includes((o as ShapeObj).shape)))
           continue;
         if (k in o || OPTIONAL[k]?.has(o.type)) valid[k] = v;
       }
@@ -1173,6 +1174,7 @@ export class Controller {
           strokeWidth: ui.strokeWidth,
           dash: ui.dash,
           radius: 12,
+          adaptiveRadius: true,
           opacity: 1,
           text: '',
           textColor: inkForCanvas(ui.canvasDark),

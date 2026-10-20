@@ -301,6 +301,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
         strokeWidth: num(spec.strokeWidth, 3, 0.5, 20),
         dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
         radius: 12,
+        adaptiveRadius: true,
         sketchy: spec.sketchy !== false,
         seed: Math.floor(Math.random() * 2 ** 31),
         opacity: 1,
