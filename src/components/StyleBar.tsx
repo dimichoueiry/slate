@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
+import { isSketchy } from '../engine/renderer';
 import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type RevealEffect, type Routing } from '../types';
 import { ensureVideoModels, cachedVideoModelInfo, getVideoModel, type VideoModelInfo } from '../ai/llm';
 import FloatingPanel from './FloatingPanel';
@@ -215,6 +216,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (hasSel) {
     const types = new Set(selObjs.map((o) => o.type));
     const single = selObjs.length === 1 ? selObjs[0] : null;
+    const singleSketchy = single?.type === 'connector' ? isSketchy(single) : !!(single as any)?.sketchy;
     const revealSteps = selObjs.map((o) => explicitRevealStep(o));
     const revealStepMixed = new Set(revealSteps.map((step) => step ?? 0)).size > 1;
     const revealStep = revealStepMixed ? null : revealSteps[0];
@@ -353,14 +355,14 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             {(types.has('shape') || types.has('connector')) && (
               <div className="seg">
                 <button
-                  className={!(single as any)?.sketchy ? 'active' : ''}
+                  className={!singleSketchy ? 'active' : ''}
                   title="Clean borders"
                   onClick={() => ctl.updateSelected({ sketchy: false })}
                 >
                   Clean
                 </button>
                 <button
-                  className={(single as any)?.sketchy ? 'active' : ''}
+                  className={singleSketchy ? 'active' : ''}
                   title="Hand-drawn borders"
                   onClick={() => ctl.updateSelected({ sketchy: true })}
                 >

@@ -832,14 +832,23 @@ export function drawFrame(ctx: CanvasRenderingContext2D, o: FrameObj, zoom: numb
   ctx.restore();
 }
 
+/**
+ * Connectors are hand-drawn unless explicitly set clean. `sketchy` is absent on
+ * connectors saved before it existed and on ones built by paths that don't set
+ * it (AI edit, AI-node output wiring, templates), so absent means sketchy.
+ */
+export function isSketchy(o: ConnectorObj): boolean {
+  return o.sketchy !== false;
+}
+
 /** Arrowhead arm length for a connector of the given width and path length. */
 export function arrowHeadLen(o: ConnectorObj, pts: Vec[]): number {
   const base = o.strokeWidth * 4 + 4;
-  if (!o.sketchy) return base;
-  // the chevron is longer, like Excalidraw's, but never more than ~40% of a short arrow
+  if (!isSketchy(o)) return base;
+  // Excalidraw's "arrow" head: 25px arms, never more than half the arrow
   let len = 0;
   for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  return Math.min(o.strokeWidth * 5 + 16, len * 0.4);
+  return Math.min(25, len * 0.5);
 }
 
 /** Point `dist` back along the polyline from its last point, so a head on a curve aims along the curve, not its last tiny segment. */
@@ -858,7 +867,7 @@ function pointBack(pts: Vec[], dist: number): Vec {
 /** Two arm endpoints of an open chevron at `tip`, pointing away from `from`. */
 export function chevronArms(from: Vec, tip: Vec, len: number): [Vec, Vec] {
   const angle = Math.atan2(tip.y - from.y, tip.x - from.x);
-  const spread = (27 * Math.PI) / 180;
+  const spread = (20 * Math.PI) / 180; // Excalidraw's "arrow" head angle
   return [
     { x: tip.x - len * Math.cos(angle - spread), y: tip.y - len * Math.sin(angle - spread) },
     { x: tip.x - len * Math.cos(angle + spread), y: tip.y - len * Math.sin(angle + spread) },
@@ -921,7 +930,7 @@ export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, do
   if (pts.length < 2) return;
   ctx.save();
   ctx.globalAlpha = o.opacity;
-  if (o.sketchy) {
+  if (isSketchy(o)) {
     strokeSketchyPaths(ctx, sketchyConnectorPaths(o, pts), o.dash, o.strokeWidth);
     if (o.label) drawConnectorLabel(ctx, o, pts);
     ctx.restore();

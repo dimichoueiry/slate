@@ -2,7 +2,7 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 
-const SHOTS = 'scripts/shots';
+const SHOTS = process.env.SHOTS ?? 'scripts/shots';
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const PORT = process.env.PORT ?? '5180';
@@ -78,12 +78,48 @@ await page.waitForTimeout(400);
 const b = await page.screenshot();
 console.log(Buffer.compare(a, b) === 0 ? 'STABLE' : 'JITTER: frames differ');
 
-// every new shape/connector is sketchy
+// every new shape/connector is sketchy (a connector with no flag counts: absent means sketchy)
 const flags = await page.evaluate(() => {
   const ctl = window.__slateCtl ?? null;
-  return ctl ? ctl.doc.all().filter((o) => o.type === 'shape' || o.type === 'connector').map((o) => !!o.sketchy) : null;
+  return ctl
+    ? ctl.doc.all().filter((o) => o.type === 'shape' || o.type === 'connector').map((o) => (o.type === 'connector' ? o.sketchy !== false : !!o.sketchy))
+    : null;
 });
 if (flags) console.log(flags.every(Boolean) ? `ALL SKETCHY (${flags.length})` : `NOT ALL SKETCHY: ${flags}`);
+
+// connectors saved before the flag existed, or built by AI edit / AI nodes / templates,
+// carry no sketchy or seed: they must still render rough, and stably (seed from id)
+const legacy = await page.evaluate(async () => {
+  const ctl = window.__slateCtl;
+  const r = await import('/src/engine/renderer.ts');
+  const box = (id, x, y) => ({ id, type: 'shape', shape: 'rect', x, y, w: 160, h: 90, rotation: 0, z: ctl.doc.nextZ(), fill: 'transparent', stroke: '#1a1a1a', strokeWidth: 3, dash: 'solid', radius: 12, opacity: 1, text: id, textColor: '#1a1a1a', fontSize: 18, sketchy: true, seed: 11 });
+  const conn = (id, from, to, routing, extra = {}) => ({ id, type: 'connector', x: 0, y: 0, rotation: 0, z: ctl.doc.nextZ(), from, to, routing, stroke: '#1a1a1a', strokeWidth: 2, dash: 'solid', startArrow: 'none', endArrow: 'triangle', opacity: 1, ...extra });
+  const objs = [
+    box('A', 180, 160), box('B', 620, 160), box('C', 180, 470), box('D', 620, 560),
+    conn('legacyStraight', { point: { x: 1000, y: 150 } }, { point: { x: 1250, y: 260 } }, 'straight'),
+    conn('legacyBound', { objectId: 'A' }, { objectId: 'B' }, 'straight'),
+    conn('legacyCurved', { objectId: 'A', anchor: 'bottom' }, { objectId: 'D', anchor: 'left' }, 'curved'),
+    conn('legacyElbow', { objectId: 'C', anchor: 'right' }, { objectId: 'D', anchor: 'top' }, 'elbow'),
+    conn('aiDashed', { point: { x: 1000, y: 420 } }, { point: { x: 1250, y: 600 } }, 'curved', { stroke: '#868e96', dash: 'dashed' }),
+  ];
+  ctl.doc.begin();
+  for (const o of ctl.doc.all()) ctl.doc.delete(o.id);
+  for (const o of objs) ctl.doc.set(o);
+  ctl.doc.commit();
+  ctl.markSceneDirty?.();
+  return objs.filter((o) => o.type === 'connector').map((o) => ({ id: o.id, flag: o.sketchy, rough: r.isSketchy(o) }));
+});
+console.log(legacy.every((c) => c.rough) ? `LEGACY CONNECTORS ROUGH (${legacy.length})` : `LEGACY NOT ROUGH: ${JSON.stringify(legacy)}`);
+await page.mouse.click(1300, 860);
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${SHOTS}/sketchy-3-arrows.png` });
+const c1 = await page.screenshot();
+await page.mouse.wheel(0, 200);
+await page.waitForTimeout(200);
+await page.mouse.wheel(0, -200);
+await page.waitForTimeout(400);
+const c2 = await page.screenshot();
+console.log(Buffer.compare(c1, c2) === 0 ? 'LEGACY STABLE' : 'LEGACY JITTER: frames differ');
 
 // SVG export uses the same roughjs paths as the canvas
 const svg = await page.evaluate(async () => {
