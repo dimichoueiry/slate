@@ -3,7 +3,7 @@ import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
 import { aabbOf, boundsOf, boxUnion, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
-import { arrowHeadLen, chevronArms, drawObject, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
+import { arrowHeadLen, chevronArms, drawObject, isSketchy, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
 import { stickyDateGeom, stickyDateLabel, stickyPaperPath, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
@@ -128,7 +128,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'shape': {
       const s = o as ShapeObj;
-      if (s.sketchy) {
+      if (isSketchy(s)) {
         let el = sketchySvg(sketchyPathInfos(s), s.dash, s.strokeWidth, s.opacity);
         if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, s.fontFamily);
         return el;
@@ -215,7 +215,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       const pts = routeConnector(c, doc.resolve);
       if (pts.length < 2) return '';
       let el = '';
-      if (c.sketchy) {
+      if (isSketchy(c)) {
         el = sketchySvg(sketchyConnectorPathInfos(c, pts), c.dash, c.strokeWidth, c.opacity);
       } else {
         const d = `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`;

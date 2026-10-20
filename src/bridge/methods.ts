@@ -10,6 +10,7 @@ import { ICONS } from '../engine/icons';
 import { aabbOf, boxUnion } from '../engine/geometry';
 import { cameraToFit } from '../engine/camera';
 import { exportPng, exportBounds } from '../export/export';
+import { seedOf } from '../engine/renderer';
 import { readUpload, uploadLabel } from '../ui/upload';
 import { runAINode, isAINode } from '../ui/ainodes';
 import { getActiveCtl, waitForBoard } from './registry';
@@ -554,7 +555,7 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
           if (typeof v !== 'boolean') rejected.push(k);
           else {
             patch[k] = v;
-            if (v && (target as AnyObj).seed === undefined) patch.seed = Math.floor(Math.random() * 2 ** 31);
+            if (v && (target as AnyObj).seed === undefined) patch.seed = seedOf(target as AnyObj as { id: string });
           }
         } else if (k === 'reveal') {
           const nextReveal = revealSpec(v, (target as AnyObj).reveal);
