@@ -15,7 +15,7 @@ import type {
   UploadFile,
   Vec,
 } from '../types';
-import { STICKY_COLORS } from '../types';
+import { STICKY_COLORS, STICKY_DEFAULT } from '../types';
 import {
   cameraToFit,
   MAX_ZOOM,
@@ -543,10 +543,11 @@ export class Controller {
       h,
       rotation: 0,
       z: this.doc.nextZ(),
-      color: '#FFE066',
+      color: STICKY_DEFAULT,
       text,
       fontSize,
       fontFamily: useUI.getState().fontFamily,
+      createdAt: Date.now(),
     };
     this.doc.set(obj);
     this.selection = new Set([obj.id]);
@@ -1871,6 +1872,7 @@ export class Controller {
       text: '',
       fontSize: 18,
       fontFamily: ui.fontFamily,
+      createdAt: Date.now(),
     };
     this.doc.set(obj);
     this.selection = new Set([obj.id]);

@@ -19,7 +19,18 @@ import type { Doc } from './doc';
 import { boundsOf, polylineMidpoint, routeConnector, shapePolygon } from './geometry';
 import { PEN_CONFIGS, strokePath } from './ink';
 import { fontString, lineHeight, wrapText } from './text';
-import { clampLayout, type ClampLayout, type ClampObj } from './sticky';
+import {
+  clampLayout,
+  stickyDateGeom,
+  stickyDateLabel,
+  stickyPaperPath,
+  stickyShadowOffset,
+  stickyTextTop,
+  STICKY_DATE_COLOR,
+  STICKY_SHADOW,
+  type ClampLayout,
+  type ClampObj,
+} from './sticky';
 import { fontStack } from '../types';
 import { revealDelayOf, revealDurationOf, revealEffectOf, revealStepOf } from './reveal';
 import rough from 'roughjs';
@@ -643,31 +654,43 @@ function drawCenteredText(
 
 export function drawSticky(ctx: CanvasRenderingContext2D, o: StickyObj) {
   ctx.save();
-  // soft shadow for the paper feel
-  ctx.shadowColor = 'rgba(0,0,0,0.18)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 3;
+  const paper = new Path2D(stickyPaperPath(o));
+  // hard offset shadow, no blur
+  const off = stickyShadowOffset(o);
+  ctx.save();
+  ctx.translate(off, off);
+  ctx.fillStyle = STICKY_SHADOW;
+  ctx.fill(paper);
+  ctx.restore();
   ctx.fillStyle = o.color;
-  const p = new Path2D();
-  p.roundRect(o.x, o.y, o.w, o.h, 4);
-  ctx.fill(p);
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-  if (o.text) {
-    const layout = clampLayout(o);
+  ctx.fill(paper);
+  // keep the clamp fade inside the rounded paper
+  ctx.clip(paper);
+  const layout = o.text ? clampLayout(o) : null;
+  if (layout) {
     const lh = lineHeight(o.fontSize);
     ctx.fillStyle = 'rgba(20,20,20,0.92)';
     ctx.font = fontString(o.fontSize, 500, fontStack(o.fontFamily));
-    ctx.textAlign = 'left';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    let y = o.y + 12;
+    const cx = o.x + o.w / 2;
+    let y = stickyTextTop(o, layout);
     for (const line of layout.lines) {
-      ctx.fillText(line, o.x + 12, y);
+      ctx.fillText(line, cx, y);
       y += lh;
     }
     // fade clamped overflow into the paper (the sticky's own color)
     drawClampOverlay(ctx, o, layout, o.color);
+  }
+  // created date, bottom-right (hidden behind the "Show more" chip when clamped)
+  const date = stickyDateLabel(o);
+  if (date && !layout?.clamped) {
+    const g = stickyDateGeom(o);
+    ctx.fillStyle = STICKY_DATE_COLOR;
+    ctx.font = fontString(g.size, 400, fontStack('sans'));
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(date, g.x, g.y);
   }
   ctx.restore();
 }

@@ -155,7 +155,7 @@ export const useUI = create<UIState>((setState) => ({
 
   routing: 'curved',
   attachEnabled: true,
-  stickyColor: '#FFE066',
+  stickyColor: '#F8DE7E',
   fontFamily: 'hand',
   fontSize: 20,
 
