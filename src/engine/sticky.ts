@@ -99,3 +99,98 @@ export function pointInClampChip(o: ClampObj, p: { x: number; y: number }): bool
   const c = l.chip;
   return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;
 }
+
+// ---- paper look: rounded, slightly irregular outline + hard offset shadow + date ----
+// Shared by the canvas renderer and SVG export so both draw the same note.
+
+/** Hard offset shadow under the paper (≈ #d6d6d6 on a white board). */
+export const STICKY_SHADOW = 'rgba(0,0,0,0.16)';
+/** Color of the small created-date label. */
+export const STICKY_DATE_COLOR = '#2b2b2b';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** FNV-1a hash of the id → stable per-note seed, so the wobble never changes between frames. */
+function seedOf(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** mulberry32: tiny deterministic PRNG in [0, 1). */
+function rng(seed: number) {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * SVG path data for the note's paper: a rounded quad whose four corners are nudged by
+ * ±~1.5px from a seed on the id, so each note is a hair off-square. Used directly in SVG
+ * export and via `new Path2D(d)` on canvas.
+ */
+export function stickyPaperPath(o: StickyObj): string {
+  const { x, y, w, h } = o;
+  const short = Math.max(1, Math.min(w, h));
+  const amp = Math.min(1.6, short * 0.008);
+  const r = Math.min(9, short / 4);
+  const rand = rng(seedOf(o.id));
+  const j = () => (rand() * 2 - 1) * amp;
+  // tl, tr, br, bl
+  const c = [
+    { x: x + j(), y: y + j() },
+    { x: x + w + j(), y: y + j() },
+    { x: x + w + j(), y: y + h + j() },
+    { x: x + j(), y: y + h + j() },
+  ];
+  const toward = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: a.x + (dx / len) * r, y: a.y + (dy / len) * r };
+  };
+  const f = (n: number) => Math.round(n * 100) / 100;
+  let d = '';
+  for (let i = 0; i < 4; i++) {
+    const prev = c[(i + 3) % 4];
+    const cur = c[i];
+    const next = c[(i + 1) % 4];
+    const a = toward(cur, prev);
+    const b = toward(cur, next);
+    d += `${i === 0 ? 'M' : 'L'}${f(a.x)},${f(a.y)}Q${f(cur.x)},${f(cur.y)} ${f(b.x)},${f(b.y)}`;
+  }
+  return d + 'Z';
+}
+
+/** Offset of the hard shadow, scaled a little with note size (4–6px at 1x). */
+export function stickyShadowOffset(o: StickyObj): number {
+  return Math.max(4, Math.min(6, Math.min(o.w, o.h) * 0.025));
+}
+
+/** "20 Oct" style label for the note's creation date, or null when it has none. */
+export function stickyDateLabel(o: StickyObj): string | null {
+  if (typeof o.createdAt !== 'number' || !isFinite(o.createdAt)) return null;
+  const d = new Date(o.createdAt);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/** Font size and bottom-right anchor (right edge, baseline) for the date label. */
+export function stickyDateGeom(o: StickyObj) {
+  const size = Math.max(10, Math.min(14, o.w * 0.05));
+  const inset = Math.max(8, size * 0.9);
+  return { size, x: o.x + o.w - inset, y: o.y + o.h - inset * 0.8 };
+}
+
+/** Top of the first drawn body line: vertically centred when it all fits, top-padded when clamped. */
+export function stickyTextTop(o: StickyObj, layout: ClampLayout): number {
+  const lh = lineHeight(o.fontSize);
+  if (layout.clamped) return o.y + 12;
+  return o.y + Math.max(12, (o.h - layout.lines.length * lh) / 2);
+}

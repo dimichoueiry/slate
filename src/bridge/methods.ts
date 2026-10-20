@@ -26,7 +26,7 @@ const DASHES = new Set(['solid', 'dashed', 'dotted']);
 const SHAPES = new Set(['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram']);
 const ROUTINGS = new Set(['straight', 'elbow', 'curved']);
 const REVEAL_EFFECTS = new Set<RevealEffect>(['pop', 'fade', 'slide-up', 'slide-left', 'none']);
-const STICKY_DEFAULT = '#FFE066';
+const STICKY_DEFAULT = '#F8DE7E';
 
 const num = (v: any, fallback: number, min: number, max: number) => {
   const n = Number(v);
@@ -265,7 +265,7 @@ function fail(i: number, msg: string): never {
 function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
   const x = num(spec.x, 0, -1e6, 1e6);
   const y = num(spec.y, 0, -1e6, 1e6);
-  const base = { id: nid(), x, y, rotation: 0, z: doc.nextZ(), createdBy: 'agent' as const };
+  const base = { id: nid(), x, y, rotation: 0, z: doc.nextZ(), createdBy: 'agent' as const, ...(spec.type === 'sticky' ? { createdAt: Date.now() } : {}) };
   const reveal = revealSpec(spec.reveal);
   if (spec.reveal !== undefined && reveal === undefined) fail(i, 'reveal must be {step:number>=1, effect?:pop|fade|slide-up|slide-left|none, durationMs?:number, delayMs?:number} or null');
   const withReveal = reveal ? { ...base, reveal } : base;
@@ -298,9 +298,12 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
         h: num(spec.h, 90, 8, 4000),
         fill: color(spec.fill, 'transparent', true),
         stroke: color(spec.stroke, '#1a1a1a'),
-        strokeWidth: num(spec.strokeWidth, 2, 0.5, 20),
+        strokeWidth: num(spec.strokeWidth, 3, 0.5, 20),
         dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
         radius: 12,
+        adaptiveRadius: true,
+        sketchy: spec.sketchy !== false,
+        seed: Math.floor(Math.random() * 2 ** 31),
         opacity: 1,
         text: str(spec.text),
         textColor: color(spec.textColor, '#1a1a1a'),
@@ -390,10 +393,12 @@ function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: an
     to: end(spec.to, 'to', spec.toAnchor),
     routing: ROUTINGS.has(spec.routing) ? spec.routing : 'curved',
     stroke: color(spec.stroke, '#1a1a1a'),
-    strokeWidth: num(spec.strokeWidth, 2, 0.5, 20),
+    strokeWidth: num(spec.strokeWidth, 3, 0.5, 20),
     dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
     startArrow: 'none',
     endArrow: spec.endArrow === 'none' ? 'none' : 'triangle',
+    sketchy: spec.sketchy !== false,
+    seed: Math.floor(Math.random() * 2 ** 31),
     opacity: 1,
     label: str(spec.label) || undefined,
   };
@@ -497,9 +502,9 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 // per-type editable props, mirroring aiEdit.ts EDITABLE
 const EDITABLE: Record<string, Set<string>> = {
   sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal']),
-  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'x', 'y', 'w', 'h', 'reveal']),
+  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal']),
   text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal']),
-  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'reveal']),
+  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'sketchy', 'reveal']),
   icon: new Set(['color', 'strokeWidth', 'x', 'y', 'reveal']),
   frame: new Set(['name', 'x', 'y', 'w', 'h', 'reveal']),
 };
@@ -545,6 +550,12 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         } else if (k === 'fixedWidth') {
           if (typeof v === 'boolean') patch[k] = v;
           else rejected.push(k);
+        } else if (k === 'sketchy') {
+          if (typeof v !== 'boolean') rejected.push(k);
+          else {
+            patch[k] = v;
+            if (v && (target as AnyObj).seed === undefined) patch.seed = Math.floor(Math.random() * 2 ** 31);
+          }
         } else if (k === 'reveal') {
           const nextReveal = revealSpec(v, (target as AnyObj).reveal);
           if (nextReveal === null) clearReveal = true;
@@ -807,6 +818,7 @@ export async function add_upload(params: AnyObj): Promise<AnyObj> {
     color: STICKY_DEFAULT,
     text,
     fontSize: 18,
+    createdAt: Date.now(),
     file: upload,
   };
   ctl.doc.begin();

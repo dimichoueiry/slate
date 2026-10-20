@@ -204,11 +204,14 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
       background: 'transparent',
     };
   } else if (obj.type === 'sticky') {
+    // centred like the rendered note
+    const blockH = textBlockSize(value || ' ', fontSize, obj.w - 24, 500, obj.fontFamily).h;
     style = {
       ...style,
       left: tl.x + 12 * zoom,
-      top: tl.y + 12 * zoom,
+      top: tl.y + Math.max(12, (obj.h - blockH) / 2) * zoom,
       width: (obj.w - 24) * zoom,
+      textAlign: 'center',
       fontWeight: 500,
       background: obj.color,
       outlineColor: 'rgba(0,0,0,0.25)',

@@ -30,7 +30,7 @@ interface UIState {
   stroke: string;
   strokeWidth: number;
   dash: DashStyle;
-  sketchy: boolean; // hand-drawn (roughjs) borders for new shapes
+  sketchy: boolean; // hand-drawn (roughjs) borders for new shapes and connectors
   rounded: boolean; // rect tool draws rounded rectangles
   // connector
   routing: Routing;
@@ -148,15 +148,15 @@ export const useUI = create<UIState>((setState) => ({
 
   fill: 'transparent',
   stroke: '#1a1a1a',
-  strokeWidth: 2,
+  strokeWidth: 3,
   dash: 'solid',
-  sketchy: false,
-  rounded: false,
+  sketchy: true,
+  rounded: true,
 
   routing: 'curved',
   attachEnabled: true,
-  stickyColor: '#FFE066',
-  fontFamily: 'hand',
+  stickyColor: '#F8DE7E',
+  fontFamily: 'excalifont',
   fontSize: 20,
 
   gridMode: 'dots',

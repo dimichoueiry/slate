@@ -2,10 +2,12 @@ import type { Box, BoardMeta, ConnectorObj, IconObj, ImageObj, ShapeObj, SlateOb
 import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
-import { aabbOf, boundsOf, boxUnion, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
-import { drawObject, getBitmap, sketchyPathInfos } from '../engine/renderer';
+import { aabbOf, boundsOf, boxUnion, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
+import { arrowHeadLen, chevronArms, drawObject, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
+import { stickyDateGeom, stickyDateLabel, stickyPaperPath, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
+import { ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
 import { db, getBlob, putBlob, createBoard } from '../store/db';
 import { nanoid } from 'nanoid';
 
@@ -62,6 +64,7 @@ export async function exportPng(
       const b = aabbOf(o, doc.resolve);
       return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
     });
+  await ensureObjectFonts(visible);
   for (const o of visible) drawObject(ctx, o, doc, scale);
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('export failed'))), 'image/png')
@@ -85,6 +88,15 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
     const b = aabbOf(o, doc.resolve);
     return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
   });
+  // embed Excalifont so the file still renders handwritten outside the app
+  const excaliText = visible
+    .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack((o as { fontFamily?: string }).fontFamily).includes('Excalifont'))
+    .map((o) => (o as { text: string }).text)
+    .join('');
+  if (excaliText) {
+    const css = await excalifontFaceCss(excaliText).catch(() => '');
+    if (css) parts.push(`<defs><style>${css}</style></defs>`);
+  }
   for (const o of visible) {
     const rot = o.rotation && o.type !== 'connector'
       ? (() => {
@@ -117,10 +129,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     case 'shape': {
       const s = o as ShapeObj;
       if (s.sketchy) {
-        let el = '';
-        for (const p of sketchyPathInfos(s)) {
-          el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" opacity="${s.opacity}" fill-rule="evenodd"/>`;
-        }
+        let el = sketchySvg(sketchyPathInfos(s), s.dash, s.strokeWidth, s.opacity);
         if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, s.fontFamily);
         return el;
       }
@@ -135,7 +144,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       let el = '';
       if (s.shape === 'rect') el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" ${common}/>`;
       else if (s.shape === 'roundedRect')
-        el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${Math.min(s.radius, s.w / 2, s.h / 2)}" ${common}/>`;
+        el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="${cornerRadius(s)}" ${common}/>`;
       else if (s.shape === 'ellipse')
         el = `<ellipse cx="${s.x + s.w / 2}" cy="${s.y + s.h / 2}" rx="${s.w / 2}" ry="${s.h / 2}" ${common}/>`;
       else {
@@ -147,15 +156,25 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'sticky': {
       const s = o as StickyObj;
-      let el = `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="4" fill="${s.color}"/>`;
+      const d = stickyPaperPath(s);
+      const off = stickyShadowOffset(s);
+      let el = `<path d="${d}" transform="translate(${off} ${off})" fill="${STICKY_SHADOW}"/>`;
+      el += `<path d="${d}" fill="${s.color}"/>`;
       if (s.text) {
         const lines = wrapText(s.text, s.fontSize, s.w - 24, 500, s.fontFamily);
         const lh = lineHeight(s.fontSize);
-        let y = s.y + 12 + s.fontSize * 0.8;
+        const top = s.y + Math.max(12, (s.h - lines.length * lh) / 2);
+        let y = top + s.fontSize * 0.8;
+        const cx = s.x + s.w / 2;
         for (const line of lines) {
-          el += `<text x="${s.x + 12}" y="${y}" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(s.fontFamily))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
+          el += `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(s.fontFamily))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
           y += lh;
         }
+      }
+      const date = stickyDateLabel(s);
+      if (date) {
+        const g = stickyDateGeom(s);
+        el += `<text x="${g.x}" y="${g.y}" text-anchor="end" font-size="${g.size}" font-family="${esc(fontStack('sans'))}" fill="${STICKY_DATE_COLOR}">${esc(date)}</text>`;
       }
       return el;
     }
@@ -194,11 +213,17 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     case 'connector': {
       const c = o as ConnectorObj;
       const pts = routeConnector(c, doc.resolve);
-      const d = `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`;
-      let el = `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="${c.strokeWidth}" opacity="${c.opacity}" stroke-linejoin="round" stroke-linecap="round"/>`;
-      const headLen = c.strokeWidth * 4 + 4;
-      if (c.endArrow === 'triangle') el += arrowSvg(pts[pts.length - 2], pts[pts.length - 1], headLen, c.stroke, c.opacity);
-      if (c.startArrow === 'triangle') el += arrowSvg(pts[1], pts[0], headLen, c.stroke, c.opacity);
+      if (pts.length < 2) return '';
+      let el = '';
+      if (c.sketchy) {
+        el = sketchySvg(sketchyConnectorPathInfos(c, pts), c.dash, c.strokeWidth, c.opacity);
+      } else {
+        const d = `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`;
+        el = `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="${c.strokeWidth}" opacity="${c.opacity}" stroke-linejoin="round" stroke-linecap="round"${dashSvg(c.dash, c.strokeWidth)}/>`;
+        const headLen = arrowHeadLen(c, pts);
+        if (c.endArrow !== 'none') el += arrowSvg(pts[pts.length - 2], pts[pts.length - 1], headLen, c, c.endArrow);
+        if (c.startArrow !== 'none') el += arrowSvg(pts[1], pts[0], headLen, c, c.startArrow);
+      }
       if (c.label) {
         const mid = polylineMidpoint(pts);
         const w = c.label.length * 7.5 + 12;
@@ -242,7 +267,29 @@ function centeredTextSvg(
   return el;
 }
 
-function arrowSvg(from: { x: number; y: number }, tip: { x: number; y: number }, len: number, color: string, opacity: number): string {
+/** SVG dash attributes matching applyDash on the canvas. */
+function dashSvg(dash: string, width: number): string {
+  if (dash === 'dashed') return ` stroke-dasharray="${width * 3} ${width * 2.5}"`;
+  if (dash === 'dotted') return ` stroke-dasharray="${width * 0.5} ${width * 2}"`;
+  return '';
+}
+
+/** roughjs paths as SVG, styled like strokeSketchyPaths on the canvas. */
+function sketchySvg(paths: SketchyPathInfo[], dash: string, width: number, opacity: number): string {
+  let el = '';
+  for (const p of paths) {
+    const dashAttr = p.isBorder ? dashSvg(dash, width) : '';
+    el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" fill-rule="evenodd"${dashAttr}/>`;
+  }
+  return el;
+}
+
+function arrowSvg(from: { x: number; y: number }, tip: { x: number; y: number }, len: number, c: ConnectorObj, kind: ConnectorObj['endArrow']): string {
+  const { stroke: color, opacity } = c;
+  if (kind === 'chevron') {
+    const [a, b] = chevronArms(from, tip, len);
+    return `<path d="M${a.x},${a.y}L${tip.x},${tip.y}L${b.x},${b.y}" fill="none" stroke="${color}" stroke-width="${c.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+  }
   const angle = Math.atan2(tip.y - from.y, tip.x - from.x);
   const spread = Math.PI / 7;
   const p1 = { x: tip.x - len * Math.cos(angle - spread), y: tip.y - len * Math.sin(angle - spread) };

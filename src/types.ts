@@ -25,7 +25,8 @@ export type ShapeKind =
 export type DashStyle = 'solid' | 'dashed' | 'dotted';
 export type AnchorSide = 'left' | 'right' | 'top' | 'bottom' | 'center';
 export type Routing = 'straight' | 'elbow' | 'curved';
-export type ArrowHead = 'none' | 'triangle';
+/** 'chevron' is the open hand-drawn head; sketchy connectors draw any head as a chevron */
+export type ArrowHead = 'none' | 'triangle' | 'chevron';
 export type RevealEffect = 'pop' | 'fade' | 'slide-up' | 'slide-left' | 'none';
 
 export interface RevealSpec {
@@ -78,6 +79,8 @@ export interface ShapeObj extends BaseObj {
   strokeWidth: number;
   dash: DashStyle;
   radius: number; // corner radius for roundedRect
+  /** roundedRect only: ignore `radius` and use Excalidraw's adaptive radius (25% of the short side, max 32) */
+  adaptiveRadius?: boolean;
   opacity: number;
   text: string;
   textColor: string;
@@ -116,6 +119,8 @@ export interface StickyObj extends BaseObj {
   text: string;
   fontSize: number;
   fontFamily?: string; // FONTS id
+  /** epoch ms when the note was created; drawn as a small date. Absent on older notes. */
+  createdAt?: number;
   /** present on "upload:" nodes — the uploaded file's extracted content */
   file?: UploadFile;
 }
@@ -170,6 +175,10 @@ export interface ConnectorObj extends BaseObj {
   opacity: number;
   /** text drawn at the midpoint of the connector */
   label?: string;
+  /** hand-drawn (roughjs) rendering */
+  sketchy?: boolean;
+  /** stable seed so the sketchy jitter doesn't change between frames */
+  seed?: number;
 }
 
 export interface IconObj extends BaseObj {
@@ -254,8 +263,11 @@ export type ToolId =
   | 'text'
   | 'frame';
 
+/** Default sticky paper: warm yellow. */
+export const STICKY_DEFAULT = '#F8DE7E';
+
 export const STICKY_COLORS = [
-  '#FFE066',
+  STICKY_DEFAULT,
   '#FFB3BA',
   '#B5EAD7',
   '#A8D8EA',
@@ -316,6 +328,7 @@ export const FONTS: FontDef[] = [
   { id: 'comfortaa', label: 'Comfortaa', stack: "'Comfortaa', sans-serif", cat: 'Display' },
   { id: 'barlow-cond', label: 'Barlow Condensed', stack: "'Barlow Condensed', sans-serif", cat: 'Display' },
   // ---- handwriting ----
+  { id: 'excalifont', label: 'Excalifont', stack: "'Excalifont', 'Comic Sans MS', cursive", cat: 'Handwriting' },
   { id: 'caveat', label: 'Caveat', stack: "'Caveat', cursive", cat: 'Handwriting' },
   { id: 'pacifico', label: 'Pacifico', stack: "'Pacifico', cursive", cat: 'Handwriting' },
   { id: 'dancing', label: 'Dancing Script', stack: "'Dancing Script', cursive", cat: 'Handwriting' },

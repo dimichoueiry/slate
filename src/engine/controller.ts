@@ -15,7 +15,7 @@ import type {
   UploadFile,
   Vec,
 } from '../types';
-import { STICKY_COLORS } from '../types';
+import { STICKY_COLORS, STICKY_DEFAULT } from '../types';
 import {
   cameraToFit,
   MAX_ZOOM,
@@ -162,6 +162,9 @@ export class Controller {
     attachChecklistNormalizer(this);
     attachAINodeNormalizer(this);
 
+    // a lazily-fetched font subset (e.g. Excalifont Cyrillic) just arrived: repaint with it
+    document.fonts?.addEventListener('loadingdone', this.markSceneDirty);
+
     this.loop = this.loop.bind(this);
     this.rafId = requestAnimationFrame(this.loop);
   }
@@ -171,6 +174,7 @@ export class Controller {
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.rafId);
+    document.fonts?.removeEventListener('loadingdone', this.markSceneDirty);
   }
 
   resize(w: number, h: number) {
@@ -543,10 +547,11 @@ export class Controller {
       h,
       rotation: 0,
       z: this.doc.nextZ(),
-      color: '#FFE066',
+      color: STICKY_DEFAULT,
       text,
       fontSize,
       fontFamily: useUI.getState().fontFamily,
+      createdAt: Date.now(),
     };
     this.doc.set(obj);
     this.selection = new Set([obj.id]);
@@ -676,8 +681,9 @@ export class Controller {
     // optional props may be absent on older objects, so `in` checks would miss them
     const OPTIONAL: Record<string, Set<string>> = {
       fontFamily: new Set(['text', 'shape', 'sticky']),
-      sketchy: new Set(['shape']),
-      seed: new Set(['shape']),
+      sketchy: new Set(['shape', 'connector']),
+      adaptiveRadius: new Set(['shape']),
+      seed: new Set(['shape', 'connector']),
       strokeWidth: new Set(['icon']),
     };
     this.doc.begin();
@@ -685,12 +691,12 @@ export class Controller {
       const valid: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(patch)) {
         // corner toggle only applies to rectangles, not other shape kinds
-        if (k === 'shape' && (o.type !== 'shape' || !['rect', 'roundedRect'].includes((o as ShapeObj).shape)))
+        if ((k === 'shape' || k === 'adaptiveRadius') && (o.type !== 'shape' || !['rect', 'roundedRect'].includes((o as ShapeObj).shape)))
           continue;
         if (k in o || OPTIONAL[k]?.has(o.type)) valid[k] = v;
       }
       if (Object.keys(valid).length) {
-        if (valid.sketchy && (o as ShapeObj).seed === undefined) {
+        if (valid.sketchy && (o as ShapeObj | ConnectorObj).seed === undefined) {
           valid.seed = Math.floor(Math.random() * 2 ** 31);
         }
         this.doc.update(o.id, valid as Partial<SlateObj>);
@@ -1168,6 +1174,7 @@ export class Controller {
           strokeWidth: ui.strokeWidth,
           dash: ui.dash,
           radius: 12,
+          adaptiveRadius: true,
           opacity: 1,
           text: '',
           textColor: inkForCanvas(ui.canvasDark),
@@ -1236,6 +1243,8 @@ export class Controller {
         startArrow: 'none',
         endArrow: 'triangle',
         opacity: 1,
+        sketchy: ui.sketchy,
+        seed: Math.floor(Math.random() * 2 ** 31),
       };
       this.doc.begin();
       this.doc.set(obj);
@@ -1814,6 +1823,8 @@ export class Controller {
         startArrow: 'none',
         endArrow: 'none',
         opacity: 1,
+        sketchy: ui.sketchy,
+        seed: Math.floor(Math.random() * 2 ** 31),
       };
       this.doc.set(obj);
       return;
@@ -1871,6 +1882,7 @@ export class Controller {
       text: '',
       fontSize: 18,
       fontFamily: ui.fontFamily,
+      createdAt: Date.now(),
     };
     this.doc.set(obj);
     this.selection = new Set([obj.id]);
@@ -1996,6 +2008,8 @@ export class Controller {
       startArrow: 'none',
       endArrow: tool === 'line' ? 'none' : 'triangle',
       opacity: 1,
+      sketchy: ui.sketchy,
+      seed: Math.floor(Math.random() * 2 ** 31),
     };
     this.doc.begin();
     this.doc.set(obj);
