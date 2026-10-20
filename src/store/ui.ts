@@ -148,7 +148,7 @@ export const useUI = create<UIState>((setState) => ({
 
   fill: 'transparent',
   stroke: '#1a1a1a',
-  strokeWidth: 2,
+  strokeWidth: 3,
   dash: 'solid',
   sketchy: true,
   rounded: false,
