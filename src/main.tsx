@@ -5,6 +5,7 @@ import './styles.css';
 import { applyTheme, loadTheme } from './store/theme';
 // file-persistence sync (no-ops gracefully when the dev /__slate endpoints are absent)
 import './store/fsync';
+import { loadDefaultFonts } from './engine/fonts';
 
 // apply the saved (or default dark) theme before first paint
 applyTheme(loadTheme());
@@ -57,8 +58,11 @@ import '@fontsource/dancing-script';
 import '@fontsource/permanent-marker';
 import '@fontsource/jetbrains-mono';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+// canvas text measures/paints with whatever font is ready, so wait for the default one
+void loadDefaultFonts().then(() =>
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  )
 );

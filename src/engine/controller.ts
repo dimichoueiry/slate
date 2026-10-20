@@ -162,6 +162,9 @@ export class Controller {
     attachChecklistNormalizer(this);
     attachAINodeNormalizer(this);
 
+    // a lazily-fetched font subset (e.g. Excalifont Cyrillic) just arrived: repaint with it
+    document.fonts?.addEventListener('loadingdone', this.markSceneDirty);
+
     this.loop = this.loop.bind(this);
     this.rafId = requestAnimationFrame(this.loop);
   }
@@ -171,6 +174,7 @@ export class Controller {
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.rafId);
+    document.fonts?.removeEventListener('loadingdone', this.markSceneDirty);
   }
 
   resize(w: number, h: number) {
