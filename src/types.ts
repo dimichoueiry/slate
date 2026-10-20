@@ -316,6 +316,7 @@ export const FONTS: FontDef[] = [
   { id: 'comfortaa', label: 'Comfortaa', stack: "'Comfortaa', sans-serif", cat: 'Display' },
   { id: 'barlow-cond', label: 'Barlow Condensed', stack: "'Barlow Condensed', sans-serif", cat: 'Display' },
   // ---- handwriting ----
+  { id: 'excalifont', label: 'Excalifont', stack: "'Excalifont', 'Comic Sans MS', cursive", cat: 'Handwriting' },
   { id: 'caveat', label: 'Caveat', stack: "'Caveat', cursive", cat: 'Handwriting' },
   { id: 'pacifico', label: 'Pacifico', stack: "'Pacifico', cursive", cat: 'Handwriting' },
   { id: 'dancing', label: 'Dancing Script', stack: "'Dancing Script', cursive", cat: 'Handwriting' },

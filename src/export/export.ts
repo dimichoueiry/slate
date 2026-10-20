@@ -6,6 +6,7 @@ import { aabbOf, boundsOf, boxUnion, polylineMidpoint, routeConnector, shapePoly
 import { drawObject, getBitmap, sketchyPathInfos } from '../engine/renderer';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
+import { ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
 import { db, getBlob, putBlob, createBoard } from '../store/db';
 import { nanoid } from 'nanoid';
 
@@ -62,6 +63,7 @@ export async function exportPng(
       const b = aabbOf(o, doc.resolve);
       return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
     });
+  await ensureObjectFonts(visible);
   for (const o of visible) drawObject(ctx, o, doc, scale);
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('export failed'))), 'image/png')
@@ -85,6 +87,15 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
     const b = aabbOf(o, doc.resolve);
     return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
   });
+  // embed Excalifont so the file still renders handwritten outside the app
+  const excaliText = visible
+    .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack((o as { fontFamily?: string }).fontFamily).includes('Excalifont'))
+    .map((o) => (o as { text: string }).text)
+    .join('');
+  if (excaliText) {
+    const css = await excalifontFaceCss(excaliText).catch(() => '');
+    if (css) parts.push(`<defs><style>${css}</style></defs>`);
+  }
   for (const o of visible) {
     const rot = o.rotation && o.type !== 'connector'
       ? (() => {
