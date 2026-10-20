@@ -13,14 +13,15 @@ const shell = fs
   .filter((d) => d.startsWith('chromium_headless_shell-'))
   .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))[0];
 const browser = await chromium.launch({
-  executablePath: `${PW}/${shell}/chrome-headless-shell-mac-arm64/chrome-headless-shell`,
+  executablePath: process.env.PW_CHROMIUM ?? `${PW}/${shell}/chrome-headless-shell-mac-arm64/chrome-headless-shell`,
 });
+const BASE = process.env.SLATE_URL ?? `http://localhost:${process.env.PORT ?? '5180'}/`;
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
 
-await page.goto('http://localhost:5180/app');
+await page.goto(new URL('app', BASE).href);
 await page.waitForSelector('.new-board');
 await page.click('.new-board');
 await page.waitForSelector('.overlay-canvas');
