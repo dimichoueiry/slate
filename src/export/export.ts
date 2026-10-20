@@ -128,7 +128,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'shape': {
       const s = o as ShapeObj;
-      if (s.sketchy) {
+      if (isSketchy(s)) {
         let el = sketchySvg(sketchyPathInfos(s), s.dash, s.strokeWidth, s.opacity);
         if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, s.fontFamily);
         return el;

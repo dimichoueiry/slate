@@ -216,7 +216,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (hasSel) {
     const types = new Set(selObjs.map((o) => o.type));
     const single = selObjs.length === 1 ? selObjs[0] : null;
-    const singleSketchy = single?.type === 'connector' ? isSketchy(single) : !!(single as any)?.sketchy;
+    const singleSketchy = single?.type === 'connector' || single?.type === 'shape' ? isSketchy(single) : false;
     const revealSteps = selObjs.map((o) => explicitRevealStep(o));
     const revealStepMixed = new Set(revealSteps.map((step) => step ?? 0)).size > 1;
     const revealStep = revealStepMixed ? null : revealSteps[0];

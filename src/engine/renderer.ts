@@ -513,10 +513,19 @@ export function applyDash(ctx: CanvasRenderingContext2D, dash: string, width: nu
   else ctx.setLineDash([]);
 }
 
+/**
+ * Shapes and connectors are hand-drawn unless explicitly set clean. `sketchy` is
+ * absent on objects saved before it existed and on ones built by paths that don't
+ * set it (AI edit, AI panel, AI-node output wiring, templates), so absent means sketchy.
+ */
+export function isSketchy(o: ShapeObj | ConnectorObj): boolean {
+  return o.sketchy !== false;
+}
+
 export function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj) {
   ctx.save();
   ctx.globalAlpha = o.opacity;
-  if (o.sketchy) {
+  if (isSketchy(o)) {
     drawSketchy(ctx, o);
   } else {
     const path = shapePath(o);
@@ -551,7 +560,7 @@ interface SketchyPath {
 }
 
 /** Stable fallback seed for objects saved without one. */
-function seedOf(o: { id: string; seed?: number }): number {
+export function seedOf(o: { id: string; seed?: number }): number {
   if (o.seed !== undefined) return o.seed;
   let h = 2166136261;
   for (let i = 0; i < o.id.length; i++) h = Math.imul(h ^ o.id.charCodeAt(i), 16777619);
@@ -830,15 +839,6 @@ export function drawFrame(ctx: CanvasRenderingContext2D, o: FrameObj, zoom: numb
   ctx.textBaseline = 'bottom';
   ctx.fillText(o.name, o.x, o.y - 4 / zoom);
   ctx.restore();
-}
-
-/**
- * Connectors are hand-drawn unless explicitly set clean. `sketchy` is absent on
- * connectors saved before it existed and on ones built by paths that don't set
- * it (AI edit, AI-node output wiring, templates), so absent means sketchy.
- */
-export function isSketchy(o: ConnectorObj): boolean {
-  return o.sketchy !== false;
 }
 
 /** Arrowhead arm length for a connector of the given width and path length. */

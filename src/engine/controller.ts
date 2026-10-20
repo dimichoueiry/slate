@@ -39,7 +39,7 @@ import {
 } from './geometry';
 import { hitTest, strokesHitBySegment } from './hit';
 import { strokeOutline, outlineToPath, type InputPoint } from './ink';
-import { drawScene, type GridSettings } from './renderer';
+import { drawScene, seedOf, type GridSettings } from './renderer';
 import { snapBox, snapToGrid, type SnapResult } from './snap';
 import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
@@ -696,8 +696,9 @@ export class Controller {
         if (k in o || OPTIONAL[k]?.has(o.type)) valid[k] = v;
       }
       if (Object.keys(valid).length) {
+        // pin the seed an unflagged object already renders with, so its wobble doesn't jump
         if (valid.sketchy && (o as ShapeObj | ConnectorObj).seed === undefined) {
-          valid.seed = Math.floor(Math.random() * 2 ** 31);
+          valid.seed = seedOf(o as ShapeObj | ConnectorObj);
         }
         this.doc.update(o.id, valid as Partial<SlateObj>);
       }

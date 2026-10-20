@@ -78,24 +78,24 @@ await page.waitForTimeout(400);
 const b = await page.screenshot();
 console.log(Buffer.compare(a, b) === 0 ? 'STABLE' : 'JITTER: frames differ');
 
-// every new shape/connector is sketchy (a connector with no flag counts: absent means sketchy)
+// every new shape/connector is sketchy (no flag counts: absent means sketchy)
 const flags = await page.evaluate(() => {
   const ctl = window.__slateCtl ?? null;
-  return ctl
-    ? ctl.doc.all().filter((o) => o.type === 'shape' || o.type === 'connector').map((o) => (o.type === 'connector' ? o.sketchy !== false : !!o.sketchy))
-    : null;
+  return ctl ? ctl.doc.all().filter((o) => o.type === 'shape' || o.type === 'connector').map((o) => o.sketchy !== false) : null;
 });
 if (flags) console.log(flags.every(Boolean) ? `ALL SKETCHY (${flags.length})` : `NOT ALL SKETCHY: ${flags}`);
 
-// connectors saved before the flag existed, or built by AI edit / AI nodes / templates,
-// carry no sketchy or seed: they must still render rough, and stably (seed from id)
+// shapes and connectors saved before the flag existed, or built by AI edit / AI panel /
+// AI nodes / templates, carry no sketchy or seed: they must still render rough, and
+// stably (seed from id). An explicit sketchy:false stays clean.
 const legacy = await page.evaluate(async () => {
   const ctl = window.__slateCtl;
   const r = await import('/src/engine/renderer.ts');
-  const box = (id, x, y) => ({ id, type: 'shape', shape: 'rect', x, y, w: 160, h: 90, rotation: 0, z: ctl.doc.nextZ(), fill: 'transparent', stroke: '#1a1a1a', strokeWidth: 3, dash: 'solid', radius: 12, opacity: 1, text: id, textColor: '#1a1a1a', fontSize: 18, sketchy: true, seed: 11 });
+  const box = (id, x, y, shape = 'rect', extra = {}) => ({ id, type: 'shape', shape, x, y, w: 160, h: 90, rotation: 0, z: ctl.doc.nextZ(), fill: 'transparent', stroke: '#1a1a1a', strokeWidth: 3, dash: 'solid', radius: 12, opacity: 1, text: id, textColor: '#1a1a1a', fontSize: 18, ...extra });
   const conn = (id, from, to, routing, extra = {}) => ({ id, type: 'connector', x: 0, y: 0, rotation: 0, z: ctl.doc.nextZ(), from, to, routing, stroke: '#1a1a1a', strokeWidth: 2, dash: 'solid', startArrow: 'none', endArrow: 'triangle', opacity: 1, ...extra });
   const objs = [
-    box('A', 180, 160), box('B', 620, 160), box('C', 180, 470), box('D', 620, 560),
+    box('A', 180, 160), box('B', 620, 160, 'roundedRect'), box('C', 180, 470, 'ellipse'), box('D', 620, 560, 'diamond', { fill: '#a5d8ff' }),
+    box('E', 1000, 300, 'triangle'), box('Clean', 1000, 680, 'rect', { sketchy: false }),
     conn('legacyStraight', { point: { x: 1000, y: 150 } }, { point: { x: 1250, y: 260 } }, 'straight'),
     conn('legacyBound', { objectId: 'A' }, { objectId: 'B' }, 'straight'),
     conn('legacyCurved', { objectId: 'A', anchor: 'bottom' }, { objectId: 'D', anchor: 'left' }, 'curved'),
@@ -106,11 +106,14 @@ const legacy = await page.evaluate(async () => {
   for (const o of ctl.doc.all()) ctl.doc.delete(o.id);
   for (const o of objs) ctl.doc.set(o);
   ctl.doc.commit();
+  ctl.zoomToFit();
   ctl.markSceneDirty?.();
-  return objs.filter((o) => o.type === 'connector').map((o) => ({ id: o.id, flag: o.sketchy, rough: r.isSketchy(o) }));
+  return objs.map((o) => ({ id: o.id, type: o.type, rough: r.isSketchy(o), want: o.sketchy !== false }));
 });
-console.log(legacy.every((c) => c.rough) ? `LEGACY CONNECTORS ROUGH (${legacy.length})` : `LEGACY NOT ROUGH: ${JSON.stringify(legacy)}`);
-await page.mouse.click(1300, 860);
+const bad = legacy.filter((o) => o.rough !== o.want);
+const n = (t) => legacy.filter((o) => o.type === t && o.want).length;
+console.log(bad.length ? `LEGACY WRONG: ${JSON.stringify(bad)}` : `LEGACY ROUGH: ${n('shape')} shapes, ${n('connector')} connectors; explicit sketchy:false stays clean`);
+await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${SHOTS}/sketchy-3-arrows.png` });
 const c1 = await page.screenshot();
@@ -120,6 +123,42 @@ await page.mouse.wheel(0, -200);
 await page.waitForTimeout(400);
 const c2 = await page.screenshot();
 console.log(Buffer.compare(c1, c2) === 0 ? 'LEGACY STABLE' : 'LEGACY JITTER: frames differ');
+
+// the style bar agrees with the renderer, and switching an unflagged shape to
+// Sketchy keeps the wobble it already had (seed pinned from its id)
+const screenOf = (id) =>
+  page.evaluate((id) => {
+    const ctl = window.__slateCtl;
+    const o = ctl.doc.get(id);
+    return ctl.worldToScreenPt({ x: o.x + 4, y: o.y + o.h / 2 });
+  }, id);
+async function toggleState(id) {
+  const p = await screenOf(id);
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(200);
+  return page.evaluate(() => ({
+    clean: document.querySelector('.stylebar button[title="Clean borders"]')?.classList.contains('active') ?? null,
+    sketchy: document.querySelector('.stylebar button[title="Hand-drawn borders"]')?.classList.contains('active') ?? null,
+  }));
+}
+const tA = await toggleState('A');
+const tClean = await toggleState('Clean');
+const tBar = tA.sketchy && !tA.clean && tClean.clean && !tClean.sketchy;
+console.log(tBar ? 'STYLEBAR AGREES (unflagged=Sketchy, sketchy:false=Clean)' : `STYLEBAR WRONG: A=${JSON.stringify(tA)} Clean=${JSON.stringify(tClean)}`);
+await toggleState('A');
+await page.click('.stylebar button[title="Hand-drawn borders"]');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+const pinned = await page.evaluate(() => {
+  const a = window.__slateCtl.doc.get('A');
+  return { sketchy: a.sketchy, seed: a.seed };
+});
+const c3 = await page.screenshot();
+console.log(
+  pinned.sketchy === true && pinned.seed !== undefined && Buffer.compare(c2, c3) === 0
+    ? `TOGGLE KEEPS WOBBLE (seed ${pinned.seed})`
+    : `TOGGLE CHANGED LOOK: ${JSON.stringify(pinned)}, frames ${Buffer.compare(c2, c3) === 0 ? 'same' : 'differ'}`
+);
 
 // SVG export uses the same roughjs paths as the canvas
 const svg = await page.evaluate(async () => {
@@ -132,6 +171,13 @@ const svgPage = await browser.newPage({ viewport: { width: 1400, height: 900 }, 
 await svgPage.setContent(`<body style="margin:0;background:#fff">${svg.replace('<svg', '<svg style="max-width:100%;height:auto"')}</body>`);
 await svgPage.screenshot({ path: `${SHOTS}/sketchy-2-export-svg.png`, fullPage: true });
 console.log(`SVG EXPORT: ${(svg.match(/<path /g) ?? []).length} paths`);
+// export agrees too: only the explicit sketchy:false rect exports as a clean <rect>
+const cleanRects = (svg.match(/<rect x="(\d+)" y="(\d+)" width="160"/g) ?? []);
+console.log(
+  cleanRects.length === 1 && cleanRects[0].includes('x="1000" y="680"')
+    ? 'SVG EXPORT AGREES (unflagged shapes rough, sketchy:false clean)'
+    : `SVG EXPORT WRONG: clean rects ${JSON.stringify(cleanRects)}`
+);
 
 console.log(errors.length ? errors.join('\n') : 'NO ERRORS');
 await browser.close();
