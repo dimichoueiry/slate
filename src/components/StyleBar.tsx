@@ -350,7 +350,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
                 </button>
               ))}
             </div>
-            {types.has('shape') && (
+            {(types.has('shape') || types.has('connector')) && (
               <div className="seg">
                 <button
                   className={!(single as any)?.sketchy ? 'active' : ''}
@@ -692,6 +692,14 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             ))}
           </div>
         )}
+        <div className="seg">
+          <button className={!ui.sketchy ? 'active' : ''} onClick={() => ui.set({ sketchy: false })}>
+            Clean
+          </button>
+          <button className={ui.sketchy ? 'active' : ''} onClick={() => ui.set({ sketchy: true })}>
+            Sketchy
+          </button>
+        </div>
         <div className="seg" title="When off, endpoints never stick to nearby shapes (hold ⌥ for a one-off)">
           <button className={ui.attachEnabled ? 'active' : ''} onClick={() => ui.set({ attachEnabled: true })}>
             Attach

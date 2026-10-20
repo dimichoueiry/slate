@@ -100,6 +100,7 @@ const objectSpec = {
       required: ['step'],
     },
     dash: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
+    sketchy: { type: 'boolean', description: 'Shapes and connectors: hand-drawn (Excalidraw-style) look. Default true; set false for clean geometric lines' },
     label: { type: 'string', description: 'Connector label drawn at its midpoint' },
     routing: { type: 'string', enum: ['straight', 'elbow', 'curved'] },
     endArrow: { type: 'string', enum: ['none', 'triangle'] },
@@ -176,7 +177,7 @@ const TOOLS = [
   },
   {
     name: 'update_objects',
-    description: 'Update existing objects (text, colors, position, size, labels, reveal metadata). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Set patch.reveal={step,effect?,durationMs?,delayMs?} to stage an object for Reveal Mode; set patch.reveal=null to clear it. Only text/style/geometry/reveal props are editable.',
+    description: 'Update existing objects (text, colors, position, size, labels, reveal metadata). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Set patch.reveal={step,effect?,durationMs?,delayMs?} to stage an object for Reveal Mode; set patch.reveal=null to clear it. Set patch.sketchy=true/false on shapes and connectors to switch between hand-drawn and clean lines. Only text/style/geometry/reveal props are editable.',
     inputSchema: {
       type: 'object',
       properties: {

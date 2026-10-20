@@ -25,7 +25,8 @@ export type ShapeKind =
 export type DashStyle = 'solid' | 'dashed' | 'dotted';
 export type AnchorSide = 'left' | 'right' | 'top' | 'bottom' | 'center';
 export type Routing = 'straight' | 'elbow' | 'curved';
-export type ArrowHead = 'none' | 'triangle';
+/** 'chevron' is the open hand-drawn head; sketchy connectors draw any head as a chevron */
+export type ArrowHead = 'none' | 'triangle' | 'chevron';
 export type RevealEffect = 'pop' | 'fade' | 'slide-up' | 'slide-left' | 'none';
 
 export interface RevealSpec {
@@ -170,6 +171,10 @@ export interface ConnectorObj extends BaseObj {
   opacity: number;
   /** text drawn at the midpoint of the connector */
   label?: string;
+  /** hand-drawn (roughjs) rendering */
+  sketchy?: boolean;
+  /** stable seed so the sketchy jitter doesn't change between frames */
+  seed?: number;
 }
 
 export interface IconObj extends BaseObj {
