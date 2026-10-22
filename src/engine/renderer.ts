@@ -560,7 +560,8 @@ function strokeStyledPaths(ctx: CanvasRenderingContext2D, paths: StyledPath[], d
       ctx.lineWidth = p.strokeWidth;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      applyDash(ctx, p.isBorder ? dash : 'solid', width);
+      if (p.isBorder && p.dash) ctx.setLineDash(p.dash);
+      else applyDash(ctx, p.isBorder ? dash : 'solid', width);
       ctx.stroke(toPath2D(p));
       ctx.setLineDash([]);
     }

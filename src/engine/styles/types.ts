@@ -14,6 +14,8 @@ export interface StyledPath {
   fill: string;
   /** the object's outline (gets the object's dash pattern); fills and arrowheads don't */
   isBorder: boolean;
+  /** explicit dash pattern for a border, overriding the painter's default for the object's dash */
+  dash?: number[];
 }
 
 /** Everything a primitive needs to know about how to stroke/fill it. */

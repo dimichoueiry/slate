@@ -285,7 +285,7 @@ function dashSvg(dash: string, width: number): string {
 function sketchySvg(paths: StyledPath[], dash: string, width: number, opacity: number): string {
   let el = '';
   for (const p of paths) {
-    const dashAttr = p.isBorder ? dashSvg(dash, width) : '';
+    const dashAttr = !p.isBorder ? '' : p.dash ? ` stroke-dasharray="${p.dash.join(' ')}"` : dashSvg(dash, width);
     el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" fill-rule="evenodd"${dashAttr}/>`;
   }
   return el;
