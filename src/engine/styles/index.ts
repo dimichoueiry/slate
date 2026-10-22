@@ -31,6 +31,16 @@ export function styleRendererFor(o: { style?: unknown }, boardStyle: DrawStyle |
   return getStyleRenderer(effectiveStyle(o, boardStyle));
 }
 
+/** Font id + weight an object's text is drawn with in its effective style, so measuring matches painting. */
+export function textFace(
+  o: { style?: unknown; fontFamily?: string; fontSize: number },
+  boardStyle: DrawStyle | undefined,
+  baseWeight: number
+): { fontId: string | undefined; weight: number } {
+  const sr = styleRendererFor(o, boardStyle);
+  return { fontId: sr.fontId(o.fontFamily), weight: sr.fontWeight(o.fontSize, baseWeight) };
+}
+
 // ---------- cached drawables ----------
 
 export const drawableCache = new DrawableCache<StyledPath[]>();
@@ -49,9 +59,10 @@ export function shapeDrawable(o: ShapeObj, boardStyle: DrawStyle | undefined): S
   const sr = styleRendererFor(o, boardStyle);
   const seed = seedOf(o);
   const r = o.shape === 'roundedRect' ? cornerRadius(o) : 0;
-  const key = `shape|${sr.id}@${sr.version}|${seed}|${o.shape}|${o.x},${o.y},${o.w},${o.h},${r}|${o.stroke}|${o.strokeWidth}|${o.dash}|${o.fill}`;
+  const hasText = !!o.text;
+  const key = `shape|${sr.id}@${sr.version}|${seed}|${o.shape}|${o.x},${o.y},${o.w},${o.h},${r}|${o.stroke}|${o.strokeWidth}|${o.dash}|${o.fill}|${o.fillStyle ?? ''}|${hasText}`;
   return drawableCache.get(o.id, key, () => {
-    const s: StrokeStyle = { seed, stroke: o.stroke, strokeWidth: o.strokeWidth, dash: o.dash, fill: o.fill, size: { w: o.w, h: o.h } };
+    const s: StrokeStyle = { seed, stroke: o.stroke, strokeWidth: o.strokeWidth, dash: o.dash, fill: o.fill, fillStyle: o.fillStyle, hasText, size: { w: o.w, h: o.h } };
     const { x, y, w, h } = o;
     switch (o.shape) {
       case 'rect':
