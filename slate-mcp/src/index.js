@@ -101,6 +101,7 @@ const objectSpec = {
       required: ['step'],
     },
     dash: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
+    fillStyle: { type: 'string', enum: ['hachure', 'solid', 'zigzag', 'dots', 'cross-hatch'], description: 'Shapes with a fill, in styles that hatch fills ("messy"): fill pattern. Default hachure' },
     sketchy: { type: 'boolean', description: 'Shapes and connectors: hand-drawn (Excalidraw-style) look. Default true; set false for clean geometric lines' },
     style: styleSchema(`Shapes, connectors, text and stickies: per-object ${STYLE_DESCRIPTION} Omit to follow the board's style (usually what you want).`),
     label: { type: 'string', description: 'Connector label drawn at its midpoint' },

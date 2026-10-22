@@ -26,6 +26,7 @@ export class BridgeError extends Error {}
 
 const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const DASHES = new Set(['solid', 'dashed', 'dotted']);
+const FILL_STYLES = new Set(['hachure', 'solid', 'zigzag', 'dots', 'cross-hatch']);
 const SHAPES = new Set(['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram']);
 const ROUTINGS = new Set(['straight', 'elbow', 'curved']);
 const REVEAL_EFFECTS = new Set<RevealEffect>(['pop', 'fade', 'slide-up', 'slide-left', 'none']);
@@ -129,7 +130,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
     case 'text':
       return { ...base, w: r(o.w), h: r(o.h), fontSize: o.fontSize, color: o.color, text: o.text, fixedWidth: !!o.fixedWidth, runnable: isAINode(o) };
     case 'shape':
-      return { ...base, w: r(o.w), h: r(o.h), shape: o.shape, fill: o.fill, stroke: o.stroke, text: o.text, textColor: o.textColor };
+      return { ...base, w: r(o.w), h: r(o.h), shape: o.shape, fill: o.fill, ...(o.fillStyle ? { fillStyle: o.fillStyle } : {}), stroke: o.stroke, text: o.text, textColor: o.textColor };
     case 'frame':
       return { ...base, w: r(o.w), h: r(o.h), name: o.name };
     case 'connector':
@@ -315,6 +316,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
         stroke: color(spec.stroke, '#1a1a1a'),
         strokeWidth: num(spec.strokeWidth, 3, 0.5, 20),
         dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
+        ...(FILL_STYLES.has(spec.fillStyle) ? { fillStyle: spec.fillStyle } : {}),
         radius: 12,
         adaptiveRadius: true,
         sketchy: spec.sketchy !== false,
@@ -527,7 +529,7 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 // per-type editable props, mirroring aiEdit.ts EDITABLE
 const EDITABLE: Record<string, Set<string>> = {
   sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal', 'style']),
-  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal', 'style']),
+  shape: new Set(['text', 'fill', 'fillStyle', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal', 'style']),
   text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal', 'style']),
   connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'sketchy', 'reveal', 'style']),
   icon: new Set(['color', 'strokeWidth', 'x', 'y', 'reveal']),
@@ -572,6 +574,9 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
           else rejected.push(k);
         } else if (k === 'dash') {
           if (DASHES.has(v as string)) patch[k] = v;
+          else rejected.push(k);
+        } else if (k === 'fillStyle') {
+          if (FILL_STYLES.has(v as string)) patch[k] = v;
           else rejected.push(k);
         } else if (k === 'fixedWidth') {
           if (typeof v === 'boolean') patch[k] = v;
