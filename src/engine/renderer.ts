@@ -527,7 +527,9 @@ export function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj, boardStyle
   ctx.save();
   ctx.globalAlpha = o.opacity;
   if (isSketchy(o)) {
-    strokeStyledPaths(ctx, shapeDrawable(o, boardStyle), o.dash, o.strokeWidth);
+    const paths = shapeDrawable(o, boardStyle);
+    if (drawPatternFill(ctx, paths, o)) strokeStyledPaths(ctx, paths.filter((p) => !isPatternPath(p)), o.dash, o.strokeWidth);
+    else strokeStyledPaths(ctx, paths, o.dash, o.strokeWidth);
   } else {
     const path = shapePath(o);
     if (o.fill && o.fill !== 'transparent') {
@@ -546,6 +548,56 @@ export function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj, boardStyle
     drawCenteredText(ctx, o.text, o, o.textColor, o.fontSize, face.fontId, face.weight);
   }
   ctx.restore();
+}
+
+// ---------- pattern-fill bitmaps ----------
+// A hatched / zigzag / dotted fill is hundreds of antialiased curves; stroking them
+// every frame made panning a hatched board slow. Each shape's pattern strokes are
+// rasterized once per drawable (WeakMap: a regenerated drawable drops the old one)
+// at a device scale at or above the current one (√2 steps, so it is at most ~1.4x
+// oversampled and re-rasterizes only when zoom crosses a step), then blitted.
+
+/** A fill drawn as strokes (hachure etc.), as opposed to a solid area or an outline. */
+function isPatternPath(p: StyledPath): boolean {
+  return !p.isBorder && p.fill === 'none' && p.stroke !== 'none';
+}
+
+const patternBitmaps = new WeakMap<StyledPath[], { scale: number; canvas: HTMLCanvasElement }>();
+/** largest bitmap side (device px); bigger fills (deep zoom) are stroked directly */
+const MAX_PATTERN_PX = 4096;
+
+/** Paint a shape's pattern-fill paths from a cached bitmap. False = nothing cached (no pattern, or too big). */
+function drawPatternFill(ctx: CanvasRenderingContext2D, paths: StyledPath[], b: Box): boolean {
+  if (!paths.some(isPatternPath)) return false;
+  const m = ctx.getTransform();
+  const deviceScale = Math.hypot(m.a, m.b);
+  const scale = 2 ** (Math.ceil(2 * Math.log2(Math.max(deviceScale, 1 / 8)) - 1e-9) / 2);
+  // room for the jitter and the "circled" ellipse that overshoots its box
+  const pad = Math.max(b.w, b.h) * 0.08 + 12;
+  const w = b.w + pad * 2;
+  const h = b.h + pad * 2;
+  if (w * scale > MAX_PATTERN_PX || h * scale > MAX_PATTERN_PX) return false;
+  let hit = patternBitmaps.get(paths);
+  if (!hit || hit.scale !== scale) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(w * scale);
+    canvas.height = Math.ceil(h * scale);
+    const g = canvas.getContext('2d')!;
+    g.setTransform(scale, 0, 0, scale, (pad - b.x) * scale, (pad - b.y) * scale);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const p of paths) {
+      if (!isPatternPath(p)) continue;
+      g.strokeStyle = p.stroke;
+      g.lineWidth = p.strokeWidth;
+      if (p.lineDash) g.setLineDash(p.lineDash);
+      g.stroke(toPath2D(p));
+      g.setLineDash([]);
+    }
+    patternBitmaps.set(paths, (hit = { scale, canvas }));
+  }
+  ctx.drawImage(hit.canvas, b.x - pad, b.y - pad, hit.canvas.width / scale, hit.canvas.height / scale);
+  return true;
 }
 
 /** Canvas painter for a style's paths; SVG export's sketchySvg is its twin. */
