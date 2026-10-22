@@ -54,6 +54,7 @@ import '@fontsource/oswald';
 import '@fontsource/abril-fatface';
 import '@fontsource/pacifico';
 import '@fontsource/caveat';
+import '@fontsource/caveat/700.css'; // Caveat Bold: key numbers in the 'messy' style
 import '@fontsource/dancing-script';
 import '@fontsource/permanent-marker';
 import '@fontsource/jetbrains-mono';

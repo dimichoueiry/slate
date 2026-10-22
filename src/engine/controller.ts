@@ -696,6 +696,7 @@ export class Controller {
       fontFamily: new Set(['text', 'shape', 'sticky']),
       sketchy: new Set(['shape', 'connector']),
       adaptiveRadius: new Set(['shape']),
+      fillStyle: new Set(['shape']),
       seed: new Set(['shape', 'connector']),
       strokeWidth: new Set(['icon']),
       // per-object style override; undefined = follow the board

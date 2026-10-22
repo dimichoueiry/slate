@@ -2,6 +2,7 @@
 // fallback family while a webfont is still downloading, so anything that
 // measures or paints text awaits these first.
 
+import { CAVEAT_FACES } from '../assets/fonts/caveat';
 import { EXCALIFONT_FACES } from '../assets/fonts/excalifont';
 import { fontStack, type SlateObj } from '../types';
 import { fontString } from './text';
@@ -31,22 +32,26 @@ export async function loadDefaultFonts(): Promise<void> {
 export async function ensureObjectFonts(
   objs: Iterable<SlateObj>,
   /** FONTS id the object actually draws with (its style may override fontFamily) */
-  fontIdOf: (o: SlateObj & { fontFamily?: string }) => string | undefined = (o) => o.fontFamily
+  fontIdOf: (o: SlateObj & { fontFamily?: string }) => string | undefined = (o) => o.fontFamily,
+  /** weight the object's text draws with (a style may bold big text) */
+  weightOf: (o: SlateObj & { fontSize?: number }) => number = () => 400
 ): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
   registerBundledFonts();
-  const byStack = new Map<string, Set<string>>();
+  const byFace = new Map<string, { weight: number; stack: string; chars: Set<string> }>();
   for (const o of objs) {
     const text = (o as { text?: unknown }).text;
     if (typeof text !== 'string' || !text) continue;
     const stack = fontStack(fontIdOf(o));
-    let chars = byStack.get(stack);
-    if (!chars) byStack.set(stack, (chars = new Set()));
-    for (const ch of text) chars.add(ch);
+    const weight = weightOf(o);
+    const key = `${weight} ${stack}`;
+    let face = byFace.get(key);
+    if (!face) byFace.set(key, (face = { weight, stack, chars: new Set() }));
+    for (const ch of text) face.chars.add(ch);
   }
   await Promise.all(
-    [...byStack].map(([stack, chars]) =>
-      document.fonts.load(fontString(16, 400, stack), [...chars].join('')).catch(() => [])
+    [...byFace.values()].map(({ weight, stack, chars }) =>
+      document.fonts.load(fontString(16, weight, stack), [...chars].join('')).catch(() => [])
     )
   );
 }
@@ -75,14 +80,33 @@ async function dataUrl(url: string): Promise<string> {
  * data URLs, so an exported SVG renders handwritten anywhere (even as <img>).
  */
 export async function excalifontFaceCss(text: string): Promise<string> {
+  return embeddedFaceCss('Excalifont', EXCALIFONT_FACES, text);
+}
+
+/** Same for Caveat, at each weight in `textByWeight` (weight → the text drawn at it). */
+export async function caveatFaceCss(textByWeight: Map<number, string>): Promise<string> {
+  const rules: string[] = [];
+  for (const [weight, text] of textByWeight) {
+    const css = await embeddedFaceCss('Caveat', CAVEAT_FACES.filter((f) => f.weight === weight), text, weight);
+    if (css) rules.push(css);
+  }
+  return rules.join('\n');
+}
+
+async function embeddedFaceCss(
+  family: string,
+  faces: { url: string; unicodeRange: string }[],
+  text: string,
+  weight = 400
+): Promise<string> {
   const cps = new Set<number>();
   for (const ch of text) cps.add(ch.codePointAt(0)!);
   const rules: string[] = [];
-  for (const f of EXCALIFONT_FACES) {
+  for (const f of faces) {
     const ranges = parseRange(f.unicodeRange);
     if (![...cps].some((c) => ranges.some(([lo, hi]) => c >= lo && c <= hi))) continue;
     rules.push(
-      `@font-face{font-family:'Excalifont';font-weight:400;src:url(${await dataUrl(f.url)}) format('woff2');unicode-range:${f.unicodeRange};}`
+      `@font-face{font-family:'${family}';font-weight:${weight};src:url(${await dataUrl(f.url)}) format('woff2');unicode-range:${f.unicodeRange};}`
     );
   }
   return rules.join('\n');

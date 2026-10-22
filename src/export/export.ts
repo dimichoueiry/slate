@@ -3,13 +3,13 @@ import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
 import { aabbOf, boundsOf, boxUnion, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
-import { arrowHeadLen, chevronArms, drawObject, isSketchy, getBitmap } from '../engine/renderer';
-import { connectorDrawable, shapeDrawable, styleRendererFor, type StyledPath } from '../engine/styles';
+import { arrowHeadLen, chevronArms, connectorLabelHeight, drawObject, isSketchy, getBitmap } from '../engine/renderer';
+import { connectorDrawable, shapeDrawable, styleRendererFor, textFace, type StyledPath } from '../engine/styles';
 import { boardStyleOf, isDrawStyle } from '../engine/style';
 import { stickyDateGeom, stickyDateLabel, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
-import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
-import { ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
+import { fontString, lineHeight, textBlockSize, wrapText, FONT_FAMILY } from '../engine/text';
+import { caveatFaceCss, ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
 import { db, getBlob, putBlob, createBoard } from '../store/db';
 import { nanoid } from 'nanoid';
 
@@ -66,7 +66,11 @@ export async function exportPng(
       const b = aabbOf(o, doc.resolve);
       return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
     });
-  await ensureObjectFonts(visible, (o) => styleRendererFor(o, doc.style).fontId(o.fontFamily));
+  await ensureObjectFonts(
+    visible,
+    (o) => styleRendererFor(o, doc.style).fontId(o.fontFamily),
+    (o) => styleRendererFor(o, doc.style).fontWeight(o.fontSize ?? 16, 400)
+  );
   for (const o of visible) drawObject(ctx, o, doc, scale);
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('export failed'))), 'image/png')
@@ -96,10 +100,22 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
     .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack(fontOf(o)).includes('Excalifont'))
     .map((o) => (o as { text: string }).text)
     .join('');
-  if (excaliText) {
-    const css = await excalifontFaceCss(excaliText).catch(() => '');
-    if (css) parts.push(`<defs><style>${css}</style></defs>`);
+  // and Caveat (the 'messy' style's font), per weight it is drawn at
+  const caveatText = new Map<number, string>();
+  for (const o of visible) {
+    const t = svgTexts(o);
+    if (!t) continue;
+    const sr = styleRendererFor(o, doc.style);
+    const font = o.type === 'connector' ? sr.labelFont.fontId : fontOf(o);
+    if (!fontStack(font).includes('Caveat')) continue;
+    const weight = o.type === 'connector' ? sr.labelFont.weight : sr.fontWeight((o as { fontSize: number }).fontSize, o.type === 'sticky' ? 500 : 400);
+    caveatText.set(weight, (caveatText.get(weight) ?? '') + t);
   }
+  const css = [
+    excaliText ? await excalifontFaceCss(excaliText).catch(() => '') : '',
+    caveatText.size ? await caveatFaceCss(caveatText).catch(() => '') : '',
+  ].filter(Boolean).join('\n');
+  if (css) parts.push(`<defs><style>${css}</style></defs>`);
   for (const o of visible) {
     const rot = o.rotation && o.type !== 'connector'
       ? (() => {
@@ -113,6 +129,13 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
   }
   parts.push('</svg>');
   return parts.join('\n');
+}
+
+/** The text an object draws in its own font (connectors: the label). */
+function svgTexts(o: SlateObj): string {
+  if (o.type === 'connector') return o.label ?? '';
+  const t = (o as { text?: unknown }).text;
+  return typeof t === 'string' ? t : '';
 }
 
 async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
@@ -135,7 +158,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       const s = o as ShapeObj;
       if (isSketchy(s)) {
         let el = sketchySvg(shapeDrawable(s, doc.style), s.dash, s.strokeWidth, s.opacity);
-        if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, sr.fontId(s.fontFamily));
+        if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, ...faceOf(s, doc));
         return el;
       }
       const fill = s.fill === 'transparent' ? 'none' : s.fill;
@@ -156,24 +179,24 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
         const poly = shapePolygon(s.shape, { x: s.x, y: s.y, w: s.w, h: s.h });
         if (poly) el = `<polygon points="${poly.map((p) => `${p.x},${p.y}`).join(' ')}" ${common}/>`;
       }
-      if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, sr.fontId(s.fontFamily));
+      if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, ...faceOf(s, doc));
       return el;
     }
     case 'sticky': {
       const s = o as StickyObj;
       const d = sr.stickyPaper(s);
-      const font = sr.fontId(s.fontFamily);
+      const { fontId: font, weight } = textFace(s, doc.style, 500);
       const off = stickyShadowOffset(s);
       let el = `<path d="${d}" transform="translate(${off} ${off})" fill="${STICKY_SHADOW}"/>`;
       el += `<path d="${d}" fill="${s.color}"/>`;
       if (s.text) {
-        const lines = wrapText(s.text, s.fontSize, s.w - 24, 500, font);
+        const lines = wrapText(s.text, s.fontSize, s.w - 24, weight, font);
         const lh = lineHeight(s.fontSize);
         const top = s.y + Math.max(12, (s.h - lines.length * lh) / 2);
         let y = top + s.fontSize * 0.8;
         const cx = s.x + s.w / 2;
         for (const line of lines) {
-          el += `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(font))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
+          el += `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${s.fontSize}" font-weight="${weight}" font-family="${esc(fontStack(font))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
           y += lh;
         }
       }
@@ -186,13 +209,13 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'text': {
       const t = o as TextObj;
-      const font = sr.fontId(t.fontFamily);
-      const lines = t.fixedWidth ? wrapText(t.text, t.fontSize, t.w, 400, font) : t.text.split('\n');
+      const { fontId: font, weight } = textFace(t, doc.style, 400);
+      const lines = t.fixedWidth ? wrapText(t.text, t.fontSize, t.w, weight, font) : t.text.split('\n');
       const lh = lineHeight(t.fontSize);
       let y = t.y + t.fontSize * 0.8;
       let el = '';
       for (const line of lines) {
-        el += `<text x="${t.x}" y="${y}" font-size="${t.fontSize}" font-family="${esc(fontStack(font))}" fill="${t.color}">${esc(line)}</text>`;
+        el += `<text x="${t.x}" y="${y}" font-size="${t.fontSize}"${weightAttr(weight)} font-family="${esc(fontStack(font))}" fill="${t.color}">${esc(line)}</text>`;
         y += lh;
       }
       return el;
@@ -233,9 +256,13 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       }
       if (c.label) {
         const mid = polylineMidpoint(pts);
-        const w = c.label.length * 7.5 + 12;
-        el += `<rect x="${mid.x - w / 2}" y="${mid.y - 10}" width="${w}" height="20" rx="6" fill="#f3f2ef"/>`;
-        el += `<text x="${mid.x}" y="${mid.y + 4}" font-size="13" font-weight="500" fill="${c.stroke}" text-anchor="middle">${esc(c.label)}</text>`;
+        const lf = sr.labelFont;
+        // the default (UI sans) label keeps its estimated width; a style font is measured
+        const w = lf.fontId ? textBlockSize(c.label, lf.size, undefined, lf.weight, lf.fontId).w + 12 : c.label.length * 7.5 + 12;
+        const h = connectorLabelHeight(lf.size);
+        const family = lf.fontId ? ` font-family="${esc(fontStack(lf.fontId))}"` : '';
+        el += `<rect x="${mid.x - w / 2}" y="${mid.y - h / 2}" width="${w}" height="${h}" rx="6" fill="#f3f2ef"/>`;
+        el += `<text x="${mid.x}" y="${mid.y + (lf.fontId ? lf.size * 0.3 : 4)}" font-size="${lf.size}" font-weight="${lf.weight}"${family} fill="${c.stroke}" text-anchor="middle">${esc(c.label)}</text>`;
       }
       return el;
     }
@@ -260,19 +287,29 @@ function centeredTextSvg(
   b: { x: number; y: number; w: number; h: number },
   color: string,
   fontSize: number,
-  fontId?: string
+  fontId?: string,
+  weight = 400
 ): string {
-  const lines = wrapText(text, fontSize, Math.max(8, b.w - 16), 400, fontId);
+  const lines = wrapText(text, fontSize, Math.max(8, b.w - 16), weight, fontId);
   const lh = lineHeight(fontSize);
   const totalH = lines.length * lh;
   let y = b.y + b.h / 2 - totalH / 2 + lh / 2 + fontSize * 0.3;
   let el = '';
   for (const line of lines) {
-    el += `<text x="${b.x + b.w / 2}" y="${y}" font-size="${fontSize}" font-family="${esc(fontStack(fontId))}" fill="${color}" text-anchor="middle">${esc(line)}</text>`;
+    el += `<text x="${b.x + b.w / 2}" y="${y}" font-size="${fontSize}"${weightAttr(weight)} font-family="${esc(fontStack(fontId))}" fill="${color}" text-anchor="middle">${esc(line)}</text>`;
     y += lh;
   }
   return el;
 }
+
+/** [fontId, weight] a shape's label draws with in its style. */
+function faceOf(s: ShapeObj, doc: Doc): [string | undefined, number] {
+  const f = textFace(s, doc.style, 400);
+  return [f.fontId, f.weight];
+}
+
+/** font-weight attribute, omitted at the default 400 */
+const weightAttr = (weight: number) => (weight === 400 ? '' : ` font-weight="${weight}"`);
 
 /** SVG dash attributes matching applyDash on the canvas. */
 function dashSvg(dash: string, width: number): string {
@@ -285,7 +322,11 @@ function dashSvg(dash: string, width: number): string {
 function sketchySvg(paths: StyledPath[], dash: string, width: number, opacity: number): string {
   let el = '';
   for (const p of paths) {
-    const dashAttr = p.isBorder ? dashSvg(dash, width) : '';
+    const dashAttr = p.lineDash
+      ? ` stroke-dasharray="${p.lineDash.join(' ')}"`
+      : p.isBorder
+        ? dashSvg(dash, width)
+        : '';
     el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" fill-rule="evenodd"${dashAttr}/>`;
   }
   return el;
