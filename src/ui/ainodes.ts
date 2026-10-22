@@ -21,8 +21,8 @@ import { useUI } from '../store/ui';
 import { getBlob, putBlob } from '../store/db';
 import { exportPng } from '../export/export';
 import { lineHeight, textBlockSize } from '../engine/text';
+import { drawFontId, drawFontWeight } from '../engine/styles';
 import { clampGrowHeight } from '../engine/sticky';
-import { faceArgs } from '../engine/styles';
 import { getBasePrompt } from '../ai/basePrompts';
 import { uploadLabel } from './upload';
 import type { UploadFile } from '../types';
@@ -164,10 +164,10 @@ function setText(ctl: AnyObj, id: string, text: string) {
   if (!o) return;
   const patch: AnyObj = { text };
   if (o.type === 'sticky') {
-    const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, ...faceArgs(o, ctl.doc.style, 500));
+    const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, drawFontWeight(o, ctl.doc.style, 500), drawFontId(o, ctl.doc.style));
     patch.h = clampGrowHeight(o.h, Math.max(o.h, m.h + 24));
   } else if (o.type === 'text') {
-    const m = textBlockSize(text || ' ', o.fontSize, o.fixedWidth ? o.w : undefined, ...faceArgs(o, ctl.doc.style, 400));
+    const m = textBlockSize(text || ' ', o.fontSize, o.fixedWidth ? o.w : undefined, drawFontWeight(o, ctl.doc.style, 400), drawFontId(o, ctl.doc.style));
     patch.w = o.fixedWidth ? o.w : m.w;
     patch.h = clampGrowHeight(o.h, m.h);
   }

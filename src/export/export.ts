@@ -4,12 +4,12 @@ import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
 import { aabbOf, boundsOf, boxUnion, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
 import { arrowHeadLen, chevronArms, connectorLabelHeight, drawObject, isSketchy, getBitmap } from '../engine/renderer';
-import { connectorDrawable, shapeDrawable, styleRendererFor, textFace, type StyledPath } from '../engine/styles';
+import { connectorDrawable, drawFontId, drawFontWeight, labelFontOf, shapeDrawable, styleRendererFor, type StyledPath } from '../engine/styles';
 import { boardStyleOf, isDrawStyle } from '../engine/style';
 import { stickyDateGeom, stickyDateLabel, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, textBlockSize, wrapText, FONT_FAMILY } from '../engine/text';
-import { caveatFaceCss, ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
+import { caveatFaceCss, ensureObjectFonts, excalifontFaceCss, kalamFaceCss } from '../engine/fonts';
 import { db, getBlob, putBlob, createBoard } from '../store/db';
 import { nanoid } from 'nanoid';
 
@@ -69,7 +69,12 @@ export async function exportPng(
   await ensureObjectFonts(
     visible,
     (o) => styleRendererFor(o, doc.style).fontId(o.fontFamily),
-    (o) => styleRendererFor(o, doc.style).fontWeight(o.fontSize ?? 16, 400)
+    // (a style's own label weight; text at its style weight on a 400 base)
+    (o) => {
+      const sr = styleRendererFor(o, doc.style);
+      if (o.type === 'connector') return sr.labelFont ? sr.labelFont.weight : 400;
+      return sr.fontWeight ? sr.fontWeight(o.fontSize ?? 16, 400) : 400;
+    }
   );
   for (const o of visible) drawObject(ctx, o, doc, scale);
   return new Promise((resolve, reject) =>
@@ -94,28 +99,38 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
     const b = aabbOf(o, doc.resolve);
     return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
   });
-  // embed Excalifont so the file still renders handwritten outside the app
+  // embed Excalifont (and Kalam, the pen stack's fallback) so the file still renders handwritten outside the app
   const fontOf = (o: SlateObj) => styleRendererFor(o, doc.style).fontId((o as { fontFamily?: string }).fontFamily);
-  const excaliText = visible
-    .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack(fontOf(o)).includes('Excalifont'))
-    .map((o) => (o as { text: string }).text)
-    .join('');
-  // and Caveat (the 'messy' style's font), per weight it is drawn at
+  const textIn = (family: string) =>
+    visible
+      .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack(fontOf(o)).includes(family))
+      .map((o) => (o as { text: string }).text)
+      .join('');
+  const excaliText = textIn('Excalifont');
+  // connector labels have no fontFamily of their own; the style picks theirs
+  const kalamText =
+    textIn('Kalam') +
+    visible
+      .filter((o): o is ConnectorObj => o.type === 'connector' && !!o.label && fontStack(fontOf(o)).includes('Kalam'))
+      .map((o) => o.label)
+      .join('');
+  // Caveat (the 'messy' style's font) per weight it is drawn at, labels included
   const caveatText = new Map<number, string>();
   for (const o of visible) {
-    const t = svgTexts(o);
-    if (!t) continue;
-    const sr = styleRendererFor(o, doc.style);
-    const font = o.type === 'connector' ? sr.labelFont.fontId : fontOf(o);
-    if (!fontStack(font).includes('Caveat')) continue;
-    const weight = o.type === 'connector' ? sr.labelFont.weight : sr.fontWeight((o as { fontSize: number }).fontSize, o.type === 'sticky' ? 500 : 400);
+    const t = o.type === 'connector' ? o.label ?? '' : 'text' in o && typeof o.text === 'string' ? o.text : '';
+    if (!t || !fontStack(fontOf(o)).includes('Caveat')) continue;
+    const weight =
+      o.type === 'connector'
+        ? labelFontOf(styleRendererFor(o, doc.style)).weight
+        : drawFontWeight(o as { fontSize: number }, doc.style, o.type === 'sticky' ? 500 : 400);
     caveatText.set(weight, (caveatText.get(weight) ?? '') + t);
   }
   const css = [
     excaliText ? await excalifontFaceCss(excaliText).catch(() => '') : '',
+    kalamText ? await kalamFaceCss(kalamText).catch(() => '') : '',
     caveatText.size ? await caveatFaceCss(caveatText).catch(() => '') : '',
-  ].filter(Boolean).join('\n');
-  if (css) parts.push(`<defs><style>${css}</style></defs>`);
+  ].filter(Boolean);
+  if (css.length) parts.push(`<defs><style>${css.join('\n')}</style></defs>`);
   for (const o of visible) {
     const rot = o.rotation && o.type !== 'connector'
       ? (() => {
@@ -129,13 +144,6 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
   }
   parts.push('</svg>');
   return parts.join('\n');
-}
-
-/** The text an object draws in its own font (connectors: the label). */
-function svgTexts(o: SlateObj): string {
-  if (o.type === 'connector') return o.label ?? '';
-  const t = (o as { text?: unknown }).text;
-  return typeof t === 'string' ? t : '';
 }
 
 async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
@@ -185,7 +193,8 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     case 'sticky': {
       const s = o as StickyObj;
       const d = sr.stickyPaper(s);
-      const { fontId: font, weight } = textFace(s, doc.style, 500);
+      const font = drawFontId(s, doc.style);
+      const weight = drawFontWeight(s, doc.style, 500);
       const off = stickyShadowOffset(s);
       let el = `<path d="${d}" transform="translate(${off} ${off})" fill="${STICKY_SHADOW}"/>`;
       el += `<path d="${d}" fill="${s.color}"/>`;
@@ -209,7 +218,8 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'text': {
       const t = o as TextObj;
-      const { fontId: font, weight } = textFace(t, doc.style, 400);
+      const font = drawFontId(t, doc.style);
+      const weight = drawFontWeight(t, doc.style, 400);
       const lines = t.fixedWidth ? wrapText(t.text, t.fontSize, t.w, weight, font) : t.text.split('\n');
       const lh = lineHeight(t.fontSize);
       let y = t.y + t.fontSize * 0.8;
@@ -256,13 +266,20 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       }
       if (c.label) {
         const mid = polylineMidpoint(pts);
-        const lf = sr.labelFont;
-        // the default (UI sans) label keeps its estimated width; a style font is measured
-        const w = lf.fontId ? textBlockSize(c.label, lf.size, undefined, lf.weight, lf.fontId).w + 12 : c.label.length * 7.5 + 12;
-        const h = connectorLabelHeight(lf.size);
-        const family = lf.fontId ? ` font-family="${esc(fontStack(lf.fontId))}"` : '';
-        el += `<rect x="${mid.x - w / 2}" y="${mid.y - h / 2}" width="${w}" height="${h}" rx="6" fill="#f3f2ef"/>`;
-        el += `<text x="${mid.x}" y="${mid.y + (lf.fontId ? lf.size * 0.3 : 4)}" font-size="${lf.size}" font-weight="${lf.weight}"${family} fill="${c.stroke}" text-anchor="middle">${esc(c.label)}</text>`;
+        const font = sr.fontId(undefined);
+        const family = font ? ` font-family="${esc(fontStack(font))}"` : '';
+        if (!sr.labelFont) {
+          const w = c.label.length * 7.5 + 12;
+          el += `<rect x="${mid.x - w / 2}" y="${mid.y - 10}" width="${w}" height="20" rx="6" fill="#f3f2ef"/>`;
+          el += `<text x="${mid.x}" y="${mid.y + 4}" font-size="13" font-weight="500" fill="${c.stroke}" text-anchor="middle"${family}>${esc(c.label)}</text>`;
+        } else {
+          // a style that sizes its own labels: measure the pill in the label's font
+          const lf = sr.labelFont;
+          const w = textBlockSize(c.label, lf.size, undefined, lf.weight, font).w + 12;
+          const h = connectorLabelHeight(lf.size);
+          el += `<rect x="${mid.x - w / 2}" y="${mid.y - h / 2}" width="${w}" height="${h}" rx="6" fill="#f3f2ef"/>`;
+          el += `<text x="${mid.x}" y="${mid.y + lf.size * 0.3}" font-size="${lf.size}" font-weight="${lf.weight}" fill="${c.stroke}" text-anchor="middle"${family}>${esc(c.label)}</text>`;
+        }
       }
       return el;
     }
@@ -304,8 +321,7 @@ function centeredTextSvg(
 
 /** [fontId, weight] a shape's label draws with in its style. */
 function faceOf(s: ShapeObj, doc: Doc): [string | undefined, number] {
-  const f = textFace(s, doc.style, 400);
-  return [f.fontId, f.weight];
+  return [drawFontId(s, doc.style), drawFontWeight(s, doc.style, 400)];
 }
 
 /** font-weight attribute, omitted at the default 400 */
@@ -322,11 +338,7 @@ function dashSvg(dash: string, width: number): string {
 function sketchySvg(paths: StyledPath[], dash: string, width: number, opacity: number): string {
   let el = '';
   for (const p of paths) {
-    const dashAttr = p.lineDash
-      ? ` stroke-dasharray="${p.lineDash.join(' ')}"`
-      : p.isBorder
-        ? dashSvg(dash, width)
-        : '';
+    const dashAttr = !p.isBorder ? '' : p.dash ? ` stroke-dasharray="${p.dash.join(' ')}"` : dashSvg(dash, width);
     el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" fill-rule="evenodd"${dashAttr}/>`;
   }
   return el;

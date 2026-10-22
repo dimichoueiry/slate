@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import rough from 'roughjs';
 import { setStyleInk } from '../src/engine/style';
-import { connectorDrawable, getStyleRenderer, shapeDrawable, textFace } from '../src/engine/styles';
+import { connectorDrawable, drawFontId, drawFontWeight, getStyleRenderer, labelFontOf, shapeDrawable } from '../src/engine/styles';
 import { curvePoints, messyStyle } from '../src/engine/styles/messy';
 import type { StrokeStyle, StyledPath } from '../src/engine/styles/types';
 import { chevronArms } from '../src/engine/styles/geom';
@@ -91,7 +91,7 @@ test('lines: roughness 1.6, bowing 2, strokeWidth 2, multi-stroke on, seed passe
   const opts: Opts = { seed: 1234, roughness: 1.6, bowing: 2, stroke: '#1a1a1a', strokeWidth: 2, disableMultiStroke: false };
   const out = messyStyle.polyline(line, st());
   assert.deepEqual(dOf(out), ds(gen.linearPath(line.map(tuple), opts)));
-  assert.ok(out.every((p) => p.strokeWidth === 2 && p.isBorder && !p.lineDash));
+  assert.ok(out.every((p) => p.strokeWidth === 2 && p.isBorder && !p.dash));
   // multi-stroke: roughjs draws each segment twice → two moveTos per segment
   assert.equal((out[0].d.match(/M/g) ?? []).length, 2 * (line.length - 1));
 });
@@ -108,7 +108,7 @@ test('dashed lines: strokeLineDash [10, 8] at roughness 1.3', () => {
   const opts: Opts = { seed: 1234, roughness: 1.3, bowing: 2, stroke: '#1a1a1a', strokeWidth: 2, disableMultiStroke: false, strokeLineDash: [10, 8] };
   const out = messyStyle.polyline(line, st({ dash: 'dashed' }));
   assert.deepEqual(dOf(out), ds(gen.linearPath(line.map(tuple), opts)));
-  assert.ok(out.every((p) => JSON.stringify(p.lineDash) === '[10,8]'), 'the dash pattern rides on the path for canvas + SVG');
+  assert.ok(out.every((p) => JSON.stringify(p.dash) === '[10,8]'), 'the dash pattern rides on the path for canvas + SVG');
 });
 
 test('curved connectors: rough curve() through the route points at roughness 1.5', () => {
@@ -209,8 +209,8 @@ test('fill picker values: solid is an opaque area, zigzag / dots / cross-hatch a
   assert.ok(solid.length === 1 && solid[0].fill === '#2f9e44' && solid[0].stroke === 'none');
   const outs = (['hachure', 'zigzag', 'dots', 'cross-hatch'] as const).map((fillStyle) => dOf(messyStyle.rect(0, 0, 200, 120, { ...s, fillStyle })));
   for (let i = 0; i < outs.length; i++) for (let j = i + 1; j < outs.length; j++) assert.notDeepEqual(outs[i], outs[j]);
-  assert.deepEqual([...messyStyle.fillStyles], ['hachure', 'solid', 'zigzag', 'dots', 'cross-hatch']);
-  assert.deepEqual([...getStyleRenderer('sketch').fillStyles], [], 'sketch offers no fill-pattern picker');
+  assert.deepEqual([...(messyStyle.fillStyles ?? [])], ['hachure', 'solid', 'zigzag', 'dots', 'cross-hatch']);
+  assert.deepEqual([...(getStyleRenderer('sketch').fillStyles ?? [])], [], 'sketch offers no fill-pattern picker');
 });
 
 test('cache key includes the fill style', () => {
@@ -246,11 +246,17 @@ test('text: Caveat everywhere, bold at key-number size, 19px labels; measured wi
   assert.equal(messyStyle.fontWeight(22, 400), 400);
   assert.equal(messyStyle.fontWeight(18, 500), 400, 'sticky 500 → Caveat Regular (only 400/700 are bundled)');
   assert.equal(messyStyle.fontWeight(32, 400), 700);
-  assert.deepEqual(messyStyle.labelFont, { fontId: 'caveat', size: 19, weight: 400 });
-  assert.deepEqual(textFace({ fontFamily: 'inter', fontSize: 32 }, 'messy', 400), { fontId: 'caveat', weight: 700 });
+  assert.deepEqual(labelFontOf(messyStyle), { size: 19, weight: 400 });
+  assert.equal(drawFontId({}, 'messy'), 'caveat', 'labels (no fontFamily) are Caveat too');
+  assert.equal(drawFontId({ fontFamily: 'inter' }, 'messy'), 'caveat');
+  assert.equal(drawFontWeight({ fontSize: 32 }, 'messy', 400), 700);
   // sketch keeps the object's own font and the caller's weight
-  assert.deepEqual(textFace({ fontFamily: 'inter', fontSize: 32 }, 'sketch', 500), { fontId: 'inter', weight: 500 });
-  assert.deepEqual(getStyleRenderer('sketch').labelFont, { fontId: undefined, size: 13, weight: 500 });
+  assert.equal(drawFontId({ fontFamily: 'inter' }, 'sketch'), 'inter');
+  assert.equal(drawFontWeight({ fontSize: 32 }, 'sketch', 500), 500);
+  // styles without a weight / label override keep the caller's weight and the 13px/500 label
+  assert.equal(drawFontWeight({ fontSize: 32 }, 'handdrawn', 500), 500);
+  assert.deepEqual(labelFontOf(getStyleRenderer('sketch')), { size: 13, weight: 500 });
+  assert.deepEqual(labelFontOf(getStyleRenderer('handdrawn')), { size: 13, weight: 500 });
 });
 
 // ---------- sketch is untouched ----------

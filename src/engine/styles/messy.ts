@@ -68,14 +68,14 @@ export function withAlpha(color: string, alpha: number): string {
 
 const stroked = (stroke: string) => (stroke === 'transparent' ? 'none' : stroke);
 
-function toPaths(drawable: Drawable, isBorder: boolean, lineDash?: number[]): StyledPath[] {
+function toPaths(drawable: Drawable, isBorder: boolean, dash?: number[]): StyledPath[] {
   return gen.toPaths(drawable).map((info) => ({
     d: info.d,
     stroke: info.stroke,
     strokeWidth: info.strokeWidth,
     fill: info.fill ?? 'none',
     isBorder,
-    ...(lineDash ? { lineDash } : {}),
+    ...(dash ? { dash } : {}),
   }));
 }
 
@@ -200,7 +200,7 @@ export const messyStyle: StyleRenderer = {
   fontId: () => 'caveat',
   // key numbers (big text) in Caveat Bold; everything else Regular
   fontWeight: (size) => (size >= 32 ? 700 : 400),
-  labelFont: { fontId: 'caveat', size: 19, weight: 400 },
+  labelFont: { size: 19, weight: 400 },
   fillStyles: MESSY_FILL_STYLES,
   fontSizes: [16, 19, 21, 22, 24, 32, 40, 56, 72, 96],
 

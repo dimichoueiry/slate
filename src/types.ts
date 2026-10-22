@@ -348,6 +348,7 @@ export const FONTS: FontDef[] = [
   { id: 'patrick', label: 'Patrick Hand', stack: "'Patrick Hand', cursive", cat: 'Handwriting' },
   { id: 'marker', label: 'Permanent Marker', stack: "'Permanent Marker', cursive", cat: 'Handwriting' },
   { id: 'bangers', label: 'Bangers', stack: "'Bangers', cursive", cat: 'Handwriting' },
+  { id: 'pen', label: 'Pen', stack: "'Segoe Print', 'Bradley Hand', 'Comic Sans MS', 'Kalam', cursive", cat: 'Handwriting' },
   { id: 'hand', label: 'Noteworthy', stack: "Noteworthy, 'Marker Felt', 'Bradley Hand', 'Comic Sans MS', cursive", cat: 'Handwriting' },
   // ---- mono ----
   { id: 'mono', label: 'SF Mono', stack: "'SF Mono', Menlo, Consolas, 'Courier New', monospace", cat: 'Mono' },

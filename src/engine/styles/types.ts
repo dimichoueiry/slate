@@ -14,8 +14,8 @@ export interface StyledPath {
   fill: string;
   /** the object's outline (gets the object's dash pattern); fills and arrowheads don't */
   isBorder: boolean;
-  /** explicit dash pattern (px) for this path, overriding the object's dash; absent = use the dash rule above */
-  lineDash?: number[];
+  /** explicit dash pattern for a border, overriding the painter's default for the object's dash */
+  dash?: number[];
 }
 
 /** Everything a primitive needs to know about how to stroke/fill it. */
@@ -51,12 +51,12 @@ export interface StyleRenderer {
 
   /** FONTS id to render an object's text with, given the object's own fontFamily. */
   fontId(objectFontId: string | undefined): string | undefined;
-  /** font weight to render (and measure) text of this size with, given the caller's base weight */
-  fontWeight(fontSize: number, baseWeight: number): number;
-  /** connector label font; fontId undefined = the UI sans stack */
-  readonly labelFont: { fontId: string | undefined; size: number; weight: number };
-  /** fill patterns offered in the fill picker; empty = this style has no fill-pattern choice */
-  readonly fillStyles: readonly FillStyle[];
+  /** font weight to render (and measure) text of this size with, given the caller's base weight; absent = the base weight */
+  fontWeight?(fontSize: number, baseWeight: number): number;
+  /** connector label size + weight (the font is fontId(undefined)); absent = 13px / 500 */
+  readonly labelFont?: { size: number; weight: number };
+  /** fill patterns offered in the fill picker; absent/empty = this style has no fill-pattern choice */
+  readonly fillStyles?: readonly FillStyle[];
   /** font-size presets offered in the size picker; absent = the app defaults */
   readonly fontSizes?: readonly number[];
 

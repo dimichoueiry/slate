@@ -31,24 +31,20 @@ export function styleRendererFor(o: { style?: unknown }, boardStyle: DrawStyle |
   return getStyleRenderer(effectiveStyle(o, boardStyle));
 }
 
-/** Font id + weight an object's text is drawn with in its effective style, so measuring matches painting. */
-export function textFace(
-  o: { style?: unknown; fontFamily?: string; fontSize: number },
-  boardStyle: DrawStyle | undefined,
-  baseWeight: number
-): { fontId: string | undefined; weight: number } {
-  const sr = styleRendererFor(o, boardStyle);
-  return { fontId: sr.fontId(o.fontFamily), weight: sr.fontWeight(o.fontSize, baseWeight) };
+/** FONTS id an object's text is drawn with in its effective style, so measure and wrap with this too. */
+export function drawFontId(o: { style?: unknown; fontFamily?: string }, boardStyle: DrawStyle | undefined): string | undefined {
+  return styleRendererFor(o, boardStyle).fontId(o.fontFamily);
 }
 
-/** textFace as the trailing [weight, fontId] arguments of textBlockSize / wrapText. */
-export function faceArgs(
-  o: { style?: unknown; fontFamily?: string; fontSize: number },
-  boardStyle: DrawStyle | undefined,
-  baseWeight: number
-): [number, string | undefined] {
-  const f = textFace(o, boardStyle, baseWeight);
-  return [f.weight, f.fontId];
+/** Font weight an object's text is drawn (and so must be measured) with: `baseWeight` unless its style sets one. */
+export function drawFontWeight(o: { style?: unknown; fontSize: number }, boardStyle: DrawStyle | undefined, baseWeight: number): number {
+  const sr = styleRendererFor(o, boardStyle);
+  return sr.fontWeight ? sr.fontWeight(o.fontSize, baseWeight) : baseWeight;
+}
+
+/** Connector label size + weight in a style (its font is fontId(undefined), see drawFontId). */
+export function labelFontOf(sr: StyleRenderer): { size: number; weight: number } {
+  return sr.labelFont ?? { size: 13, weight: 500 };
 }
 
 // ---------- cached drawables ----------

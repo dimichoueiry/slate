@@ -77,8 +77,8 @@ const snapshot = (style) =>
     for (const o of ctl.doc.all()) {
       if (o.type === 'shape') out.draw[o.id] = st.shapeDrawable(o, style);
       if (o.type === 'connector') out.draw[o.id] = st.connectorDrawable(o, geo.routeConnector(o, ctl.doc.resolve), style);
-      if (o.type === 'connector' && o.label) out.faces[o.id] = st.styleRendererFor(o, style).labelFont.fontId;
-      else if ('text' in o && o.text) out.faces[o.id] = st.textFace(o, style, 400);
+      if (o.type === 'connector' && o.label) out.faces[o.id] = st.drawFontId(o, style);
+      else if ('text' in o && o.text) out.faces[o.id] = { fontId: st.drawFontId(o, style), weight: st.drawFontWeight(o, style, 400) };
     }
     return out;
   }, style);
@@ -97,7 +97,7 @@ const restyled = ids.filter((id) => JSON.stringify(sketch.draw[id]) !== JSON.str
 check(restyled.length === ids.length, `every shape + connector restyles (${restyled.length}/${ids.length})`);
 const connIds = ids.filter((id) => id.startsWith('c-'));
 check(connIds.every((id) => messy.draw[id].every((p) => p.fill === 'none')), 'no connector draws a filled arrowhead (open chevrons only)');
-check(messy.draw['c-dashed'].some((p) => JSON.stringify(p.lineDash) === '[10,8]'), 'dashed connector carries strokeLineDash [10, 8]');
+check(messy.draw['c-dashed'].some((p) => JSON.stringify(p.dash) === '[10,8]'), 'dashed connector carries strokeLineDash [10, 8]');
 const hatched = messy.draw.rect.filter((p) => !p.isBorder);
 check(hatched.length > 0 && hatched.every((p) => p.stroke === 'rgba(25,113,194,0.45)' && p.fill === 'none'), 'filled rect hatches in rgba(25,113,194,0.45), stroke-only');
 const faceIds = Object.keys(messy.faces);

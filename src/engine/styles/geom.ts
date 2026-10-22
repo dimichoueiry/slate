@@ -25,6 +25,14 @@ export function pointBack(pts: Vec[], dist: number): Vec {
 
 /** SVG path of the cubic bezier that `pts` (evenly sampled in t, count - 1 divisible by 3) was sampled from. */
 export function cubicThrough(pts: Vec[]): string | null {
+  const c = cubicControlsThrough(pts);
+  if (!c) return null;
+  const [a, c1, c2, b] = c;
+  return `M${a.x} ${a.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`;
+}
+
+/** [start, control 1, control 2, end] of the cubic that `pts` (evenly sampled in t, count - 1 divisible by 3) was sampled from. */
+export function cubicControlsThrough(pts: Vec[]): [Vec, Vec, Vec, Vec] | null {
   const n = pts.length - 1;
   if (n < 3 || n % 3 !== 0) return null;
   const a = pts[0];
@@ -35,7 +43,7 @@ export function cubicThrough(pts: Vec[]): string | null {
   const r2 = { x: 27 * p2.x - a.x - 8 * b.x, y: 27 * p2.y - a.y - 8 * b.y };
   const c1 = { x: (2 * r1.x - r2.x) / 18, y: (2 * r1.y - r2.y) / 18 };
   const c2 = { x: (2 * r2.x - r1.x) / 18, y: (2 * r2.y - r1.y) / 18 };
-  return `M${a.x} ${a.y} C${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`;
+  return [a, c1, c2, b];
 }
 
 /** Total length of a polyline. */

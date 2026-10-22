@@ -39,6 +39,7 @@ import '@fontsource/great-vibes';
 import '@fontsource/shadows-into-light';
 import '@fontsource/indie-flower';
 import '@fontsource/kalam';
+import '@fontsource/kalam/700.css';
 import '@fontsource/patrick-hand';
 import '@fontsource/bangers';
 import '@fontsource/fira-code';

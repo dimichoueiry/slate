@@ -41,11 +41,11 @@ import { hitTest, strokesHitBySegment } from './hit';
 import { strokeOutline, outlineToPath, type InputPoint } from './ink';
 import { drawScene, seedOf, type GridSettings } from './renderer';
 import { newSeed } from './style';
-import { styleRendererFor, textFace } from './styles';
 import { snapBox, snapToGrid, type SnapResult } from './snap';
 import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
 import { clampHeight, clampLayout, pointInClampChip, stickyWidthFor } from './sticky';
+import { drawFontId, drawFontWeight, styleRendererFor } from './styles';
 import {
   collectRevealSteps,
   DEFAULT_REVEAL_DURATION,
@@ -521,8 +521,7 @@ export class Controller {
     const center = screenToWorld(this.camera, { x: this.viewW / 2, y: this.viewH / 2 });
     const fontSize = 20;
     const fontFamily = useUI.getState().fontFamily;
-    const f = textFace({ fontFamily, fontSize }, this.doc.style, 400);
-    const m = textBlockSize(text, fontSize, undefined, f.weight, f.fontId);
+    const m = textBlockSize(text, fontSize, undefined, drawFontWeight({ fontSize }, this.doc.style, 400), drawFontId({ fontFamily }, this.doc.style));
     const obj: TextObj = {
       id: nanoid(8),
       type: 'text',
@@ -548,8 +547,7 @@ export class Controller {
     const center = screenToWorld(this.camera, { x: this.viewW / 2, y: this.viewH / 2 });
     const fontSize = 16;
     const w = stickyWidthFor(text);
-    const f = textFace({ fontFamily: useUI.getState().fontFamily, fontSize }, this.doc.style, 500);
-    const m = textBlockSize(text || ' ', fontSize, w - 24, f.weight, f.fontId);
+    const m = textBlockSize(text || ' ', fontSize, w - 24, drawFontWeight({ fontSize }, this.doc.style, 500), drawFontId({ fontFamily: useUI.getState().fontFamily }, this.doc.style));
     const h = clampHeight(Math.max(120, m.h + 24));
     const obj: StickyObj = {
       id: nanoid(8),
@@ -813,12 +811,10 @@ export class Controller {
     this.doc.begin();
     for (const o of this.selectedObjects()) {
       if (o.type === 'text') {
-        const f = textFace({ ...o, fontSize: size }, this.doc.style, 400);
-        const m = textBlockSize(o.text || ' ', size, o.fixedWidth ? o.w : undefined, f.weight, f.fontId);
+        const m = textBlockSize(o.text || ' ', size, o.fixedWidth ? o.w : undefined, drawFontWeight({ ...o, fontSize: size }, this.doc.style, 400), drawFontId(o, this.doc.style));
         this.doc.update<TextObj>(o.id, { fontSize: size, w: o.fixedWidth ? o.w : m.w, h: m.h });
       } else if (o.type === 'sticky') {
-        const f = textFace({ ...o, fontSize: size }, this.doc.style, 500);
-        const m = textBlockSize(o.text || ' ', size, o.w - 24, f.weight, f.fontId);
+        const m = textBlockSize(o.text || ' ', size, o.w - 24, drawFontWeight({ ...o, fontSize: size }, this.doc.style, 500), drawFontId(o, this.doc.style));
         this.doc.update<StickyObj>(o.id, { fontSize: size, h: Math.max(o.h, m.h + 24) });
       } else if (o.type === 'shape') {
         this.doc.update<ShapeObj>(o.id, { fontSize: size });
@@ -1723,7 +1719,7 @@ export class Controller {
     const hit = hitTest(this.doc, world, 6 / this.camera.zoom);
     if (!hit) return false;
     const o = this.doc.get(hit.id);
-    if (o && (o.type === 'sticky' || o.type === 'text') && pointInClampChip(o, world, styleRendererFor(o, this.doc.style))) {
+    if (o && (o.type === 'sticky' || o.type === 'text') && pointInClampChip(o, world, drawFontId(o, this.doc.style), styleRendererFor(o, this.doc.style).fontWeight)) {
       this.selection = new Set([o.id]);
       this.syncSelection();
       this.openReader(o);
@@ -1745,7 +1741,7 @@ export class Controller {
       if (isDataNode(this.doc.get(hit.id))) return; // data: nodes are edited via the structured popover, not free text
       // long content that's clamped on the canvas opens the reader instead of the cramped inline editor
       const hitObj = this.doc.get(hit.id);
-      if (hitObj && (hitObj.type === 'sticky' || hitObj.type === 'text') && clampLayout(hitObj, styleRendererFor(hitObj, this.doc.style)).clamped) {
+      if (hitObj && (hitObj.type === 'sticky' || hitObj.type === 'text') && clampLayout(hitObj, drawFontId(hitObj, this.doc.style), styleRendererFor(hitObj, this.doc.style).fontWeight).clamped) {
         this.openReader(hitObj);
         return;
       }
@@ -2084,16 +2080,14 @@ export class Controller {
         const t = next as TextObj;
         if (it.origins.size === 1) {
           const width = Math.max(8, nw);
-          const f = textFace(t, this.doc.style, 400);
-          const m = textBlockSize(t.text || ' ', t.fontSize, width, f.weight, f.fontId);
+          const m = textBlockSize(t.text || ' ', t.fontSize, width, drawFontWeight(t, this.doc.style, 400), drawFontId(t, this.doc.style));
           t.fixedWidth = true;
           t.w = width;
           t.h = Math.max(8, m.h);
           if (handle.includes('n')) t.y = fy - t.h;
         } else {
           t.fontSize = Math.max(6, t.fontSize * Math.abs(sy));
-          const f = textFace(t, this.doc.style, 400);
-          const m = textBlockSize(t.text || ' ', t.fontSize, t.fixedWidth ? nw : undefined, f.weight, f.fontId);
+          const m = textBlockSize(t.text || ' ', t.fontSize, t.fixedWidth ? nw : undefined, drawFontWeight(t, this.doc.style, 400), drawFontId(t, this.doc.style));
           t.w = t.fixedWidth ? nw : m.w;
           t.h = m.h;
         }

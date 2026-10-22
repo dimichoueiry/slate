@@ -66,18 +66,17 @@ function geom(o: ClampObj) {
   return { wrapW: o.fixedWidth ? o.w : null, weight: 400 as const, padY: 0, inset: 0, chipGap: 2 };
 }
 
-/** A style's text font choice; clampLayout wraps in it so lines match what is drawn. */
-export type TextFont = Pick<StyleRenderer, 'fontId' | 'fontWeight'>;
+/** A style's weight override (StyleRenderer.fontWeight); absent = the object type's base weight. */
+export type FontWeightFn = StyleRenderer['fontWeight'];
 
 /**
  * Compute the on-canvas layout: which lines show, and whether the object is clamped.
- * Pass the object's style renderer so lines wrap in the font it is drawn with
- * (a style may swap the font or weight); without one the object's own font is used.
+ * `fontId` is the font the text is drawn with (its style may override o.fontFamily; see drawFontId),
+ * `fontWeight` the style's weight override, if any (see drawFontWeight).
  */
-export function clampLayout(o: ClampObj, sr?: TextFont): ClampLayout {
+export function clampLayout(o: ClampObj, fontId: string | undefined = o.fontFamily, fontWeight?: FontWeightFn): ClampLayout {
   const g = geom(o);
-  const fontId = sr ? sr.fontId(o.fontFamily) : o.fontFamily;
-  const weight = sr ? sr.fontWeight(o.fontSize, g.weight) : g.weight;
+  const weight = fontWeight ? fontWeight(o.fontSize, g.weight) : g.weight;
   const all =
     g.wrapW != null
       ? wrapText(o.text, o.fontSize, g.wrapW, weight, fontId)
@@ -103,8 +102,13 @@ export function clampLayout(o: ClampObj, sr?: TextFont): ClampLayout {
 }
 
 /** True if a world-space point lands on a clamped object's "Show more" chip. */
-export function pointInClampChip(o: ClampObj, p: { x: number; y: number }, sr?: TextFont): boolean {
-  const l = clampLayout(o, sr);
+export function pointInClampChip(
+  o: ClampObj,
+  p: { x: number; y: number },
+  fontId: string | undefined = o.fontFamily,
+  fontWeight?: FontWeightFn
+): boolean {
+  const l = clampLayout(o, fontId, fontWeight);
   if (!l.clamped || !l.chip) return false;
   const c = l.chip;
   return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;

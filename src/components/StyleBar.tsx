@@ -395,14 +395,14 @@ function StyleBarInner({ ctl, activeStyle }: { ctl: Controller; activeStyle: Sty
                 {(() => {
                   // only where it applies: filled shapes drawn in a style that offers fill patterns
                   const filled = selObjs.filter(
-                    (o) => o.type === 'shape' && o.fill !== 'transparent' && getStyleRenderer(effectiveStyle(o, ui.boardStyle)).fillStyles.length > 0
+                    (o) => o.type === 'shape' && o.fill !== 'transparent' && (getStyleRenderer(effectiveStyle(o, ui.boardStyle)).fillStyles?.length ?? 0) > 0
                   );
                   if (!filled.length) return null;
-                  const sr = getStyleRenderer(effectiveStyle(filled[0], ui.boardStyle));
-                  const values = new Set(filled.map((o) => (o.type === 'shape' ? o.fillStyle ?? sr.fillStyles[0] : undefined)));
+                  const styles = getStyleRenderer(effectiveStyle(filled[0], ui.boardStyle)).fillStyles ?? [];
+                  const values = new Set(filled.map((o) => (o.type === 'shape' ? o.fillStyle ?? styles[0] : undefined)));
                   return (
                     <FillStyleSeg
-                      styles={sr.fillStyles}
+                      styles={styles}
                       value={values.size === 1 ? [...values][0] : undefined}
                       onPick={(f) => ctl.updateSelected({ fillStyle: f })}
                     />

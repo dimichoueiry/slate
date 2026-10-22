@@ -68,9 +68,6 @@ export const sketchStyle: StyleRenderer = {
   fontStack: fontStack('excalifont'),
 
   fontId: (id) => id,
-  fontWeight: (_size, weight) => weight,
-  labelFont: { fontId: undefined, size: 13, weight: 500 },
-  fillStyles: [],
 
   rect: (x, y, w, h, s) => toPaths(gen.rectangle(x, y, w, h, closedOptions(s)), s.stroke),
 
