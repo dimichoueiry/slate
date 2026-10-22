@@ -69,7 +69,8 @@ export function shapeDrawable(o: ShapeObj, boardStyle: DrawStyle | undefined): S
   const sr = styleRendererFor(o, boardStyle);
   const seed = seedOf(o);
   const r = o.shape === 'roundedRect' ? cornerRadius(o) : 0;
-  const hasText = !!o.text;
+  // only an ellipse's look depends on carrying a label (styles may draw it as a circled highlight)
+  const hasText = o.shape === 'ellipse' && !!o.text;
   const key = `shape|${sr.id}@${sr.version}|${seed}|${o.shape}|${o.x},${o.y},${o.w},${o.h},${r}|${o.stroke}|${o.strokeWidth}|${o.dash}|${o.fill}|${o.fillStyle ?? ''}|${hasText}`;
   return drawableCache.get(o.id, key, () => {
     const s: StrokeStyle = { seed, stroke: o.stroke, strokeWidth: o.strokeWidth, dash: o.dash, fill: o.fill, fillStyle: o.fillStyle, hasText, size: { w: o.w, h: o.h } };
