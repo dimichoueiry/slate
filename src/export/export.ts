@@ -1,10 +1,12 @@
-import type { Box, BoardMeta, ConnectorObj, IconObj, ImageObj, ShapeObj, SlateObj, StickyObj, StrokeObj, TextObj, VideoObj } from '../types';
+import type { Box, BoardMeta, ConnectorObj, DrawStyle, IconObj, ImageObj, ShapeObj, SlateObj, StickyObj, StrokeObj, TextObj, VideoObj } from '../types';
 import { fontStack } from '../types';
 import { iconDef } from '../engine/icons';
 import type { Doc } from '../engine/doc';
 import { aabbOf, boundsOf, boxUnion, cornerRadius, polylineMidpoint, routeConnector, shapePolygon } from '../engine/geometry';
-import { arrowHeadLen, chevronArms, drawObject, isSketchy, getBitmap, sketchyConnectorPathInfos, sketchyPathInfos, type SketchyPathInfo } from '../engine/renderer';
-import { stickyDateGeom, stickyDateLabel, stickyPaperPath, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
+import { arrowHeadLen, chevronArms, drawObject, isSketchy, getBitmap } from '../engine/renderer';
+import { connectorDrawable, shapeDrawable, styleRendererFor, type StyledPath } from '../engine/styles';
+import { boardStyleOf, isDrawStyle } from '../engine/style';
+import { stickyDateGeom, stickyDateLabel, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
 import { ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
@@ -64,7 +66,7 @@ export async function exportPng(
       const b = aabbOf(o, doc.resolve);
       return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
     });
-  await ensureObjectFonts(visible);
+  await ensureObjectFonts(visible, (o) => styleRendererFor(o, doc.style).fontId(o.fontFamily));
   for (const o of visible) drawObject(ctx, o, doc, scale);
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('export failed'))), 'image/png')
@@ -89,8 +91,9 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
     return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
   });
   // embed Excalifont so the file still renders handwritten outside the app
+  const fontOf = (o: SlateObj) => styleRendererFor(o, doc.style).fontId((o as { fontFamily?: string }).fontFamily);
   const excaliText = visible
-    .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack((o as { fontFamily?: string }).fontFamily).includes('Excalifont'))
+    .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack(fontOf(o)).includes('Excalifont'))
     .map((o) => (o as { text: string }).text)
     .join('');
   if (excaliText) {
@@ -113,6 +116,8 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
 }
 
 async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
+  // the same style dispatch the canvas uses (engine/styles), so the file matches the screen
+  const sr = styleRendererFor(o, doc.style);
   switch (o.type) {
     case 'stroke': {
       const s = o as StrokeObj;
@@ -129,8 +134,8 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     case 'shape': {
       const s = o as ShapeObj;
       if (isSketchy(s)) {
-        let el = sketchySvg(sketchyPathInfos(s), s.dash, s.strokeWidth, s.opacity);
-        if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, s.fontFamily);
+        let el = sketchySvg(shapeDrawable(s, doc.style), s.dash, s.strokeWidth, s.opacity);
+        if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, sr.fontId(s.fontFamily));
         return el;
       }
       const fill = s.fill === 'transparent' ? 'none' : s.fill;
@@ -151,23 +156,24 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
         const poly = shapePolygon(s.shape, { x: s.x, y: s.y, w: s.w, h: s.h });
         if (poly) el = `<polygon points="${poly.map((p) => `${p.x},${p.y}`).join(' ')}" ${common}/>`;
       }
-      if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, s.fontFamily);
+      if (s.text) el += centeredTextSvg(s.text, s, s.textColor, s.fontSize, sr.fontId(s.fontFamily));
       return el;
     }
     case 'sticky': {
       const s = o as StickyObj;
-      const d = stickyPaperPath(s);
+      const d = sr.stickyPaper(s);
+      const font = sr.fontId(s.fontFamily);
       const off = stickyShadowOffset(s);
       let el = `<path d="${d}" transform="translate(${off} ${off})" fill="${STICKY_SHADOW}"/>`;
       el += `<path d="${d}" fill="${s.color}"/>`;
       if (s.text) {
-        const lines = wrapText(s.text, s.fontSize, s.w - 24, 500, s.fontFamily);
+        const lines = wrapText(s.text, s.fontSize, s.w - 24, 500, font);
         const lh = lineHeight(s.fontSize);
         const top = s.y + Math.max(12, (s.h - lines.length * lh) / 2);
         let y = top + s.fontSize * 0.8;
         const cx = s.x + s.w / 2;
         for (const line of lines) {
-          el += `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(s.fontFamily))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
+          el += `<text x="${cx}" y="${y}" text-anchor="middle" font-size="${s.fontSize}" font-weight="500" font-family="${esc(fontStack(font))}" fill="rgba(20,20,20,0.92)">${esc(line)}</text>`;
           y += lh;
         }
       }
@@ -180,12 +186,13 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
     }
     case 'text': {
       const t = o as TextObj;
-      const lines = t.fixedWidth ? wrapText(t.text, t.fontSize, t.w, 400, t.fontFamily) : t.text.split('\n');
+      const font = sr.fontId(t.fontFamily);
+      const lines = t.fixedWidth ? wrapText(t.text, t.fontSize, t.w, 400, font) : t.text.split('\n');
       const lh = lineHeight(t.fontSize);
       let y = t.y + t.fontSize * 0.8;
       let el = '';
       for (const line of lines) {
-        el += `<text x="${t.x}" y="${y}" font-size="${t.fontSize}" font-family="${esc(fontStack(t.fontFamily))}" fill="${t.color}">${esc(line)}</text>`;
+        el += `<text x="${t.x}" y="${y}" font-size="${t.fontSize}" font-family="${esc(fontStack(font))}" fill="${t.color}">${esc(line)}</text>`;
         y += lh;
       }
       return el;
@@ -216,7 +223,7 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
       if (pts.length < 2) return '';
       let el = '';
       if (isSketchy(c)) {
-        el = sketchySvg(sketchyConnectorPathInfos(c, pts), c.dash, c.strokeWidth, c.opacity);
+        el = sketchySvg(connectorDrawable(c, pts, doc.style), c.dash, c.strokeWidth, c.opacity);
       } else {
         const d = `M${pts.map((p) => `${p.x},${p.y}`).join('L')}`;
         el = `<path d="${d}" fill="none" stroke="${c.stroke}" stroke-width="${c.strokeWidth}" opacity="${c.opacity}" stroke-linejoin="round" stroke-linecap="round"${dashSvg(c.dash, c.strokeWidth)}/>`;
@@ -275,7 +282,7 @@ function dashSvg(dash: string, width: number): string {
 }
 
 /** roughjs paths as SVG, styled like strokeSketchyPaths on the canvas. */
-function sketchySvg(paths: SketchyPathInfo[], dash: string, width: number, opacity: number): string {
+function sketchySvg(paths: StyledPath[], dash: string, width: number, opacity: number): string {
   let el = '';
   for (const p of paths) {
     const dashAttr = p.isBorder ? dashSvg(dash, width) : '';
@@ -311,7 +318,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 interface SlateFile {
   format: 'slate';
   version: 1;
-  board: { name: string; viewport: BoardMeta['viewport'] };
+  board: { name: string; viewport: BoardMeta['viewport']; style?: DrawStyle };
   objects: SlateObj[];
   blobs: Record<string, string>; // blobId -> dataURL
 }
@@ -367,7 +374,7 @@ async function buildSlateFile(meta: BoardMeta, objects: SlateObj[]): Promise<Blo
   const file: SlateFile = {
     format: 'slate',
     version: 1,
-    board: { name: meta.name, viewport: meta.viewport },
+    board: { name: meta.name, viewport: meta.viewport, style: boardStyleOf(meta) },
     objects,
     blobs: await collectBlobs(objects),
   };
@@ -385,7 +392,11 @@ export async function importSlateFile(file: File): Promise<BoardMeta> {
   const data = JSON.parse(await file.text()) as SlateFile;
   if (data.format !== 'slate') throw new Error('Not a .slate file');
   const blobIdMap = await restoreBlobs(data.blobs);
-  const board = await createBoard(data.board.name || file.name.replace(/\.slate$/, ''));
+  const board = await createBoard(
+    data.board.name || file.name.replace(/\.slate$/, ''),
+    null,
+    isDrawStyle(data.board.style) ? data.board.style : undefined
+  );
   await db.boards.update(board.id, { viewport: data.board.viewport });
   await restoreBoardObjects(board.id, data.objects ?? [], blobIdMap);
   return board;

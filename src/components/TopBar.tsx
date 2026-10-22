@@ -7,6 +7,7 @@ import { downloadBlob, exportBounds, exportPng, exportSlateFile, exportSvg } fro
 import { getFlows, runFlow, type Flow } from '../ui/ainodes';
 import { setCanvasDark } from '../store/theme';
 import BrandKitControl from './BrandKit';
+import { DRAW_STYLES, DRAW_STYLE_LABELS, isDrawStyle } from '../engine/style';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
@@ -129,6 +130,23 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         >
           ◐
         </button>
+        <select
+          className="font-select board-style-select"
+          title="Drawing style for this board"
+          value={ui.boardStyle}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (!isDrawStyle(next)) return;
+            ctl.setBoardStyle(next);
+            void updateBoardMeta(boardId, { style: next });
+          }}
+        >
+          {DRAW_STYLES.map((st) => (
+            <option key={st} value={st}>
+              {DRAW_STYLE_LABELS[st]}
+            </option>
+          ))}
+        </select>
         <button
           className="chrome-btn"
           title="Reveal mode"

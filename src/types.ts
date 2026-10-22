@@ -28,6 +28,8 @@ export type Routing = 'straight' | 'elbow' | 'curved';
 /** 'chevron' is the open hand-drawn head; sketchy connectors draw any head as a chevron */
 export type ArrowHead = 'none' | 'triangle' | 'chevron';
 export type RevealEffect = 'pop' | 'fade' | 'slide-up' | 'slide-left' | 'none';
+/** Board/object drawing style. 'sketch' is the original roughjs look. See src/engine/styles/. */
+export type DrawStyle = 'sketch' | 'handdrawn' | 'messy';
 
 export interface RevealSpec {
   step: number;
@@ -50,6 +52,12 @@ interface BaseObj {
   reveal?: RevealSpec;
   /** provenance marker — objects created via the MCP agent bridge (PRD §7.3) */
   createdBy?: 'agent';
+  /** per-object drawing style override; absent = the board's style */
+  style?: DrawStyle;
+  /** 31-bit seed for every jittered/randomized look, set once at creation (Doc assigns it)
+   *  and kept on update/move; duplicates get a fresh one. Old objects get one derived
+   *  from the id on load (see engine/style.ts). */
+  seed?: number;
   // vid: node params (only used on a video AI node)
   videoResolution?: string;
   videoAspect?: string;
@@ -88,8 +96,6 @@ export interface ShapeObj extends BaseObj {
   fontFamily?: string; // FONTS id
   /** hand-drawn (roughjs) rendering */
   sketchy?: boolean;
-  /** stable seed so the sketchy jitter doesn't change between frames */
-  seed?: number;
 }
 
 /** An uploaded file attached to a node, extracted to text so AI nodes can read it. */
@@ -177,8 +183,6 @@ export interface ConnectorObj extends BaseObj {
   label?: string;
   /** hand-drawn (roughjs) rendering */
   sketchy?: boolean;
-  /** stable seed so the sketchy jitter doesn't change between frames */
-  seed?: number;
 }
 
 export interface IconObj extends BaseObj {
@@ -224,6 +228,7 @@ export interface BoardMeta {
   brandKitId?: string | null; // active brand kit for this board
   projectId?: string | null; // folder/project this board belongs to
   canvasDark?: boolean; // per-board dark canvas surface (default = light paper)
+  style?: DrawStyle; // default drawing style for this board's objects (absent = 'sketch')
 }
 
 /** A folder/project grouping boards on the home screen. */

@@ -9,6 +9,7 @@ import { createBridge, PairingRequiredError, NoTabError } from './server.js';
 import { defaultConfigPath } from './pairing.js';
 import { checkSvg } from './svg.js';
 import { ICON_NAMES } from './icons.js';
+import { checkStyleArgs, DRAW_STYLES, styleSchema, STYLE_DESCRIPTION } from './style.js';
 
 // ---------- CLI args ----------
 
@@ -101,6 +102,7 @@ const objectSpec = {
     },
     dash: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
     sketchy: { type: 'boolean', description: 'Shapes and connectors: hand-drawn (Excalidraw-style) look. Default true; set false for clean geometric lines' },
+    style: styleSchema(`Shapes, connectors, text and stickies: per-object ${STYLE_DESCRIPTION} Omit to follow the board's style (usually what you want).`),
     label: { type: 'string', description: 'Connector label drawn at its midpoint' },
     routing: { type: 'string', enum: ['straight', 'elbow', 'curved'] },
     endArrow: { type: 'string', enum: ['none', 'triangle'] },
@@ -123,7 +125,7 @@ const TOOLS = [
   {
     name: 'read_board',
     description:
-      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames, and reveal metadata for presentation playback. Objects with "runnable": true are live AI nodes (executable via run_node). On the currently open board, objects the user has selected carry "selected": true. Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
+      'Read every object on a board (never truncated): positions, sizes, text, connector endpoints, frames, and reveal metadata for presentation playback. board.style is the board\'s drawing style; an object carries "style" only when it overrides it. Objects with "runnable": true are live AI nodes (executable via run_node). On the currently open board, objects the user has selected carry "selected": true. Ink strokes are summarized as bounding boxes. Use this to see what is on the canvas — including edits the user made by hand — before adding to it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -150,10 +152,14 @@ const TOOLS = [
   },
   {
     name: 'create_board',
-    description: 'Create a new Slate board (optionally inside a project) and open it in the tab. Returns the boardId.',
+    description: 'Create a new Slate board (optionally inside a project) and open it in the tab. Optional style sets the board-wide drawing style (default "sketch"). Returns the boardId and style.',
     inputSchema: {
       type: 'object',
-      properties: { name: { type: 'string' }, projectId: { type: 'string' } },
+      properties: {
+        name: { type: 'string' },
+        projectId: { type: 'string' },
+        style: styleSchema(`Board default ${STYLE_DESCRIPTION} Objects follow it unless they set their own style.`),
+      },
       required: ['name'],
     },
   },
@@ -177,7 +183,7 @@ const TOOLS = [
   },
   {
     name: 'update_objects',
-    description: 'Update existing objects (text, colors, position, size, labels, reveal metadata). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Set patch.reveal={step,effect?,durationMs?,delayMs?} to stage an object for Reveal Mode; set patch.reveal=null to clear it. Set patch.sketchy=true/false on shapes and connectors to switch between hand-drawn and clean lines. Only text/style/geometry/reveal props are editable.',
+    description: 'Update existing objects (text, colors, position, size, labels, reveal metadata). One call is one undo step. For type:"text", set w to make wrapped text reflow without changing fontSize; set fixedWidth:false to return to natural-width label text. Set patch.reveal={step,effect?,durationMs?,delayMs?} to stage an object for Reveal Mode; set patch.reveal=null to clear it. Set patch.sketchy=true/false on shapes and connectors to switch between hand-drawn and clean lines. Set patch.style to "sketch"|"handdrawn"|"messy" on shapes, connectors, text and stickies to override the board\'s drawing style for that object; patch.style=null returns it to the board style. Only text/style/geometry/reveal props are editable.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -186,7 +192,15 @@ const TOOLS = [
           type: 'array',
           items: {
             type: 'object',
-            properties: { id: { type: 'string' }, patch: { type: 'object' } },
+            properties: {
+              id: { type: 'string' },
+              patch: {
+                type: 'object',
+                properties: {
+                  style: { type: ['string', 'null'], enum: [...DRAW_STYLES, null], description: `Per-object ${STYLE_DESCRIPTION} null = back to the board style.` },
+                },
+              },
+            },
             required: ['id', 'patch'],
           },
         },
@@ -292,6 +306,11 @@ async function handleToolCall(id, name, args) {
   }
   // authoritative SVG safety check happens here (tested in svg.test.js);
   // the tab re-checks cheaply at the WS boundary
+  const styleError = checkStyleArgs(name, args);
+  if (styleError) {
+    toolText(id, styleError, true);
+    return;
+  }
   if (name === 'add_objects' && Array.isArray(args?.objects)) {
     for (let i = 0; i < args.objects.length; i++) {
       const spec = args.objects[i];

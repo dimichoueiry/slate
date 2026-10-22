@@ -11,6 +11,7 @@ import { aabbOf, boxUnion } from '../engine/geometry';
 import { cameraToFit } from '../engine/camera';
 import { exportPng, exportBounds } from '../export/export';
 import { seedOf } from '../engine/renderer';
+import { boardStyleOf, DRAW_STYLES, isDrawStyle } from '../engine/style';
 import { readUpload, uploadLabel } from '../ui/upload';
 import { runAINode, isAINode } from '../ui/ainodes';
 import { getActiveCtl, waitForBoard } from './registry';
@@ -28,6 +29,9 @@ const SHAPES = new Set(['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond',
 const ROUTINGS = new Set(['straight', 'elbow', 'curved']);
 const REVEAL_EFFECTS = new Set<RevealEffect>(['pop', 'fade', 'slide-up', 'slide-left', 'none']);
 const STICKY_DEFAULT = '#F8DE7E';
+const STYLE_ENUM = DRAW_STYLES.join('|');
+/** object types whose look follows a drawing style */
+const STYLED_TYPES = new Set(['sticky', 'text', 'shape', 'connector']);
 
 const num = (v: any, fallback: number, min: number, max: number) => {
   const n = Number(v);
@@ -57,6 +61,11 @@ function revealSpec(v: any, fallback?: AnyObj | null): AnyObj | null | undefined
 function serializeReveal(o: AnyObj): AnyObj {
   const r = revealSpec(o.reveal);
   return r ? { reveal: r } : {};
+}
+
+/** per-object style override, only when the object has one (absent = board style) */
+function serializeStyle(o: AnyObj): AnyObj {
+  return isDrawStyle(o.style) ? { style: o.style } : {};
 }
 
 // ---------- board access ----------
@@ -99,6 +108,7 @@ export async function list_boards(): Promise<AnyObj[]> {
     boards.map(async (b) => ({
       id: b.id,
       name: b.name,
+      style: boardStyleOf(b),
       projectName: b.projectId ? projName.get(b.projectId) ?? null : null,
       updatedAt: b.updatedAt,
       objectCount: await db.objects.where('boardId').equals(b.id).count(),
@@ -108,7 +118,7 @@ export async function list_boards(): Promise<AnyObj[]> {
 
 function serializeObj(o: AnyObj): AnyObj | null {
   const r = (n: number) => Math.round(n ?? 0);
-  const base: AnyObj = { id: o.id, type: o.type, x: r(o.x), y: r(o.y), ...serializeReveal(o) };
+  const base: AnyObj = { id: o.id, type: o.type, x: r(o.x), y: r(o.y), ...serializeReveal(o), ...serializeStyle(o) };
   if (o.parentId) base.frameId = o.parentId;
   if (o.createdBy) base.createdBy = o.createdBy;
   if (o.locked) base.locked = true;
@@ -130,6 +140,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
         label: o.label ?? '',
         routing: o.routing,
         ...serializeReveal(o),
+        ...serializeStyle(o),
         ...(o.createdBy ? { createdBy: o.createdBy } : {}),
         ...(o.locked ? { locked: true } : {}),
       };
@@ -176,7 +187,7 @@ export async function read_board(params: AnyObj): Promise<AnyObj> {
   if (cur && cur.boardId === boardId && cur.ctl.selection?.size) {
     for (const o of objects) if (cur.ctl.selection.has(o.id)) o.selected = true;
   }
-  return { board: { id: meta.id, name: meta.name }, objectCount: objects.length, objects };
+  return { board: { id: meta.id, name: meta.name, style: boardStyleOf(meta) }, objectCount: objects.length, objects };
 }
 
 /** First non-node text object a node points at — same rule the flow engine uses. */
@@ -246,10 +257,11 @@ export async function create_board(params: AnyObj): Promise<AnyObj> {
   const name = str(params?.name, 'Untitled board').trim() || 'Untitled board';
   const projectId = str(params?.projectId) || null;
   if (projectId && !(await db.projects.get(projectId))) throw new BridgeError(`No project with id "${projectId}"`);
-  const board = await createBoard(name, projectId);
+  if (params?.style !== undefined && !isDrawStyle(params.style)) throw new BridgeError(`style must be ${STYLE_ENUM}`);
+  const board = await createBoard(name, projectId, params?.style);
   navigateToBoard(board.id);
   await waitForBoard(board.id).catch(() => null);
-  return { boardId: board.id, name: board.name };
+  return { boardId: board.id, name: board.name, style: boardStyleOf(board) };
 }
 
 interface BuiltSpec {
@@ -269,7 +281,8 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
   const base = { id: nid(), x, y, rotation: 0, z: doc.nextZ(), createdBy: 'agent' as const, ...(spec.type === 'sticky' ? { createdAt: Date.now() } : {}) };
   const reveal = revealSpec(spec.reveal);
   if (spec.reveal !== undefined && reveal === undefined) fail(i, 'reveal must be {step:number>=1, effect?:pop|fade|slide-up|slide-left|none, durationMs?:number, delayMs?:number} or null');
-  const withReveal = reveal ? { ...base, reveal } : base;
+  const style = specStyle(spec, i);
+  const withReveal = { ...base, ...(reveal ? { reveal } : {}), ...(style ? { style } : {}) };
   switch (spec.type) {
     case 'sticky': {
       const text = str(spec.text);
@@ -340,6 +353,14 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
   }
 }
 
+/** Validated optional `style` of an add_objects spec (only shapes, connectors, text and stickies take one). */
+function specStyle(spec: AnyObj, i: number): string | undefined {
+  if (spec.style === undefined || spec.style === null) return undefined;
+  if (!isDrawStyle(spec.style)) fail(i, `style must be ${STYLE_ENUM} (omit it to use the board's style)`);
+  if (!STYLED_TYPES.has(spec.type)) fail(i, `style applies to sticky|text|shape|connector, not "${spec.type}"`);
+  return spec.style;
+}
+
 /** Closest icon names for a typo/guess — substring hits first, then edit distance. */
 function closestIcons(name: string, n = 5): string[] {
   const q = name.toLowerCase();
@@ -369,6 +390,7 @@ const ANCHOR_SIDES = new Set(['left', 'right', 'top', 'bottom']);
 function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: any, field: string) => AnyObj): AnyObj {
   const reveal = revealSpec(spec.reveal);
   if (spec.reveal !== undefined && reveal === undefined) fail(i, 'reveal must be {step:number>=1, effect?:pop|fade|slide-up|slide-left|none, durationMs?:number, delayMs?:number} or null');
+  const style = specStyle(spec, i);
   const end = (e: any, field: string, anchor: any): AnyObj => {
     if (e && typeof e === 'object') {
       if (typeof e.ref === 'string' || typeof e.id === 'string') {
@@ -390,6 +412,7 @@ function buildConnector(spec: AnyObj, i: number, doc: AnyObj, resolveRef: (r: an
     createdBy: 'agent' as const,
     type: 'connector',
     ...(reveal ? { reveal } : {}),
+    ...(style ? { style } : {}),
     from: end(spec.from, 'from', spec.fromAnchor),
     to: end(spec.to, 'to', spec.toAnchor),
     routing: ROUTINGS.has(spec.routing) ? spec.routing : 'curved',
@@ -502,10 +525,10 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 
 // per-type editable props, mirroring aiEdit.ts EDITABLE
 const EDITABLE: Record<string, Set<string>> = {
-  sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal']),
-  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal']),
-  text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal']),
-  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'sketchy', 'reveal']),
+  sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal', 'style']),
+  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal', 'style']),
+  text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal', 'style']),
+  connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'sketchy', 'reveal', 'style']),
   icon: new Set(['color', 'strokeWidth', 'x', 'y', 'reveal']),
   frame: new Set(['name', 'x', 'y', 'w', 'h', 'reveal']),
 };
@@ -537,6 +560,7 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
       const patch: AnyObj = {};
       const rejected: string[] = [];
       let clearReveal = false;
+      let clearStyle = false;
       for (const [k, v] of Object.entries(set as AnyObj)) {
         if (!allowed.has(k)) {
           rejected.push(k);
@@ -557,6 +581,11 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
             patch[k] = v;
             if (v && (target as AnyObj).seed === undefined) patch.seed = seedOf(target as AnyObj as { id: string });
           }
+        } else if (k === 'style') {
+          // null clears the override (back to the board's style)
+          if (v === null) clearStyle = true;
+          else if (isDrawStyle(v)) patch.style = v;
+          else rejected.push(k);
         } else if (k === 'reveal') {
           const nextReveal = revealSpec(v, (target as AnyObj).reveal);
           if (nextReveal === null) clearReveal = true;
@@ -570,7 +599,7 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         else if (k === 'x' || k === 'y') patch[k] = num(v, (target as AnyObj)[k], -1e6, 1e6);
         else if (k === 'w' || k === 'h') patch[k] = num(v, (target as AnyObj)[k], 8, 20000);
       }
-      if (!Object.keys(patch).length && !clearReveal) {
+      if (!Object.keys(patch).length && !clearReveal && !clearStyle) {
         results.push({ id: e.id, ok: false, error: `no applicable props${rejected.length ? ` (rejected: ${rejected.join(', ')})` : ''}` });
         continue;
       }
@@ -588,9 +617,10 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, 500, t.fontFamily);
         patch.h = Math.max(patch.h ?? t.h, m.h + 24);
       }
-      if (clearReveal) {
+      if (clearReveal || clearStyle) {
         const next = { ...(target as AnyObj), ...patch };
-        delete next.reveal;
+        if (clearReveal) delete next.reveal;
+        if (clearStyle) delete next.style;
         doc.set(next);
       } else {
         doc.update(e.id, patch);

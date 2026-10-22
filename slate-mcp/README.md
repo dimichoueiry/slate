@@ -21,9 +21,9 @@ Then open Slate in your browser and ask your agent to draw something. On first u
 | `list_boards` | List your boards |
 | `read_board` | Read every object on a board — including reveal steps and your hand edits (selected objects are marked) |
 | `get_selection` | Read what you currently have **selected** — select objects, then say "make these blue" or "summarize this" |
-| `create_board` | Create and open a new board |
-| `add_objects` | Draw a batch of stickies/shapes/text/frames/connectors (one undo step, animates in; optional auto-layout). Add `reveal:{step,effect}` to stage objects for Reveal Mode. Text with `w` becomes a wrapped text box; a sticky whose first line starts with `ai:`, `img:`, `search:`, … is a live runnable AI node — the agent can build entire flows |
-| `update_objects` | Edit text, colors, positions, wrapped text width, and Reveal Mode metadata |
+| `create_board` | Create and open a new board; optional `style`: `sketch` (default), `handdrawn` or `messy` |
+| `add_objects` | Draw a batch of stickies/shapes/text/frames/connectors (one undo step, animates in; optional auto-layout). Add `reveal:{step,effect}` to stage objects for Reveal Mode. Optional per-object `style` (`sketch`/`handdrawn`/`messy`) overrides the board style. Text with `w` becomes a wrapped text box; a sticky whose first line starts with `ai:`, `img:`, `search:`, … is a live runnable AI node — the agent can build entire flows |
+| `update_objects` | Edit text, colors, positions, wrapped text width, drawing `style` (`null` = board style), and Reveal Mode metadata |
 | `delete_objects` | Delete objects (never boards) |
 | `run_node` | Run a Slate AI node (`ai:`, `chart:`, `img:`, …) like pressing ▶ |
 | `get_node_output` | Read a node's last output |

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 import { isSketchy } from '../engine/renderer';
-import { FONTS, PALETTE, STICKY_COLORS, type PenTool, type RevealEffect, type Routing } from '../types';
+import { FONTS, type DrawStyle, type PenTool, type RevealEffect, type Routing, type SlateObj } from '../types';
+import { DRAW_STYLES, DRAW_STYLE_LABELS, effectiveStyle, isDrawStyle } from '../engine/style';
+import { getStyleRenderer, type StyleRenderer } from '../engine/styles';
 import { ensureVideoModels, cachedVideoModelInfo, getVideoModel, type VideoModelInfo } from '../ai/llm';
 import FloatingPanel from './FloatingPanel';
 import {
@@ -14,6 +16,38 @@ import {
 } from '../engine/reveal';
 
 const FONT_SIZES = [12, 14, 16, 20, 24, 32, 40, 56, 72, 96];
+
+/** The style whose swatches the pickers offer: the selection's effective style, else the board's. */
+const ActiveStyle = createContext<StyleRenderer>(getStyleRenderer('sketch'));
+
+/** objects whose look follows a drawing style (and so get the style picker) */
+const STYLED_TYPES = new Set<SlateObj['type']>(['shape', 'connector', 'text', 'sticky']);
+
+/** Board default + the three styles; '' = follow the board. */
+function ObjectStyleSelect({ objs, boardStyle, onPick }: { objs: SlateObj[]; boardStyle: DrawStyle; onPick: (s: DrawStyle | undefined) => void }) {
+  const values = new Set(objs.map((o) => (isDrawStyle(o.style) ? o.style : '')));
+  const value = values.size === 1 ? [...values][0] : 'mixed';
+  return (
+    <select
+      className="font-select object-style-select"
+      title="Drawing style"
+      value={value}
+      onChange={(e) => onPick(isDrawStyle(e.target.value) ? e.target.value : undefined)}
+    >
+      {value === 'mixed' && (
+        <option value="mixed" disabled>
+          Mixed
+        </option>
+      )}
+      <option value="">Board default ({DRAW_STYLE_LABELS[boardStyle]})</option>
+      {DRAW_STYLES.map((st) => (
+        <option key={st} value={st}>
+          {DRAW_STYLE_LABELS[st]}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 // Crisp corner-style icons (the old ⃞/▢ glyphs rendered inverted in some fonts).
 const SharpCornerIcon = () => (
@@ -69,7 +103,7 @@ const PEN_TOOLS: { id: PenTool; label: string }[] = [
 function Swatches({
   value,
   onPick,
-  colors = PALETTE,
+  colors,
   allowTransparent,
 }: {
   value: string;
@@ -77,6 +111,8 @@ function Swatches({
   colors?: string[];
   allowTransparent?: boolean;
 }) {
+  const active = useContext(ActiveStyle);
+  colors ??= active.palette as string[];
   const customColors = useUI((s) => s.customColors);
   const addCustomColor = useUI((s) => s.addCustomColor);
   const removeCustomColor = useUI((s) => s.removeCustomColor);
@@ -188,6 +224,20 @@ function ColorControl({
 }
 
 export default function StyleBar({ ctl }: { ctl: Controller }) {
+  const tool = useUI((s) => s.tool);
+  const boardStyle = useUI((s) => s.boardStyle);
+  useUI((s) => s.selection);
+  useUI((s) => s.docVersion);
+  const first = tool === 'select' ? ctl.selectedObjects()[0] : undefined;
+  const activeStyle = getStyleRenderer(first ? effectiveStyle(first, boardStyle) : boardStyle);
+  return (
+    <ActiveStyle.Provider value={activeStyle}>
+      <StyleBarInner ctl={ctl} activeStyle={activeStyle} />
+    </ActiveStyle.Provider>
+  );
+}
+
+function StyleBarInner({ ctl, activeStyle }: { ctl: Controller; activeStyle: StyleRenderer }) {
   const ui = useUI();
   useUI((s) => s.docVersion); // re-render when object props change so controls track the document
   const sel = ui.selection;
@@ -390,6 +440,13 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
             )}
           </>
         )}
+        {selObjs.some((o) => STYLED_TYPES.has(o.type)) && (
+          <ObjectStyleSelect
+            objs={selObjs.filter((o) => STYLED_TYPES.has(o.type))}
+            boardStyle={ui.boardStyle}
+            onPick={(st) => ctl.updateSelected({ style: st })}
+          />
+        )}
         {(types.has('text') || types.has('shape') || types.has('sticky')) && (
           <>
             <FontSelect
@@ -447,7 +504,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
         {types.has('sticky') && (
           <ColorControl
             label="Note"
-            colors={STICKY_COLORS}
+            colors={activeStyle.stickyPalette as string[]}
             value={(single as any)?.color ?? ''}
             onPick={(c) => ctl.updateSelected({ color: c })}
           />
@@ -720,7 +777,7 @@ export default function StyleBar({ ctl }: { ctl: Controller }) {
   if (ui.tool === 'sticky') {
     return (
       <FloatingPanel id="stylebar" className="stylebar">
-        <ColorControl label="Color" colors={STICKY_COLORS} value={ui.stickyColor} onPick={(c) => ui.set({ stickyColor: c })} />
+        <ColorControl label="Color" colors={activeStyle.stickyPalette as string[]} value={ui.stickyColor} onPick={(c) => ui.set({ stickyColor: c })} />
       </FloatingPanel>
     );
   }

@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node scripts/unit-tests.mjs"
   },
   "dependencies": {
     "@fontsource/abril-fatface": "^5.2.7",
