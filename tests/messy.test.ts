@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import rough from 'roughjs';
 import { setStyleInk } from '../src/engine/style';
 import { connectorDrawable, getStyleRenderer, shapeDrawable, textFace } from '../src/engine/styles';
-import { messyStyle } from '../src/engine/styles/messy';
+import { curvePoints, messyStyle } from '../src/engine/styles/messy';
 import type { StrokeStyle, StyledPath } from '../src/engine/styles/types';
 import { chevronArms } from '../src/engine/styles/geom';
 import type { ConnectorObj, ShapeObj, Vec } from '../src/types';
@@ -113,7 +113,13 @@ test('dashed lines: strokeLineDash [10, 8] at roughness 1.3', () => {
 
 test('curved connectors: rough curve() through the route points at roughness 1.5', () => {
   const opts: Opts = { seed: 1234, roughness: 1.5, bowing: 2, stroke: '#1a1a1a', strokeWidth: 2, disableMultiStroke: false };
-  assert.deepEqual(dOf(messyStyle.curve(curvePts, st())), ds(gen.curve(curvePts.map(tuple), opts)));
+  const through = curvePoints(curvePts);
+  assert.deepEqual(dOf(messyStyle.curve(curvePts, st())), ds(gen.curve(through.map(tuple), opts)));
+  // through route points only (thinned to ~40px apart so the jitter doesn't squiggle), ends kept
+  assert.ok(through.every((p) => curvePts.includes(p)));
+  assert.equal(through[0], curvePts[0]);
+  assert.equal(through[through.length - 1], curvePts[curvePts.length - 1]);
+  assert.ok(through.length >= 5 && through.length < curvePts.length, `${through.length} of ${curvePts.length} points`);
 });
 
 test('rects and polygons: roughness 1.6, fill drawn separately with stroke none', () => {

@@ -24,6 +24,8 @@ export const MESSY = {
   dashedRoughness: 1.3,
   dash: [10, 8],
   curveRoughness: 1.5,
+  /** curve() runs through route points at least this far apart (px): roughjs jitters every point, so dense samples squiggle */
+  curvePointSpacing: 40,
   bowing: 2,
   lineWidth: 2,
   emphasizedWidth: 2.8,
@@ -75,6 +77,25 @@ function toPaths(drawable: Drawable, isBorder: boolean, lineDash?: number[]): St
     isBorder,
     ...(lineDash ? { lineDash } : {}),
   }));
+}
+
+/** The route points a rough curve passes through: both ends plus samples at least `spacing` apart. */
+export function curvePoints(pts: Vec[], spacing: number = MESSY.curvePointSpacing): Vec[] {
+  if (pts.length <= 2) return pts;
+  const out = [pts[0]];
+  let since = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    since += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    if (since >= spacing) {
+      out.push(pts[i]);
+      since = 0;
+    }
+  }
+  const last = pts[pts.length - 1];
+  // don't leave a stub: fold a too-close final sample into the end point
+  if (out.length > 1 && Math.hypot(last.x - out[out.length - 1].x, last.y - out[out.length - 1].y) < spacing / 2) out.pop();
+  out.push(last);
+  return out;
 }
 
 const isMarker = (s: StrokeStyle) => Math.max(s.size.w, s.size.h) <= MESSY.markerSize;
@@ -205,7 +226,7 @@ export const messyStyle: StyleRenderer = {
 
   curve(pts, s) {
     const o = { ...lineOptions(s, polylineLength(pts)), ...(s.dash === 'dashed' ? {} : { roughness: MESSY.curveRoughness }) };
-    return toPaths(gen.curve(pts.map(tuple), o), true, dashOf(o));
+    return toPaths(gen.curve(curvePoints(pts).map(tuple), o), true, dashOf(o));
   },
 
   // open chevron: one 3-point linearPath through both arms and the tip, never a filled triangle

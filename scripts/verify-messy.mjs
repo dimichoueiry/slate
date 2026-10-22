@@ -196,7 +196,9 @@ fs.writeFileSync(`${OUT}/canvas-before.png`, before);
 fs.writeFileSync(`${OUT}/canvas-after.png`, after);
 const snapAfter = await snapshot('messy');
 const changed = Object.keys(snapBefore.draw).filter((id) => JSON.stringify(snapBefore.draw[id]) !== JSON.stringify(snapAfter.draw[id]));
-check(JSON.stringify(snapAfter) === drawBefore, `drawables identical after reload${changed.length ? ` (changed: ${changed.join(', ')})` : ''}`);
+const facesChanged = Object.keys({ ...snapBefore.faces, ...snapAfter.faces }).filter((id) => JSON.stringify(snapBefore.faces[id]) !== JSON.stringify(snapAfter.faces[id]));
+check(!changed.length, `drawables identical after reload${changed.length ? ` (changed: ${changed.join(', ')})` : ''}`);
+check(!facesChanged.length, `text faces identical after reload${facesChanged.length ? ` (changed: ${facesChanged.map((id) => `${id} ${JSON.stringify(snapBefore.faces[id])}→${JSON.stringify(snapAfter.faces[id])}`).join(', ')})` : ''}`);
 check(Buffer.compare(before, after) === 0, `canvas pixels identical after reload (${before.length} vs ${after.length} bytes)`);
 
 // ---- canvas vs PNG export vs SVG export ----
