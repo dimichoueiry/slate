@@ -132,12 +132,12 @@ test('getStyleRenderer dispatches by style; every style has a palette and a font
   assert.equal(styleRendererFor({}, 'handdrawn').id, 'handdrawn');
 });
 
-test('handdrawn and messy stubs currently draw exactly like sketch', () => {
+test('the messy stub currently draws exactly like sketch', () => {
   const s = shape('stub', { seed: 99, shape: 'ellipse', fill: '#ffd43b' });
   const c = connector('stubc', { seed: 5, routing: 'curved' });
   const pts = [{ x: 0, y: 0 }, { x: 70, y: 10 }, { x: 140, y: 60 }, { x: 200, y: 80 }];
   const ref = { s: shapeDrawable(s, 'sketch'), c: connectorDrawable(c, pts, 'sketch') };
-  for (const st of ['handdrawn', 'messy'] as const) {
+  for (const st of ['messy'] as const) {
     assert.deepEqual(shapeDrawable(s, st), ref.s);
     assert.deepEqual(connectorDrawable(c, pts, st), ref.c);
   }

@@ -65,12 +65,15 @@ function geom(o: ClampObj) {
   return { wrapW: o.fixedWidth ? o.w : null, weight: 400 as const, padY: 0, inset: 0, chipGap: 2 };
 }
 
-/** Compute the on-canvas layout: which lines show, and whether the object is clamped. */
-export function clampLayout(o: ClampObj): ClampLayout {
+/**
+ * Compute the on-canvas layout: which lines show, and whether the object is clamped.
+ * `fontId` is the font the text is drawn with (its style may override o.fontFamily; see drawFontId).
+ */
+export function clampLayout(o: ClampObj, fontId: string | undefined = o.fontFamily): ClampLayout {
   const g = geom(o);
   const all =
     g.wrapW != null
-      ? wrapText(o.text, o.fontSize, g.wrapW, g.weight, o.fontFamily)
+      ? wrapText(o.text, o.fontSize, g.wrapW, g.weight, fontId)
       : o.text.split('\n');
   const lh = lineHeight(o.fontSize);
   const avail = o.h - g.padY;
@@ -93,8 +96,8 @@ export function clampLayout(o: ClampObj): ClampLayout {
 }
 
 /** True if a world-space point lands on a clamped object's "Show more" chip. */
-export function pointInClampChip(o: ClampObj, p: { x: number; y: number }): boolean {
-  const l = clampLayout(o);
+export function pointInClampChip(o: ClampObj, p: { x: number; y: number }, fontId: string | undefined = o.fontFamily): boolean {
+  const l = clampLayout(o, fontId);
   if (!l.clamped || !l.chip) return false;
   const c = l.chip;
   return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;

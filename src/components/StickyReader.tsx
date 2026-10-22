@@ -3,6 +3,7 @@ import type { Controller } from '../engine/controller';
 import type { StickyObj, TextObj } from '../types';
 import { useUI } from '../store/ui';
 import { textBlockSize } from '../engine/text';
+import { drawFontId } from '../engine/styles';
 import { clampGrowHeight } from '../engine/sticky';
 
 type ReadObj = StickyObj | TextObj;
@@ -47,10 +48,10 @@ function readingTime(words: number): string {
 /** Write changed text back to a sticky/text object, keeping its height within the cap. */
 function commitText(ctl: Controller, o: ReadObj, text: string) {
   if (o.type === 'sticky') {
-    const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, o.fontFamily);
+    const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, drawFontId(o, ctl.doc.style));
     ctl.doc.update<StickyObj>(o.id, { text, h: clampGrowHeight(o.h, Math.max(o.h, m.h + 24)) });
   } else {
-    const m = textBlockSize(text || ' ', o.fontSize, o.fixedWidth ? o.w : undefined, 400, o.fontFamily);
+    const m = textBlockSize(text || ' ', o.fontSize, o.fixedWidth ? o.w : undefined, 400, drawFontId(o, ctl.doc.style));
     ctl.doc.update<TextObj>(o.id, { text, w: o.fixedWidth ? o.w : m.w, h: clampGrowHeight(o.h, m.h) });
   }
 }

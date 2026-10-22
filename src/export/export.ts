@@ -9,7 +9,7 @@ import { boardStyleOf, isDrawStyle } from '../engine/style';
 import { stickyDateGeom, stickyDateLabel, stickyShadowOffset, STICKY_DATE_COLOR, STICKY_SHADOW } from '../engine/sticky';
 import { outlineToSvgPathData, strokeOutline, PEN_CONFIGS, type InputPoint } from '../engine/ink';
 import { fontString, lineHeight, wrapText, FONT_FAMILY } from '../engine/text';
-import { ensureObjectFonts, excalifontFaceCss } from '../engine/fonts';
+import { ensureObjectFonts, excalifontFaceCss, kalamFaceCss } from '../engine/fonts';
 import { db, getBlob, putBlob, createBoard } from '../store/db';
 import { nanoid } from 'nanoid';
 
@@ -90,16 +90,26 @@ export async function exportSvg(doc: Doc, box: Box, transparent: boolean): Promi
     const b = aabbOf(o, doc.resolve);
     return b.x < box.x + box.w && b.x + b.w > box.x && b.y < box.y + box.h && b.y + b.h > box.y;
   });
-  // embed Excalifont so the file still renders handwritten outside the app
+  // embed Excalifont (and Kalam, the pen stack's fallback) so the file still renders handwritten outside the app
   const fontOf = (o: SlateObj) => styleRendererFor(o, doc.style).fontId((o as { fontFamily?: string }).fontFamily);
-  const excaliText = visible
-    .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack(fontOf(o)).includes('Excalifont'))
-    .map((o) => (o as { text: string }).text)
-    .join('');
-  if (excaliText) {
-    const css = await excalifontFaceCss(excaliText).catch(() => '');
-    if (css) parts.push(`<defs><style>${css}</style></defs>`);
-  }
+  const textIn = (family: string) =>
+    visible
+      .filter((o) => 'text' in o && typeof o.text === 'string' && fontStack(fontOf(o)).includes(family))
+      .map((o) => (o as { text: string }).text)
+      .join('');
+  const excaliText = textIn('Excalifont');
+  // connector labels have no fontFamily of their own; the style picks theirs
+  const kalamText =
+    textIn('Kalam') +
+    visible
+      .filter((o): o is ConnectorObj => o.type === 'connector' && !!o.label && fontStack(fontOf(o)).includes('Kalam'))
+      .map((o) => o.label)
+      .join('');
+  const css = [
+    excaliText ? await excalifontFaceCss(excaliText).catch(() => '') : '',
+    kalamText ? await kalamFaceCss(kalamText).catch(() => '') : '',
+  ].filter(Boolean);
+  if (css.length) parts.push(`<defs><style>${css.join('\n')}</style></defs>`);
   for (const o of visible) {
     const rot = o.rotation && o.type !== 'connector'
       ? (() => {
@@ -235,7 +245,9 @@ async function objectToSvg(o: SlateObj, doc: Doc): Promise<string> {
         const mid = polylineMidpoint(pts);
         const w = c.label.length * 7.5 + 12;
         el += `<rect x="${mid.x - w / 2}" y="${mid.y - 10}" width="${w}" height="20" rx="6" fill="#f3f2ef"/>`;
-        el += `<text x="${mid.x}" y="${mid.y + 4}" font-size="13" font-weight="500" fill="${c.stroke}" text-anchor="middle">${esc(c.label)}</text>`;
+        const font = sr.fontId(undefined);
+        const family = font ? ` font-family="${esc(fontStack(font))}"` : '';
+        el += `<text x="${mid.x}" y="${mid.y + 4}" font-size="13" font-weight="500" fill="${c.stroke}" text-anchor="middle"${family}>${esc(c.label)}</text>`;
       }
       return el;
     }
@@ -285,7 +297,7 @@ function dashSvg(dash: string, width: number): string {
 function sketchySvg(paths: StyledPath[], dash: string, width: number, opacity: number): string {
   let el = '';
   for (const p of paths) {
-    const dashAttr = p.isBorder ? dashSvg(dash, width) : '';
+    const dashAttr = !p.isBorder ? '' : p.dash ? ` stroke-dasharray="${p.dash.join(' ')}"` : dashSvg(dash, width);
     el += `<path d="${p.d}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" fill-rule="evenodd"${dashAttr}/>`;
   }
   return el;
