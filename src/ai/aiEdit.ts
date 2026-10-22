@@ -2,6 +2,7 @@
 // (edits + creations + deletions) → applied as a single undoable transaction.
 import { chat, type ChatMessage } from './llm';
 import { textBlockSize } from '../engine/text';
+import { faceArgs } from '../engine/styles';
 import { clampHeight } from '../engine/sticky';
 
 type AnyObj = Record<string, any>;
@@ -142,7 +143,7 @@ function buildCreated(item: AnyObj, refs: Map<string, string>, doc: AnyObj): Any
       const w = num(item.w, 180, 40, 2000);
       const fontSize = num(item.fontSize, 18, 8, 96);
       const text = str(item.text);
-      const m = textBlockSize(text || ' ', fontSize, w - 24, 500);
+      const m = textBlockSize(text || ' ', fontSize, w - 24, ...faceArgs({ fontSize }, doc.style, 500));
       const h = clampHeight(Math.max(num(item.h, 180, 40, 4000), m.h + 24));
       return { ...base, type: 'sticky', w, h, color: color(item.color, '#FFE066'), text, fontSize };
     }
@@ -166,7 +167,7 @@ function buildCreated(item: AnyObj, refs: Map<string, string>, doc: AnyObj): Any
     case 'text': {
       const fontSize = num(item.fontSize, 20, 6, 200);
       const text = str(item.text, ' ');
-      const m = textBlockSize(text, fontSize);
+      const m = textBlockSize(text, fontSize, undefined, ...faceArgs({ fontSize }, doc.style, 400));
       return { ...base, type: 'text', text, color: color(item.color, '#1a1a1a'), fontSize, w: m.w, h: clampHeight(m.h), fixedWidth: false };
     }
     case 'frame':
@@ -310,14 +311,14 @@ export async function aiEditSelection(ctl: AnyObj, instruction: string): Promise
       if (target.type === 'text' && (patch.text !== undefined || patch.fontSize !== undefined)) {
         const text = patch.text ?? target.text;
         const fontSize = patch.fontSize ?? target.fontSize;
-        const m = textBlockSize(text || ' ', fontSize, target.fixedWidth ? target.w : undefined, 400, target.fontFamily);
+        const m = textBlockSize(text || ' ', fontSize, target.fixedWidth ? target.w : undefined, ...faceArgs({ ...target, fontSize }, ctl.doc.style, 400));
         patch.w = target.fixedWidth ? target.w : m.w;
         patch.h = m.h;
       }
       if (target.type === 'sticky' && (patch.text !== undefined || patch.fontSize !== undefined)) {
         const text = patch.text ?? target.text;
         const fontSize = patch.fontSize ?? target.fontSize;
-        const m = textBlockSize(text || ' ', fontSize, (patch.w ?? target.w) - 24, 500, target.fontFamily);
+        const m = textBlockSize(text || ' ', fontSize, (patch.w ?? target.w) - 24, ...faceArgs({ ...target, fontSize }, ctl.doc.style, 500));
         patch.h = Math.max(patch.h ?? target.h, m.h + 24);
       }
       ctl.doc.update(target.id, patch);

@@ -5,6 +5,7 @@
 import { nanoid } from 'nanoid';
 import { db, listBoards, createBoard, loadBoardObjects, listProjects, putBlob } from '../store/db';
 import { textBlockSize } from '../engine/text';
+import { faceArgs } from '../engine/styles';
 import { clampHeight } from '../engine/sticky';
 import { ICONS } from '../engine/icons';
 import { aabbOf, boxUnion } from '../engine/geometry';
@@ -288,7 +289,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const text = str(spec.text);
       const w = num(spec.w, 200, 40, 2000);
       const fontSize = num(spec.fontSize, 18, 8, 96);
-      const m = textBlockSize(text || ' ', fontSize, w - 24, 500);
+      const m = textBlockSize(text || ' ', fontSize, w - 24, ...faceArgs({ style, fontSize }, doc.style, 500));
       const h = clampHeight(Math.max(num(spec.h, 180, 40, 4000), m.h + 24));
       return { ...withReveal, type: 'sticky', w, h, color: color(spec.color, STICKY_DEFAULT), text, fontSize };
     }
@@ -298,7 +299,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const fontSize = num(spec.fontSize, 20, 6, 200);
       const fixedWidth = spec.fixedWidth === true || spec.w !== undefined;
       const wrapW = fixedWidth ? num(spec.w, 320, 8, 4000) : undefined;
-      const m = textBlockSize(text, fontSize, wrapW, 400, spec.fontFamily);
+      const m = textBlockSize(text, fontSize, wrapW, ...faceArgs({ style, fontFamily: spec.fontFamily, fontSize }, doc.style, 400));
       const h = spec.h !== undefined ? num(spec.h, m.h, 8, 20000) : clampHeight(m.h);
       return { ...withReveal, type: 'text', text, color: color(spec.color, '#1a1a1a'), fontSize, w: fixedWidth ? wrapW : m.w, h, fixedWidth };
     }
@@ -608,13 +609,13 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
       if (t.type === 'text' && (patch.text !== undefined || patch.fontSize !== undefined || patch.w !== undefined || patch.fixedWidth !== undefined)) {
         const fixedWidth = patch.fixedWidth ?? (patch.w !== undefined ? true : t.fixedWidth);
         const wrapW = fixedWidth ? (patch.w ?? t.w) : undefined;
-        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, wrapW, 400, t.fontFamily);
+        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, wrapW, ...faceArgs({ ...t, ...patch, fontSize: patch.fontSize ?? t.fontSize, ...(clearStyle ? { style: undefined } : {}) }, doc.style, 400));
         patch.fixedWidth = fixedWidth;
         patch.w = fixedWidth ? wrapW : m.w;
         if (patch.h === undefined) patch.h = m.h;
       }
       if (t.type === 'sticky' && (patch.text !== undefined || patch.fontSize !== undefined)) {
-        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, 500, t.fontFamily);
+        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, ...faceArgs({ ...t, ...patch, fontSize: patch.fontSize ?? t.fontSize, ...(clearStyle ? { style: undefined } : {}) }, doc.style, 500));
         patch.h = Math.max(patch.h ?? t.h, m.h + 24);
       }
       if (clearReveal || clearStyle) {
@@ -835,7 +836,7 @@ export async function add_upload(params: AnyObj): Promise<AnyObj> {
   const y = num(params?.y, Math.round(cam.y + (ctl.viewH ?? 800) / 4 / (cam.zoom || 1)), -1e6, 1e6);
   const text = uploadLabel(upload);
   const w = 260;
-  const m = textBlockSize(text, 18, w - 24, 500);
+  const m = textBlockSize(text, 18, w - 24, ...faceArgs({ fontSize: 18 }, ctl.doc.style, 500));
   const node = {
     id: nid(),
     type: 'sticky' as const,

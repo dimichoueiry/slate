@@ -4,6 +4,7 @@
 // lives in `o.text` — clamping is purely a display concern, never a truncation.
 
 import type { StickyObj, TextObj } from '../types';
+import type { StyleRenderer } from './styles/types';
 import { wrapText, lineHeight } from './text';
 
 /** Objects that participate in clamping. */
@@ -65,12 +66,21 @@ function geom(o: ClampObj) {
   return { wrapW: o.fixedWidth ? o.w : null, weight: 400 as const, padY: 0, inset: 0, chipGap: 2 };
 }
 
-/** Compute the on-canvas layout: which lines show, and whether the object is clamped. */
-export function clampLayout(o: ClampObj): ClampLayout {
+/** A style's text font choice; clampLayout wraps in it so lines match what is drawn. */
+export type TextFont = Pick<StyleRenderer, 'fontId' | 'fontWeight'>;
+
+/**
+ * Compute the on-canvas layout: which lines show, and whether the object is clamped.
+ * Pass the object's style renderer so lines wrap in the font it is drawn with
+ * (a style may swap the font or weight); without one the object's own font is used.
+ */
+export function clampLayout(o: ClampObj, sr?: TextFont): ClampLayout {
   const g = geom(o);
+  const fontId = sr ? sr.fontId(o.fontFamily) : o.fontFamily;
+  const weight = sr ? sr.fontWeight(o.fontSize, g.weight) : g.weight;
   const all =
     g.wrapW != null
-      ? wrapText(o.text, o.fontSize, g.wrapW, g.weight, o.fontFamily)
+      ? wrapText(o.text, o.fontSize, g.wrapW, weight, fontId)
       : o.text.split('\n');
   const lh = lineHeight(o.fontSize);
   const avail = o.h - g.padY;
@@ -93,8 +103,8 @@ export function clampLayout(o: ClampObj): ClampLayout {
 }
 
 /** True if a world-space point lands on a clamped object's "Show more" chip. */
-export function pointInClampChip(o: ClampObj, p: { x: number; y: number }): boolean {
-  const l = clampLayout(o);
+export function pointInClampChip(o: ClampObj, p: { x: number; y: number }, sr?: TextFont): boolean {
+  const l = clampLayout(o, sr);
   if (!l.clamped || !l.chip) return false;
   const c = l.chip;
   return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;

@@ -41,6 +41,16 @@ export function textFace(
   return { fontId: sr.fontId(o.fontFamily), weight: sr.fontWeight(o.fontSize, baseWeight) };
 }
 
+/** textFace as the trailing [weight, fontId] arguments of textBlockSize / wrapText. */
+export function faceArgs(
+  o: { style?: unknown; fontFamily?: string; fontSize: number },
+  boardStyle: DrawStyle | undefined,
+  baseWeight: number
+): [number, string | undefined] {
+  const f = textFace(o, boardStyle, baseWeight);
+  return [f.weight, f.fontId];
+}
+
 // ---------- cached drawables ----------
 
 export const drawableCache = new DrawableCache<StyledPath[]>();
