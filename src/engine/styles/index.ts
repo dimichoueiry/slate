@@ -31,6 +31,11 @@ export function styleRendererFor(o: { style?: unknown }, boardStyle: DrawStyle |
   return getStyleRenderer(effectiveStyle(o, boardStyle));
 }
 
+/** FONTS id an object's text is drawn with in its effective style, so measure and wrap with this too. */
+export function drawFontId(o: { style?: unknown; fontFamily?: string }, boardStyle: DrawStyle | undefined): string | undefined {
+  return styleRendererFor(o, boardStyle).fontId(o.fontFamily);
+}
+
 // ---------- cached drawables ----------
 
 export const drawableCache = new DrawableCache<StyledPath[]>();

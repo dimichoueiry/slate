@@ -2,6 +2,10 @@
 // fallback family while a webfont is still downloading, so anything that
 // measures or paints text awaits these first.
 
+import kalamLatin400 from '@fontsource/kalam/files/kalam-latin-400-normal.woff2?url';
+import kalamLatinExt400 from '@fontsource/kalam/files/kalam-latin-ext-400-normal.woff2?url';
+import kalamLatin700 from '@fontsource/kalam/files/kalam-latin-700-normal.woff2?url';
+import kalamLatinExt700 from '@fontsource/kalam/files/kalam-latin-ext-700-normal.woff2?url';
 import { EXCALIFONT_FACES } from '../assets/fonts/excalifont';
 import { fontStack, type SlateObj } from '../types';
 import { fontString } from './text';
@@ -37,7 +41,8 @@ export async function ensureObjectFonts(
   registerBundledFonts();
   const byStack = new Map<string, Set<string>>();
   for (const o of objs) {
-    const text = (o as { text?: unknown }).text;
+    // connector labels draw in their style's font too
+    const text = (o as { text?: unknown }).text || (o as { label?: unknown }).label;
     if (typeof text !== 'string' || !text) continue;
     const stack = fontStack(fontIdOf(o));
     let chars = byStack.get(stack);
@@ -70,20 +75,40 @@ async function dataUrl(url: string): Promise<string> {
   });
 }
 
+/** @font-face rules (as data URLs) for the faces of `family` whose unicode-range covers `text`. */
+async function embeddedFaceCss(family: string, faces: { url: string; unicodeRange: string; weight?: number }[], text: string): Promise<string> {
+  const cps = new Set<number>();
+  for (const ch of text) cps.add(ch.codePointAt(0)!);
+  const rules: string[] = [];
+  for (const f of faces) {
+    const ranges = parseRange(f.unicodeRange);
+    if (![...cps].some((c) => ranges.some(([lo, hi]) => c >= lo && c <= hi))) continue;
+    rules.push(
+      `@font-face{font-family:'${family}';font-weight:${f.weight ?? 400};src:url(${await dataUrl(f.url)}) format('woff2');unicode-range:${f.unicodeRange};}`
+    );
+  }
+  return rules.join('\n');
+}
+
 /**
  * `@font-face` rules embedding the Excalifont subsets that cover `text`, as
  * data URLs, so an exported SVG renders handwritten anywhere (even as <img>).
  */
-export async function excalifontFaceCss(text: string): Promise<string> {
-  const cps = new Set<number>();
-  for (const ch of text) cps.add(ch.codePointAt(0)!);
-  const rules: string[] = [];
-  for (const f of EXCALIFONT_FACES) {
-    const ranges = parseRange(f.unicodeRange);
-    if (![...cps].some((c) => ranges.some(([lo, hi]) => c >= lo && c <= hi))) continue;
-    rules.push(
-      `@font-face{font-family:'Excalifont';font-weight:400;src:url(${await dataUrl(f.url)}) format('woff2');unicode-range:${f.unicodeRange};}`
-    );
-  }
-  return rules.join('\n');
+export function excalifontFaceCss(text: string): Promise<string> {
+  return embeddedFaceCss('Excalifont', EXCALIFONT_FACES, text);
+}
+
+// Kalam (SIL OFL 1.1, @fontsource/kalam): the pen font stack's guaranteed fallback.
+const KALAM_LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
+const KALAM_LATIN_EXT = 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF';
+const KALAM_FACES = [
+  { url: kalamLatin400, unicodeRange: KALAM_LATIN, weight: 400 },
+  { url: kalamLatinExt400, unicodeRange: KALAM_LATIN_EXT, weight: 400 },
+  { url: kalamLatin700, unicodeRange: KALAM_LATIN, weight: 700 },
+  { url: kalamLatinExt700, unicodeRange: KALAM_LATIN_EXT, weight: 700 },
+];
+
+/** `@font-face` rules embedding Kalam for `text`, so the hand-drawn style's SVG export renders handwritten anywhere. */
+export function kalamFaceCss(text: string): Promise<string> {
+  return embeddedFaceCss('Kalam', KALAM_FACES, text);
 }

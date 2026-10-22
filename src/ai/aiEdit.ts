@@ -2,6 +2,7 @@
 // (edits + creations + deletions) → applied as a single undoable transaction.
 import { chat, type ChatMessage } from './llm';
 import { textBlockSize } from '../engine/text';
+import { drawFontId } from '../engine/styles';
 import { clampHeight } from '../engine/sticky';
 
 type AnyObj = Record<string, any>;
@@ -310,14 +311,14 @@ export async function aiEditSelection(ctl: AnyObj, instruction: string): Promise
       if (target.type === 'text' && (patch.text !== undefined || patch.fontSize !== undefined)) {
         const text = patch.text ?? target.text;
         const fontSize = patch.fontSize ?? target.fontSize;
-        const m = textBlockSize(text || ' ', fontSize, target.fixedWidth ? target.w : undefined, 400, target.fontFamily);
+        const m = textBlockSize(text || ' ', fontSize, target.fixedWidth ? target.w : undefined, 400, drawFontId(target, ctl.doc.style));
         patch.w = target.fixedWidth ? target.w : m.w;
         patch.h = m.h;
       }
       if (target.type === 'sticky' && (patch.text !== undefined || patch.fontSize !== undefined)) {
         const text = patch.text ?? target.text;
         const fontSize = patch.fontSize ?? target.fontSize;
-        const m = textBlockSize(text || ' ', fontSize, (patch.w ?? target.w) - 24, 500, target.fontFamily);
+        const m = textBlockSize(text || ' ', fontSize, (patch.w ?? target.w) - 24, 500, drawFontId(target, ctl.doc.style));
         patch.h = Math.max(patch.h ?? target.h, m.h + 24);
       }
       ctl.doc.update(target.id, patch);

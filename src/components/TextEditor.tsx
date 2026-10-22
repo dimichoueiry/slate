@@ -4,6 +4,7 @@ import type { ConnectorObj, ShapeObj, StickyObj, TextObj } from '../types';
 import { fontStack } from '../types';
 import { useUI } from '../store/ui';
 import { lineHeight, textBlockSize } from '../engine/text';
+import { drawFontId } from '../engine/styles';
 import { clampGrowHeight } from '../engine/sticky';
 import { polylineMidpoint, routeConnector } from '../engine/geometry';
 
@@ -57,11 +58,11 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
         if (text.trim() === '') {
           ctl.doc.delete(o.id);
         } else {
-          const m = textBlockSize(text, o.fontSize, o.fixedWidth ? o.w : undefined, 400, o.fontFamily);
+          const m = textBlockSize(text, o.fontSize, o.fixedWidth ? o.w : undefined, 400, drawFontId(o, ctl.doc.style));
           ctl.doc.update<TextObj>(o.id, { text, w: o.fixedWidth ? o.w : m.w, h: clampGrowHeight(o.h, m.h) });
         }
       } else if (o.type === 'sticky') {
-        const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, o.fontFamily);
+        const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, drawFontId(o, ctl.doc.style));
         ctl.doc.update<StickyObj>(o.id, { text, h: clampGrowHeight(o.h, Math.max(o.h, m.h + 24)) });
       } else {
         ctl.doc.update<ShapeObj>(o.id, { text });
@@ -107,7 +108,7 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
   const zoom = ctl.camera.zoom;
   const fontSize = obj.type === 'connector' ? 13 : obj.fontSize;
   const lh = lineHeight(fontSize);
-  const family = fontStack(obj.type === 'connector' ? undefined : obj.fontFamily);
+  const family = fontStack(drawFontId(obj, ctl.doc.style));
 
   // slash-command menu: "/" then optional filter, at the very start, on non-connectors
   const slashMatch = obj.type !== 'connector' ? /^\/(\w*)$/.exec(value) : null;
@@ -205,7 +206,7 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     };
   } else if (obj.type === 'sticky') {
     // centred like the rendered note
-    const blockH = textBlockSize(value || ' ', fontSize, obj.w - 24, 500, obj.fontFamily).h;
+    const blockH = textBlockSize(value || ' ', fontSize, obj.w - 24, 500, drawFontId(obj, ctl.doc.style)).h;
     style = {
       ...style,
       left: tl.x + 12 * zoom,
@@ -218,7 +219,7 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     };
   } else {
     // shape: horizontally centered block
-    const m = textBlockSize(value || ' ', fontSize, Math.max(8, obj.w - 16), 400, obj.fontFamily);
+    const m = textBlockSize(value || ' ', fontSize, Math.max(8, obj.w - 16), 400, drawFontId(obj, ctl.doc.style));
     const blockH = m.h;
     style = {
       ...style,

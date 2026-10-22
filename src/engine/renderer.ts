@@ -34,7 +34,7 @@ import {
 } from './sticky';
 import { fontStack } from '../types';
 import { revealDelayOf, revealDurationOf, revealEffectOf, revealStepOf } from './reveal';
-import { chevronArms, connectorDrawable, shapeDrawable, styleRendererFor, toPath2D, type StyledPath } from './styles';
+import { chevronArms, connectorDrawable, drawFontId, shapeDrawable, styleRendererFor, toPath2D, type StyledPath } from './styles';
 
 export { seedOf } from './style';
 export { chevronArms } from './styles';
@@ -607,7 +607,7 @@ export function drawSticky(ctx: CanvasRenderingContext2D, o: StickyObj, boardSty
   ctx.fill(paper);
   // keep the clamp fade inside the rounded paper
   ctx.clip(paper);
-  const layout = o.text ? clampLayout(o) : null;
+  const layout = o.text ? clampLayout(o, sr.fontId(o.fontFamily)) : null;
   if (layout) {
     const lh = lineHeight(o.fontSize);
     ctx.fillStyle = 'rgba(20,20,20,0.92)';
@@ -682,10 +682,11 @@ function drawClampOverlay(
 export function drawText(ctx: CanvasRenderingContext2D, o: TextObj, boardStyle?: DrawStyle) {
   ctx.save();
   ctx.fillStyle = o.color;
-  ctx.font = fontString(o.fontSize, 400, fontStack(styleRendererFor(o, boardStyle).fontId(o.fontFamily)));
+  const font = styleRendererFor(o, boardStyle).fontId(o.fontFamily);
+  ctx.font = fontString(o.fontSize, 400, fontStack(font));
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  const layout = clampLayout(o);
+  const layout = clampLayout(o, font);
   const lh = lineHeight(o.fontSize);
   let y = o.y;
   for (const line of layout.lines) {
@@ -759,7 +760,7 @@ export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, do
   ctx.globalAlpha = o.opacity;
   if (isSketchy(o)) {
     strokeStyledPaths(ctx, connectorDrawable(o, pts, doc.style), o.dash, o.strokeWidth);
-    if (o.label) drawConnectorLabel(ctx, o, pts);
+    if (o.label) drawConnectorLabel(ctx, o, pts, doc.style);
     ctx.restore();
     return;
   }
@@ -784,14 +785,14 @@ export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, do
 
   if (o.endArrow !== 'none') drawArrowhead(ctx, pts[pts.length - 2], pts[pts.length - 1], headLen, o.endArrow);
   if (o.startArrow !== 'none') drawArrowhead(ctx, pts[1], pts[0], headLen, o.startArrow);
-  if (o.label) drawConnectorLabel(ctx, o, pts);
+  if (o.label) drawConnectorLabel(ctx, o, pts, doc.style);
   ctx.restore();
 }
 
-function drawConnectorLabel(ctx: CanvasRenderingContext2D, o: ConnectorObj, pts: Vec[]) {
+function drawConnectorLabel(ctx: CanvasRenderingContext2D, o: ConnectorObj, pts: Vec[], boardStyle?: DrawStyle) {
   const mid = polylineMidpoint(pts);
   const fs = 13;
-  ctx.font = fontString(fs, 500);
+  ctx.font = fontString(fs, 500, fontStack(drawFontId(o, boardStyle)));
   const tw = ctx.measureText(o.label!).width;
   const padX = 6;
   const bg = new Path2D();
