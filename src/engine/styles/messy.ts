@@ -125,13 +125,35 @@ export function fillOptions(s: StrokeStyle): Options | null {
   };
 }
 
+/**
+ * Run `fn` with Math.random replaced by a PRNG seeded from `seed`. roughjs 4.6.6's
+ * dot filler jitters each dot with bare Math.random() (not its seeded randomizer),
+ * so without this a 'dots' fill would change on every regeneration and reload.
+ */
+export function withSeededRandom<T>(seed: number, fn: () => T): T {
+  let a = seed >>> 0;
+  const orig = Math.random;
+  // mulberry32
+  Math.random = () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  try {
+    return fn();
+  } finally {
+    Math.random = orig;
+  }
+}
+
 const dashOf = (o: Options) => (o.strokeLineDash ? [...o.strokeLineDash] : undefined);
 
 /** Fill (under) + outline (over) of one closed figure. */
 function closed(s: StrokeStyle, draw: (o: Options) => Drawable, highlight = false): StyledPath[] {
   const out: StyledPath[] = [];
   const f = fillOptions(s);
-  if (f) out.push(...toPaths(draw(f), false));
+  if (f) out.push(...toPaths(withSeededRandom(s.seed, () => draw(f)), false));
   if (s.stroke !== 'transparent' && s.strokeWidth > 0) {
     const o = outlineOptions(s, highlight);
     out.push(...toPaths(draw(o), true, dashOf(o)));

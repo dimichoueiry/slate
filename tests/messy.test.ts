@@ -64,6 +64,19 @@ test('same seed → identical drawables and paths; a different seed → differen
   a.forEach((paths, i) => assert.notDeepEqual(dOf(paths), dOf(c[i]), `primitive #${i} must change with the seed`));
 });
 
+test('every fill pattern is deterministic per seed (roughjs dots use bare Math.random)', () => {
+  for (const fillStyle of ['hachure', 'solid', 'zigzag', 'dots', 'cross-hatch'] as const) {
+    const s = st({ fill: '#868e96', fillStyle });
+    const a = dOf(messyStyle.polygon(tri, s));
+    Math.random(); // advance the global RNG between runs
+    assert.deepEqual(dOf(messyStyle.polygon(tri, s)), a, `${fillStyle} repeats`);
+    if (fillStyle !== 'solid') assert.notDeepEqual(dOf(messyStyle.polygon(tri, { ...s, seed: s.seed + 1 })), a, `${fillStyle} follows the seed`);
+  }
+  const r = Math.random;
+  messyStyle.rect(0, 0, 50, 50, st({ fill: '#868e96', fillStyle: 'dots' }));
+  assert.equal(Math.random, r, 'Math.random is restored');
+});
+
 test('the object’s stored seed drives the drawable (cache cleared between runs)', () => {
   const o = shape('det', { fill: '#2f9e44', seed: 4242 });
   const first = JSON.stringify(shapeDrawable(o, 'messy'));
