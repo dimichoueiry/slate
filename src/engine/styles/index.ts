@@ -36,6 +36,17 @@ export function drawFontId(o: { style?: unknown; fontFamily?: string }, boardSty
   return styleRendererFor(o, boardStyle).fontId(o.fontFamily);
 }
 
+/** Font weight an object's text is drawn (and so must be measured) with: `baseWeight` unless its style sets one. */
+export function drawFontWeight(o: { style?: unknown; fontSize: number }, boardStyle: DrawStyle | undefined, baseWeight: number): number {
+  const sr = styleRendererFor(o, boardStyle);
+  return sr.fontWeight ? sr.fontWeight(o.fontSize, baseWeight) : baseWeight;
+}
+
+/** Connector label size + weight in a style (its font is fontId(undefined), see drawFontId). */
+export function labelFontOf(sr: StyleRenderer): { size: number; weight: number } {
+  return sr.labelFont ?? { size: 13, weight: 500 };
+}
+
 // ---------- cached drawables ----------
 
 export const drawableCache = new DrawableCache<StyledPath[]>();
@@ -54,9 +65,11 @@ export function shapeDrawable(o: ShapeObj, boardStyle: DrawStyle | undefined): S
   const sr = styleRendererFor(o, boardStyle);
   const seed = seedOf(o);
   const r = o.shape === 'roundedRect' ? cornerRadius(o) : 0;
-  const key = `shape|${sr.id}@${sr.version}|${seed}|${o.shape}|${o.x},${o.y},${o.w},${o.h},${r}|${o.stroke}|${o.strokeWidth}|${o.dash}|${o.fill}`;
+  // only an ellipse's look depends on carrying a label (styles may draw it as a circled highlight)
+  const hasText = o.shape === 'ellipse' && !!o.text;
+  const key = `shape|${sr.id}@${sr.version}|${seed}|${o.shape}|${o.x},${o.y},${o.w},${o.h},${r}|${o.stroke}|${o.strokeWidth}|${o.dash}|${o.fill}|${o.fillStyle ?? ''}|${hasText}`;
   return drawableCache.get(o.id, key, () => {
-    const s: StrokeStyle = { seed, stroke: o.stroke, strokeWidth: o.strokeWidth, dash: o.dash, fill: o.fill, size: { w: o.w, h: o.h } };
+    const s: StrokeStyle = { seed, stroke: o.stroke, strokeWidth: o.strokeWidth, dash: o.dash, fill: o.fill, fillStyle: o.fillStyle, hasText, size: { w: o.w, h: o.h } };
     const { x, y, w, h } = o;
     switch (o.shape) {
       case 'rect':

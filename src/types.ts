@@ -30,6 +30,8 @@ export type ArrowHead = 'none' | 'triangle' | 'chevron';
 export type RevealEffect = 'pop' | 'fade' | 'slide-up' | 'slide-left' | 'none';
 /** Board/object drawing style. 'sketch' is the original roughjs look. See src/engine/styles/. */
 export type DrawStyle = 'sketch' | 'handdrawn' | 'messy';
+/** How a style fills a closed shape (roughjs fill styles). Only styles that list it in `fillStyles` use it. */
+export type FillStyle = 'hachure' | 'solid' | 'zigzag' | 'dots' | 'cross-hatch';
 
 export interface RevealSpec {
   step: number;
@@ -83,6 +85,8 @@ export interface ShapeObj extends BaseObj {
   w: number;
   h: number;
   fill: string; // 'transparent' allowed
+  /** fill pattern for styles that offer one (see StyleRenderer.fillStyles); absent = the style's default */
+  fillStyle?: FillStyle;
   stroke: string;
   strokeWidth: number;
   dash: DashStyle;

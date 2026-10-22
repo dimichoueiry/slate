@@ -3,6 +3,7 @@
 // imperatively, so it can't read CSS variables directly).
 
 import { setSceneColors } from '../engine/renderer';
+import { setStyleInk } from '../engine/style';
 
 export type Theme = 'light' | 'dark';
 const KEY = 'slate-theme';
@@ -43,5 +44,6 @@ export function inkForCanvas(dark: boolean): string {
 /** Set the drawing canvas surface light/dark for the open board, and repaint. */
 export function setCanvasDark(dark: boolean) {
   setSceneColors(dark ? CANVAS_DARK : CANVAS_LIGHT);
+  setStyleInk(inkForCanvas(dark));
   (window as { __slateCtl?: { markSceneDirty?: () => void } }).__slateCtl?.markSceneDirty?.();
 }

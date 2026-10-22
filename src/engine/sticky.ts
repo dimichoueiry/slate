@@ -4,6 +4,7 @@
 // lives in `o.text` — clamping is purely a display concern, never a truncation.
 
 import type { StickyObj, TextObj } from '../types';
+import type { StyleRenderer } from './styles/types';
 import { wrapText, lineHeight } from './text';
 
 /** Objects that participate in clamping. */
@@ -65,15 +66,20 @@ function geom(o: ClampObj) {
   return { wrapW: o.fixedWidth ? o.w : null, weight: 400 as const, padY: 0, inset: 0, chipGap: 2 };
 }
 
+/** A style's weight override (StyleRenderer.fontWeight); absent = the object type's base weight. */
+export type FontWeightFn = StyleRenderer['fontWeight'];
+
 /**
  * Compute the on-canvas layout: which lines show, and whether the object is clamped.
- * `fontId` is the font the text is drawn with (its style may override o.fontFamily; see drawFontId).
+ * `fontId` is the font the text is drawn with (its style may override o.fontFamily; see drawFontId),
+ * `fontWeight` the style's weight override, if any (see drawFontWeight).
  */
-export function clampLayout(o: ClampObj, fontId: string | undefined = o.fontFamily): ClampLayout {
+export function clampLayout(o: ClampObj, fontId: string | undefined = o.fontFamily, fontWeight?: FontWeightFn): ClampLayout {
   const g = geom(o);
+  const weight = fontWeight ? fontWeight(o.fontSize, g.weight) : g.weight;
   const all =
     g.wrapW != null
-      ? wrapText(o.text, o.fontSize, g.wrapW, g.weight, fontId)
+      ? wrapText(o.text, o.fontSize, g.wrapW, weight, fontId)
       : o.text.split('\n');
   const lh = lineHeight(o.fontSize);
   const avail = o.h - g.padY;
@@ -96,8 +102,13 @@ export function clampLayout(o: ClampObj, fontId: string | undefined = o.fontFami
 }
 
 /** True if a world-space point lands on a clamped object's "Show more" chip. */
-export function pointInClampChip(o: ClampObj, p: { x: number; y: number }, fontId: string | undefined = o.fontFamily): boolean {
-  const l = clampLayout(o, fontId);
+export function pointInClampChip(
+  o: ClampObj,
+  p: { x: number; y: number },
+  fontId: string | undefined = o.fontFamily,
+  fontWeight?: FontWeightFn
+): boolean {
+  const l = clampLayout(o, fontId, fontWeight);
   if (!l.clamped || !l.chip) return false;
   const c = l.chip;
   return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;

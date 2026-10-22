@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 import { isSketchy } from '../engine/renderer';
-import { FONTS, type DrawStyle, type PenTool, type RevealEffect, type Routing, type SlateObj } from '../types';
+import { FONTS, type DrawStyle, type FillStyle, type PenTool, type RevealEffect, type Routing, type SlateObj } from '../types';
 import { DRAW_STYLES, DRAW_STYLE_LABELS, effectiveStyle, isDrawStyle } from '../engine/style';
 import { getStyleRenderer, type StyleRenderer } from '../engine/styles';
 import { ensureVideoModels, cachedVideoModelInfo, getVideoModel, type VideoModelInfo } from '../ai/llm';
@@ -61,8 +61,30 @@ const RoundCornerIcon = () => (
   </svg>
 );
 
+const FILL_STYLE_LABELS: Record<FillStyle, { glyph: string; title: string }> = {
+  hachure: { glyph: '▨', title: 'Hatched fill' },
+  'cross-hatch': { glyph: '▦', title: 'Cross-hatched fill' },
+  solid: { glyph: '■', title: 'Solid fill' },
+  zigzag: { glyph: '≋', title: 'Zigzag fill' },
+  dots: { glyph: '⁘', title: 'Dotted fill' },
+};
+
+/** Fill-pattern buttons for styles that offer them (see StyleRenderer.fillStyles). */
+function FillStyleSeg({ styles, value, onPick }: { styles: readonly FillStyle[]; value: FillStyle | undefined; onPick: (f: FillStyle) => void }) {
+  return (
+    <div className="seg fill-style-seg">
+      {styles.map((f) => (
+        <button key={f} className={value === f ? 'active' : ''} title={FILL_STYLE_LABELS[f].title} data-fill-style={f} onClick={() => onPick(f)}>
+          {FILL_STYLE_LABELS[f].glyph}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function FontSizeSelect({ value, onPick }: { value: number; onPick: (n: number) => void }) {
-  const options = FONT_SIZES.includes(value) ? FONT_SIZES : [...FONT_SIZES, value].sort((a, b) => a - b);
+  const sizes = (useContext(ActiveStyle).fontSizes as number[] | undefined) ?? FONT_SIZES;
+  const options = sizes.includes(value) ? sizes : [...sizes, value].sort((a, b) => a - b);
   return (
     <select className="font-select" value={value} onChange={(e) => onPick(Number(e.target.value))} title="Text size">
       {options.map((n) => (
@@ -370,6 +392,22 @@ function StyleBarInner({ ctl, activeStyle }: { ctl: Controller; activeStyle: Sty
                   value={(single as any)?.fill ?? ''}
                   onPick={(c) => ctl.updateSelected({ fill: c })}
                 />
+                {(() => {
+                  // only where it applies: filled shapes drawn in a style that offers fill patterns
+                  const filled = selObjs.filter(
+                    (o) => o.type === 'shape' && o.fill !== 'transparent' && (getStyleRenderer(effectiveStyle(o, ui.boardStyle)).fillStyles?.length ?? 0) > 0
+                  );
+                  if (!filled.length) return null;
+                  const styles = getStyleRenderer(effectiveStyle(filled[0], ui.boardStyle)).fillStyles ?? [];
+                  const values = new Set(filled.map((o) => (o.type === 'shape' ? o.fillStyle ?? styles[0] : undefined)));
+                  return (
+                    <FillStyleSeg
+                      styles={styles}
+                      value={values.size === 1 ? [...values][0] : undefined}
+                      onPick={(f) => ctl.updateSelected({ fillStyle: f })}
+                    />
+                  );
+                })()}
                 {ui.editingTextId !== null &&
                   selObjs.some((o) => o.id === ui.editingTextId && o.type === 'shape') && (
                     <ColorControl

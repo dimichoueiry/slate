@@ -2,7 +2,7 @@
 // render_board) and SVG export all draw through these methods, so a style only
 // has to produce path data once to look the same everywhere.
 
-import type { DashStyle, DrawStyle, StickyObj, Vec } from '../../types';
+import type { DashStyle, DrawStyle, FillStyle, StickyObj, Vec } from '../../types';
 
 /** One output path. Canvas draws it via Path2D(d); SVG export emits it as <path d>. */
 export interface StyledPath {
@@ -28,6 +28,10 @@ export interface StrokeStyle {
   dash: DashStyle;
   /** closed shapes only: fill color, may be 'transparent' */
   fill?: string;
+  /** closed shapes only: the object's chosen fill pattern (absent = style default) */
+  fillStyle?: FillStyle;
+  /** closed shapes only: the shape carries a text label (an ellipse around text is drawn as a "circled" highlight) */
+  hasText?: boolean;
   /** size of the object the primitive belongs to (shape box, or a connector's path bounds) — styles scale jitter by it */
   size: { w: number; h: number };
 }
@@ -47,6 +51,14 @@ export interface StyleRenderer {
 
   /** FONTS id to render an object's text with, given the object's own fontFamily. */
   fontId(objectFontId: string | undefined): string | undefined;
+  /** font weight to render (and measure) text of this size with, given the caller's base weight; absent = the base weight */
+  fontWeight?(fontSize: number, baseWeight: number): number;
+  /** connector label size + weight (the font is fontId(undefined)); absent = 13px / 500 */
+  readonly labelFont?: { size: number; weight: number };
+  /** fill patterns offered in the fill picker; absent/empty = this style has no fill-pattern choice */
+  readonly fillStyles?: readonly FillStyle[];
+  /** font-size presets offered in the size picker; absent = the app defaults */
+  readonly fontSizes?: readonly number[];
 
   // ---- closed outlines (fill comes from StrokeStyle.fill) ----
   rect(x: number, y: number, w: number, h: number, s: StrokeStyle): StyledPath[];

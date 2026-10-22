@@ -4,7 +4,7 @@ import type { ConnectorObj, ShapeObj, StickyObj, TextObj } from '../types';
 import { fontStack } from '../types';
 import { useUI } from '../store/ui';
 import { lineHeight, textBlockSize } from '../engine/text';
-import { drawFontId } from '../engine/styles';
+import { drawFontId, drawFontWeight, labelFontOf, styleRendererFor } from '../engine/styles';
 import { clampGrowHeight } from '../engine/sticky';
 import { polylineMidpoint, routeConnector } from '../engine/geometry';
 
@@ -58,11 +58,11 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
         if (text.trim() === '') {
           ctl.doc.delete(o.id);
         } else {
-          const m = textBlockSize(text, o.fontSize, o.fixedWidth ? o.w : undefined, 400, drawFontId(o, ctl.doc.style));
+          const m = textBlockSize(text, o.fontSize, o.fixedWidth ? o.w : undefined, drawFontWeight(o, ctl.doc.style, 400), drawFontId(o, ctl.doc.style));
           ctl.doc.update<TextObj>(o.id, { text, w: o.fixedWidth ? o.w : m.w, h: clampGrowHeight(o.h, m.h) });
         }
       } else if (o.type === 'sticky') {
-        const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, 500, drawFontId(o, ctl.doc.style));
+        const m = textBlockSize(text || ' ', o.fontSize, o.w - 24, drawFontWeight(o, ctl.doc.style, 500), drawFontId(o, ctl.doc.style));
         ctl.doc.update<StickyObj>(o.id, { text, h: clampGrowHeight(o.h, Math.max(o.h, m.h + 24)) });
       } else {
         ctl.doc.update<ShapeObj>(o.id, { text });
@@ -106,7 +106,11 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
   if (!obj) return null;
 
   const zoom = ctl.camera.zoom;
-  const fontSize = obj.type === 'connector' ? 13 : obj.fontSize;
+  // edit in the font the object is drawn with (its style may swap font and weight)
+  const labelFont = labelFontOf(styleRendererFor(obj, ctl.doc.style));
+  const fontSize = obj.type === 'connector' ? labelFont.size : obj.fontSize;
+  const weight =
+    obj.type === 'connector' ? labelFont.weight : drawFontWeight(obj, ctl.doc.style, obj.type === 'sticky' ? 500 : 400);
   const lh = lineHeight(fontSize);
   const family = fontStack(drawFontId(obj, ctl.doc.style));
 
@@ -179,6 +183,7 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     fontSize: fontSize * zoom,
     lineHeight: `${lh * zoom}px`,
     fontFamily: family,
+    fontWeight: weight,
     color: obj.type === 'text' ? obj.color : obj.type === 'shape' ? obj.textColor : 'rgba(20,20,20,0.92)',
   };
 
@@ -193,7 +198,6 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
       background: '#f3f2ef',
       borderRadius: 6,
       color: obj.stroke,
-      fontWeight: 500,
     };
   } else if (obj.type === 'text') {
     style = {
@@ -206,20 +210,19 @@ export default function TextEditor({ ctl, objectId }: { ctl: Controller; objectI
     };
   } else if (obj.type === 'sticky') {
     // centred like the rendered note
-    const blockH = textBlockSize(value || ' ', fontSize, obj.w - 24, 500, drawFontId(obj, ctl.doc.style)).h;
+    const blockH = textBlockSize(value || ' ', fontSize, obj.w - 24, weight, drawFontId(obj, ctl.doc.style)).h;
     style = {
       ...style,
       left: tl.x + 12 * zoom,
       top: tl.y + Math.max(12, (obj.h - blockH) / 2) * zoom,
       width: (obj.w - 24) * zoom,
       textAlign: 'center',
-      fontWeight: 500,
       background: obj.color,
       outlineColor: 'rgba(0,0,0,0.25)',
     };
   } else {
     // shape: horizontally centered block
-    const m = textBlockSize(value || ' ', fontSize, Math.max(8, obj.w - 16), 400, drawFontId(obj, ctl.doc.style));
+    const m = textBlockSize(value || ' ', fontSize, Math.max(8, obj.w - 16), weight, drawFontId(obj, ctl.doc.style));
     const blockH = m.h;
     style = {
       ...style,

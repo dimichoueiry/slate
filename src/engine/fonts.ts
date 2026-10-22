@@ -2,6 +2,7 @@
 // fallback family while a webfont is still downloading, so anything that
 // measures or paints text awaits these first.
 
+import { CAVEAT_FACES } from '../assets/fonts/caveat';
 import kalamLatin400 from '@fontsource/kalam/files/kalam-latin-400-normal.woff2?url';
 import kalamLatinExt400 from '@fontsource/kalam/files/kalam-latin-ext-400-normal.woff2?url';
 import kalamLatin700 from '@fontsource/kalam/files/kalam-latin-700-normal.woff2?url';
@@ -35,23 +36,27 @@ export async function loadDefaultFonts(): Promise<void> {
 export async function ensureObjectFonts(
   objs: Iterable<SlateObj>,
   /** FONTS id the object actually draws with (its style may override fontFamily) */
-  fontIdOf: (o: SlateObj & { fontFamily?: string }) => string | undefined = (o) => o.fontFamily
+  fontIdOf: (o: SlateObj & { fontFamily?: string }) => string | undefined = (o) => o.fontFamily,
+  /** weight the object's text draws with (a style may bold big text) */
+  weightOf: (o: SlateObj & { fontSize?: number }) => number = () => 400
 ): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
   registerBundledFonts();
-  const byStack = new Map<string, Set<string>>();
+  const byFace = new Map<string, { weight: number; stack: string; chars: Set<string> }>();
   for (const o of objs) {
     // connector labels draw in their style's font too
     const text = (o as { text?: unknown }).text || (o as { label?: unknown }).label;
     if (typeof text !== 'string' || !text) continue;
     const stack = fontStack(fontIdOf(o));
-    let chars = byStack.get(stack);
-    if (!chars) byStack.set(stack, (chars = new Set()));
-    for (const ch of text) chars.add(ch);
+    const weight = weightOf(o);
+    const key = `${weight} ${stack}`;
+    let face = byFace.get(key);
+    if (!face) byFace.set(key, (face = { weight, stack, chars: new Set() }));
+    for (const ch of text) face.chars.add(ch);
   }
   await Promise.all(
-    [...byStack].map(([stack, chars]) =>
-      document.fonts.load(fontString(16, 400, stack), [...chars].join('')).catch(() => [])
+    [...byFace.values()].map(({ weight, stack, chars }) =>
+      document.fonts.load(fontString(16, weight, stack), [...chars].join('')).catch(() => [])
     )
   );
 }
@@ -111,4 +116,14 @@ const KALAM_FACES = [
 /** `@font-face` rules embedding Kalam for `text`, so the hand-drawn style's SVG export renders handwritten anywhere. */
 export function kalamFaceCss(text: string): Promise<string> {
   return embeddedFaceCss('Kalam', KALAM_FACES, text);
+}
+
+/** `@font-face` rules embedding Caveat (the 'messy' style's font) at each weight in `textByWeight` (weight → text drawn at it). */
+export async function caveatFaceCss(textByWeight: Map<number, string>): Promise<string> {
+  const rules: string[] = [];
+  for (const [weight, text] of textByWeight) {
+    const css = await embeddedFaceCss('Caveat', CAVEAT_FACES.filter((f) => f.weight === weight), text);
+    if (css) rules.push(css);
+  }
+  return rules.join('\n');
 }

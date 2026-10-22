@@ -5,7 +5,7 @@
 import { nanoid } from 'nanoid';
 import { db, listBoards, createBoard, loadBoardObjects, listProjects, putBlob } from '../store/db';
 import { textBlockSize } from '../engine/text';
-import { drawFontId } from '../engine/styles';
+import { drawFontId, drawFontWeight } from '../engine/styles';
 import { clampHeight } from '../engine/sticky';
 import { ICONS } from '../engine/icons';
 import { aabbOf, boxUnion } from '../engine/geometry';
@@ -26,6 +26,7 @@ export class BridgeError extends Error {}
 
 const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const DASHES = new Set(['solid', 'dashed', 'dotted']);
+const FILL_STYLES = new Set(['hachure', 'solid', 'zigzag', 'dots', 'cross-hatch']);
 const SHAPES = new Set(['rect', 'roundedRect', 'ellipse', 'triangle', 'diamond', 'parallelogram']);
 const ROUTINGS = new Set(['straight', 'elbow', 'curved']);
 const REVEAL_EFFECTS = new Set<RevealEffect>(['pop', 'fade', 'slide-up', 'slide-left', 'none']);
@@ -129,7 +130,7 @@ function serializeObj(o: AnyObj): AnyObj | null {
     case 'text':
       return { ...base, w: r(o.w), h: r(o.h), fontSize: o.fontSize, color: o.color, text: o.text, fixedWidth: !!o.fixedWidth, runnable: isAINode(o) };
     case 'shape':
-      return { ...base, w: r(o.w), h: r(o.h), shape: o.shape, fill: o.fill, stroke: o.stroke, text: o.text, textColor: o.textColor };
+      return { ...base, w: r(o.w), h: r(o.h), shape: o.shape, fill: o.fill, ...(o.fillStyle ? { fillStyle: o.fillStyle } : {}), stroke: o.stroke, text: o.text, textColor: o.textColor };
     case 'frame':
       return { ...base, w: r(o.w), h: r(o.h), name: o.name };
     case 'connector':
@@ -289,7 +290,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const text = str(spec.text);
       const w = num(spec.w, 200, 40, 2000);
       const fontSize = num(spec.fontSize, 18, 8, 96);
-      const m = textBlockSize(text || ' ', fontSize, w - 24, 500, drawFontId({ style }, doc.style));
+      const m = textBlockSize(text || ' ', fontSize, w - 24, drawFontWeight({ style, fontSize }, doc.style, 500), drawFontId({ style }, doc.style));
       const h = clampHeight(Math.max(num(spec.h, 180, 40, 4000), m.h + 24));
       return { ...withReveal, type: 'sticky', w, h, color: color(spec.color, STICKY_DEFAULT), text, fontSize };
     }
@@ -299,7 +300,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
       const fontSize = num(spec.fontSize, 20, 6, 200);
       const fixedWidth = spec.fixedWidth === true || spec.w !== undefined;
       const wrapW = fixedWidth ? num(spec.w, 320, 8, 4000) : undefined;
-      const m = textBlockSize(text, fontSize, wrapW, 400, drawFontId({ style, fontFamily: spec.fontFamily }, doc.style));
+      const m = textBlockSize(text, fontSize, wrapW, drawFontWeight({ style, fontSize }, doc.style, 400), drawFontId({ style, fontFamily: spec.fontFamily }, doc.style));
       const h = spec.h !== undefined ? num(spec.h, m.h, 8, 20000) : clampHeight(m.h);
       return { ...withReveal, type: 'text', text, color: color(spec.color, '#1a1a1a'), fontSize, w: fixedWidth ? wrapW : m.w, h, fixedWidth };
     }
@@ -315,6 +316,7 @@ function buildObject(spec: AnyObj, i: number, doc: AnyObj): AnyObj {
         stroke: color(spec.stroke, '#1a1a1a'),
         strokeWidth: num(spec.strokeWidth, 3, 0.5, 20),
         dash: DASHES.has(spec.dash) ? spec.dash : 'solid',
+        ...(FILL_STYLES.has(spec.fillStyle) ? { fillStyle: spec.fillStyle } : {}),
         radius: 12,
         adaptiveRadius: true,
         sketchy: spec.sketchy !== false,
@@ -527,7 +529,7 @@ export async function add_objects(params: AnyObj): Promise<AnyObj> {
 // per-type editable props, mirroring aiEdit.ts EDITABLE
 const EDITABLE: Record<string, Set<string>> = {
   sticky: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'reveal', 'style']),
-  shape: new Set(['text', 'fill', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal', 'style']),
+  shape: new Set(['text', 'fill', 'fillStyle', 'stroke', 'textColor', 'strokeWidth', 'dash', 'sketchy', 'x', 'y', 'w', 'h', 'reveal', 'style']),
   text: new Set(['text', 'color', 'fontSize', 'x', 'y', 'w', 'h', 'fixedWidth', 'reveal', 'style']),
   connector: new Set(['label', 'stroke', 'strokeWidth', 'dash', 'sketchy', 'reveal', 'style']),
   icon: new Set(['color', 'strokeWidth', 'x', 'y', 'reveal']),
@@ -573,6 +575,9 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
         } else if (k === 'dash') {
           if (DASHES.has(v as string)) patch[k] = v;
           else rejected.push(k);
+        } else if (k === 'fillStyle') {
+          if (FILL_STYLES.has(v as string)) patch[k] = v;
+          else rejected.push(k);
         } else if (k === 'fixedWidth') {
           if (typeof v === 'boolean') patch[k] = v;
           else rejected.push(k);
@@ -607,16 +612,18 @@ export async function update_objects(params: AnyObj): Promise<AnyObj> {
       // keep text-bearing objects sized to their content (in the font they draw with), like aiEdit does
       const t = target as AnyObj;
       const font = drawFontId({ style: clearStyle ? undefined : patch.style ?? t.style, fontFamily: t.fontFamily }, doc.style);
+      const weight = (base: number) =>
+        drawFontWeight({ style: clearStyle ? undefined : patch.style ?? t.style, fontSize: patch.fontSize ?? t.fontSize }, doc.style, base);
       if (t.type === 'text' && (patch.text !== undefined || patch.fontSize !== undefined || patch.w !== undefined || patch.fixedWidth !== undefined)) {
         const fixedWidth = patch.fixedWidth ?? (patch.w !== undefined ? true : t.fixedWidth);
         const wrapW = fixedWidth ? (patch.w ?? t.w) : undefined;
-        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, wrapW, 400, font);
+        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, wrapW, weight(400), font);
         patch.fixedWidth = fixedWidth;
         patch.w = fixedWidth ? wrapW : m.w;
         if (patch.h === undefined) patch.h = m.h;
       }
       if (t.type === 'sticky' && (patch.text !== undefined || patch.fontSize !== undefined)) {
-        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, 500, font);
+        const m = textBlockSize((patch.text ?? t.text) || ' ', patch.fontSize ?? t.fontSize, (patch.w ?? t.w) - 24, weight(500), font);
         patch.h = Math.max(patch.h ?? t.h, m.h + 24);
       }
       if (clearReveal || clearStyle) {

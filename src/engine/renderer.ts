@@ -34,7 +34,7 @@ import {
 } from './sticky';
 import { fontStack } from '../types';
 import { revealDelayOf, revealDurationOf, revealEffectOf, revealStepOf } from './reveal';
-import { chevronArms, connectorDrawable, drawFontId, shapeDrawable, styleRendererFor, toPath2D, type StyledPath } from './styles';
+import { chevronArms, connectorDrawable, drawFontId, drawFontWeight, labelFontOf, shapeDrawable, styleRendererFor, toPath2D, type StyledPath } from './styles';
 
 export { seedOf } from './style';
 export { chevronArms } from './styles';
@@ -527,7 +527,9 @@ export function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj, boardStyle
   ctx.save();
   ctx.globalAlpha = o.opacity;
   if (isSketchy(o)) {
-    strokeStyledPaths(ctx, shapeDrawable(o, boardStyle), o.dash, o.strokeWidth);
+    const paths = shapeDrawable(o, boardStyle);
+    if (drawPatternFill(ctx, paths, o)) strokeStyledPaths(ctx, paths.filter((p) => !isPatternPath(p)), o.dash, o.strokeWidth);
+    else strokeStyledPaths(ctx, paths, o.dash, o.strokeWidth);
   } else {
     const path = shapePath(o);
     if (o.fill && o.fill !== 'transparent') {
@@ -542,10 +544,57 @@ export function drawShape(ctx: CanvasRenderingContext2D, o: ShapeObj, boardStyle
     }
   }
   if (o.text) {
-    const font = styleRendererFor(o, boardStyle).fontId(o.fontFamily);
-    drawCenteredText(ctx, o.text, o, o.textColor, o.fontSize, font);
+    drawCenteredText(ctx, o.text, o, o.textColor, o.fontSize, drawFontId(o, boardStyle), drawFontWeight(o, boardStyle, 400));
   }
   ctx.restore();
+}
+
+// ---------- pattern-fill bitmaps ----------
+// A hatched / zigzag / dotted fill is hundreds of antialiased curves; stroking them
+// every frame made panning a hatched board slow. Each shape's pattern strokes are
+// rasterized once per drawable (WeakMap: a regenerated drawable drops the old one)
+// at a device scale at or above the current one (√2 steps, so it is at most ~1.4x
+// oversampled and re-rasterizes only when zoom crosses a step), then blitted.
+
+/** A fill drawn as strokes (hachure etc.), as opposed to a solid area or an outline. */
+function isPatternPath(p: StyledPath): boolean {
+  return !p.isBorder && p.fill === 'none' && p.stroke !== 'none';
+}
+
+const patternBitmaps = new WeakMap<StyledPath[], { scale: number; canvas: HTMLCanvasElement }>();
+/** largest bitmap side (device px); bigger fills (deep zoom) are stroked directly */
+const MAX_PATTERN_PX = 4096;
+
+/** Paint a shape's pattern-fill paths from a cached bitmap. False = nothing cached (no pattern, or too big). */
+function drawPatternFill(ctx: CanvasRenderingContext2D, paths: StyledPath[], b: Box): boolean {
+  if (!paths.some(isPatternPath)) return false;
+  const m = ctx.getTransform();
+  const deviceScale = Math.hypot(m.a, m.b);
+  const scale = 2 ** (Math.ceil(2 * Math.log2(Math.max(deviceScale, 1 / 8)) - 1e-9) / 2);
+  // room for the jitter and the "circled" ellipse that overshoots its box
+  const pad = Math.max(b.w, b.h) * 0.08 + 12;
+  const w = b.w + pad * 2;
+  const h = b.h + pad * 2;
+  if (w * scale > MAX_PATTERN_PX || h * scale > MAX_PATTERN_PX) return false;
+  let hit = patternBitmaps.get(paths);
+  if (!hit || hit.scale !== scale) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(w * scale);
+    canvas.height = Math.ceil(h * scale);
+    const g = canvas.getContext('2d')!;
+    g.setTransform(scale, 0, 0, scale, (pad - b.x) * scale, (pad - b.y) * scale);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    for (const p of paths) {
+      if (!isPatternPath(p)) continue;
+      g.strokeStyle = p.stroke;
+      g.lineWidth = p.strokeWidth;
+      g.stroke(toPath2D(p));
+    }
+    patternBitmaps.set(paths, (hit = { scale, canvas }));
+  }
+  ctx.drawImage(hit.canvas, b.x - pad, b.y - pad, hit.canvas.width / scale, hit.canvas.height / scale);
+  return true;
 }
 
 /** Canvas painter for a style's paths; SVG export's sketchySvg is its twin. */
@@ -574,14 +623,15 @@ function drawCenteredText(
   b: Box,
   color: string,
   fontSize: number,
-  fontId?: string
+  fontId?: string,
+  weight = 400
 ) {
   const maxW = Math.max(8, b.w - 16);
-  const lines = wrapText(text, fontSize, maxW, 400, fontId);
+  const lines = wrapText(text, fontSize, maxW, weight, fontId);
   const lh = lineHeight(fontSize);
   const totalH = lines.length * lh;
   ctx.fillStyle = color;
-  ctx.font = fontString(fontSize, 400, fontStack(fontId));
+  ctx.font = fontString(fontSize, weight, fontStack(fontId));
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const cx = b.x + b.w / 2;
@@ -607,11 +657,11 @@ export function drawSticky(ctx: CanvasRenderingContext2D, o: StickyObj, boardSty
   ctx.fill(paper);
   // keep the clamp fade inside the rounded paper
   ctx.clip(paper);
-  const layout = o.text ? clampLayout(o, sr.fontId(o.fontFamily)) : null;
+  const layout = o.text ? clampLayout(o, sr.fontId(o.fontFamily), sr.fontWeight) : null;
   if (layout) {
     const lh = lineHeight(o.fontSize);
     ctx.fillStyle = 'rgba(20,20,20,0.92)';
-    ctx.font = fontString(o.fontSize, 500, fontStack(sr.fontId(o.fontFamily)));
+    ctx.font = fontString(o.fontSize, drawFontWeight(o, boardStyle, 500), fontStack(sr.fontId(o.fontFamily)));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const cx = o.x + o.w / 2;
@@ -681,12 +731,13 @@ function drawClampOverlay(
 
 export function drawText(ctx: CanvasRenderingContext2D, o: TextObj, boardStyle?: DrawStyle) {
   ctx.save();
+  const sr = styleRendererFor(o, boardStyle);
   ctx.fillStyle = o.color;
-  const font = styleRendererFor(o, boardStyle).fontId(o.fontFamily);
-  ctx.font = fontString(o.fontSize, 400, fontStack(font));
+  const font = sr.fontId(o.fontFamily);
+  ctx.font = fontString(o.fontSize, drawFontWeight(o, boardStyle, 400), fontStack(font));
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  const layout = clampLayout(o, font);
+  const layout = clampLayout(o, font, sr.fontWeight);
   const lh = lineHeight(o.fontSize);
   let y = o.y;
   for (const line of layout.lines) {
@@ -791,18 +842,24 @@ export function drawConnector(ctx: CanvasRenderingContext2D, o: ConnectorObj, do
 
 function drawConnectorLabel(ctx: CanvasRenderingContext2D, o: ConnectorObj, pts: Vec[], boardStyle?: DrawStyle) {
   const mid = polylineMidpoint(pts);
-  const fs = 13;
-  ctx.font = fontString(fs, 500, fontStack(drawFontId(o, boardStyle)));
+  const lf = labelFontOf(styleRendererFor(o, boardStyle));
+  ctx.font = fontString(lf.size, lf.weight, fontStack(drawFontId(o, boardStyle)));
   const tw = ctx.measureText(o.label!).width;
   const padX = 6;
+  const bh = connectorLabelHeight(lf.size);
   const bg = new Path2D();
-  bg.roundRect(mid.x - tw / 2 - padX, mid.y - 10, tw + padX * 2, 20, 6);
+  bg.roundRect(mid.x - tw / 2 - padX, mid.y - bh / 2, tw + padX * 2, bh, 6);
   ctx.fillStyle = '#f3f2ef';
   ctx.fill(bg);
   ctx.fillStyle = o.stroke;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(o.label!, mid.x, mid.y + 0.5);
+}
+
+/** Height of a connector label's backing pill for a label font size (20 at the default 13px). */
+export function connectorLabelHeight(fontSize: number): number {
+  return Math.max(20, fontSize + 6);
 }
 
 function trimEnd(pts: Vec[], by: number) {

@@ -3,6 +3,7 @@
 // same path MCP render_board uses) and SVG export — and write them to OUT.
 // Run it on two builds and pass COMPARE=<other OUT dir> to prove the output is
 // byte-identical (e.g. that the 'sketch' style didn't change).
+// STYLE=handdrawn|messy renders the same board in that board style (default: sketch).
 // Usage: OUT=/tmp/a PORT=5181 node scripts/render-sample.mjs
 //        OUT=/tmp/b COMPARE=/tmp/a PORT=5181 node scripts/render-sample.mjs
 import { chromium } from 'playwright';
@@ -33,6 +34,8 @@ if (await skip.count()) await skip.click();
 await page.locator('button.new-board').first().click();
 await page.waitForSelector('.overlay-canvas');
 await page.waitForTimeout(400);
+const STYLE = process.env.STYLE ?? 'sketch';
+if (STYLE !== 'sketch') await page.selectOption('.board-style-select', STYLE);
 
 const out = await page.evaluate(async () => {
   const ctl = window.__slateCtl;
@@ -101,7 +104,7 @@ if (process.env.COMPARE) {
     same &&= eq;
     console.log(`${f}: ${eq ? 'IDENTICAL' : 'DIFFERENT'} (${a.length} vs ${b.length} bytes)`);
   }
-  console.log(same ? 'SKETCH OUTPUT UNCHANGED' : 'SKETCH OUTPUT CHANGED');
+  console.log(`${STYLE.toUpperCase()} OUTPUT ${same ? 'UNCHANGED' : 'CHANGED'}`);
   if (!same) process.exitCode = 1;
 }
 console.log(errors.length ? errors.join('\n') : 'NO ERRORS');

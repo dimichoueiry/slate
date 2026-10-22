@@ -67,3 +67,18 @@ export function backfillSeeds<T extends { id: string; seed?: number }>(objs: T[]
   for (const o of objs) backfillSeed(o);
   return objs;
 }
+
+// ---------- canvas ink ----------
+// The default ink of the open board's canvas surface (dark on light paper, light
+// on a dark board). The theme layer sets it; styles whose palette leads with
+// "ink" read it so the swatch stays legible in dark mode.
+
+let canvasInk = '#1a1a1a';
+
+export function setStyleInk(color: string) {
+  canvasInk = color;
+}
+
+export function styleInk(): string {
+  return canvasInk;
+}
