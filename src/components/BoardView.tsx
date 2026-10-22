@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { goHome } from '../App';
 import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
+import { boardStyleOf } from '../engine/style';
 import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit } from '../store/db';
 import { pullBoardOnOpen } from '../store/gitsync/engine';
 import { useUI } from '../store/ui';
@@ -87,6 +88,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       }
       const objects = await loadBoardObjects(boardId);
       if (cancelled) return;
+      controller.doc.style = boardStyleOf(meta);
       controller.doc.load(objects);
       controller.doc.dirty.clear(); // loading isn't an edit
       controller.setCamera(meta.viewport);
@@ -103,6 +105,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
         presentationStep: 0,
         activeBrandKit: kit ?? null,
         canvasDark: !!meta.canvasDark,
+        boardStyle: controller.doc.style,
       });
       useUI.getState().syncCanvasInk(!!meta.canvasDark);
       autosave = startAutosave(controller.doc, boardId);

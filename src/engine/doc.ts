@@ -1,6 +1,8 @@
 import RBush from 'rbush';
-import type { Box, SlateObj } from '../types';
+import type { Box, DrawStyle, SlateObj } from '../types';
 import { aabbOf, boxesIntersect } from './geometry';
+import { backfillSeeds, DEFAULT_DRAW_STYLE, newSeed } from './style';
+import { clearDrawables, evictDrawables } from './styles';
 
 interface IndexEntry {
   minX: number;
@@ -37,6 +39,9 @@ export class Doc {
   private pending: Command | null = null;
 
   zCounter = 1;
+
+  /** the board's default drawing style (objects without a `style` override use it) */
+  style: DrawStyle = DEFAULT_DRAW_STYLE;
 
   get(id: string): SlateObj | undefined {
     return this.objects.get(id);
@@ -137,9 +142,18 @@ export class Doc {
     }
   }
 
+  /**
+   * Every object gets its seed once, the first time it enters the doc; a replacement
+   * that omits it keeps the current one. Mutates `obj` so the caller sees the seed too.
+   */
+  private ensureSeed(obj: SlateObj, before: SlateObj | null) {
+    if (obj.seed === undefined) obj.seed = before?.seed ?? newSeed();
+  }
+
   /** Create or replace an object (records undo). */
   set(obj: SlateObj) {
     const before = this.objects.get(obj.id) ?? null;
+    this.ensureSeed(obj, before);
     this.record(obj.id, before ? { ...before } : null, { ...obj });
     this.rawSet(obj);
     this.notify(new Set([obj.id]));
@@ -150,6 +164,7 @@ export class Doc {
     const cur = this.objects.get(id);
     if (!cur) return;
     const next = { ...cur, ...patch } as SlateObj;
+    this.ensureSeed(next, cur);
     this.record(id, { ...cur }, { ...next });
     this.rawSet(next);
     this.notify(new Set([id]));
@@ -168,6 +183,7 @@ export class Doc {
     const changed = new Set<string>();
     for (const o of objs) {
       const before = this.objects.get(o.id) ?? null;
+      this.ensureSeed(o, before);
       this.record(o.id, before ? { ...before } : null, { ...o });
       this.rawSet(o);
       changed.add(o.id);
@@ -200,6 +216,7 @@ export class Doc {
   rawDelete(id: string) {
     this.objects.delete(id);
     this.unindex(id);
+    evictDrawables(id);
     this.dirty.set(id, null);
   }
 
@@ -219,6 +236,9 @@ export class Doc {
     this.undoStack = [];
     this.redoStack = [];
     this.dirty.clear();
+    clearDrawables();
+    // objects saved before seeds existed get the id-derived seed they always rendered with
+    backfillSeeds(objs);
     for (const o of objs) {
       this.objects.set(o.id, o);
       if (o.z >= this.zCounter) this.zCounter = Math.floor(o.z) + 1;

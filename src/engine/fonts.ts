@@ -28,14 +28,18 @@ export async function loadDefaultFonts(): Promise<void> {
 }
 
 /** Load every face (incl. unicode-range subsets) needed to draw these objects' text. */
-export async function ensureObjectFonts(objs: Iterable<SlateObj>): Promise<void> {
+export async function ensureObjectFonts(
+  objs: Iterable<SlateObj>,
+  /** FONTS id the object actually draws with (its style may override fontFamily) */
+  fontIdOf: (o: SlateObj & { fontFamily?: string }) => string | undefined = (o) => o.fontFamily
+): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return;
   registerBundledFonts();
   const byStack = new Map<string, Set<string>>();
   for (const o of objs) {
     const text = (o as { text?: unknown }).text;
     if (typeof text !== 'string' || !text) continue;
-    const stack = fontStack((o as { fontFamily?: string }).fontFamily);
+    const stack = fontStack(fontIdOf(o));
     let chars = byStack.get(stack);
     if (!chars) byStack.set(stack, (chars = new Set()));
     for (const ch of text) chars.add(ch);

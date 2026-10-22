@@ -15,7 +15,7 @@ import type {
   UploadFile,
   Vec,
 } from '../types';
-import { STICKY_COLORS, STICKY_DEFAULT } from '../types';
+import { STICKY_COLORS, STICKY_DEFAULT, type DrawStyle } from '../types';
 import {
   cameraToFit,
   MAX_ZOOM,
@@ -40,6 +40,7 @@ import {
 import { hitTest, strokesHitBySegment } from './hit';
 import { strokeOutline, outlineToPath, type InputPoint } from './ink';
 import { drawScene, seedOf, type GridSettings } from './renderer';
+import { newSeed } from './style';
 import { snapBox, snapToGrid, type SnapResult } from './snap';
 import { recognizeStroke, type Recognized } from './recognize';
 import { textBlockSize } from './text';
@@ -355,6 +356,14 @@ export class Controller {
     this.cameraChanged();
   }
 
+  /** Switch the board's default drawing style (objects with their own `style` keep it). */
+  setBoardStyle(style: DrawStyle) {
+    if (this.doc.style === style) return;
+    this.doc.style = style;
+    useUI.getState().set({ boardStyle: style });
+    this.markSceneDirty();
+  }
+
   // ---------- selection / edit API (used by UI chrome + shortcuts) ----------
 
   selectIds(ids: string[]) {
@@ -453,6 +462,7 @@ export class Controller {
         x: o.x + dx,
         y: o.y + dy,
         z: this.doc.nextZ(),
+        seed: newSeed(), // a duplicate gets its own wobble
       };
       if (clone.groupId) {
         if (!groupMap.has(clone.groupId)) groupMap.set(clone.groupId, nanoid(8));
@@ -685,6 +695,8 @@ export class Controller {
       adaptiveRadius: new Set(['shape']),
       seed: new Set(['shape', 'connector']),
       strokeWidth: new Set(['icon']),
+      // per-object style override; undefined = follow the board
+      style: new Set(['shape', 'connector', 'text', 'sticky']),
     };
     this.doc.begin();
     for (const o of this.selectedObjects()) {
@@ -879,6 +891,7 @@ export class Controller {
     const clones: SlateObj[] = comp.objects.map((o) => {
       const c = structuredClone(o);
       c.id = idMap.get(o.id)!;
+      c.seed = newSeed(); // each placed instance is a new object
       c.x += dx;
       c.y += dy;
       c.z = this.doc.nextZ();
@@ -2403,6 +2416,7 @@ export class Controller {
     }
     const clone = structuredClone(src);
     clone.id = nanoid(8);
+    clone.seed = newSeed();
     clone.z = this.doc.nextZ();
     clone.groupId = null;
     clone.parentId = null;

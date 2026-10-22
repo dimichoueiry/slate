@@ -1,7 +1,8 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { nanoid } from 'nanoid';
-import type { BoardMeta, BrandKit, Project, SlateObj } from '../types';
+import type { BoardMeta, BrandKit, DrawStyle, Project, SlateObj } from '../types';
 import type { Doc } from '../engine/doc';
+import { backfillSeeds, DEFAULT_DRAW_STYLE } from '../engine/style';
 
 interface ObjectRow {
   id: string;
@@ -116,7 +117,11 @@ export async function listBoards(): Promise<BoardMeta[]> {
   return boards.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt);
 }
 
-export async function createBoard(name = 'Untitled board', projectId: string | null = null): Promise<BoardMeta> {
+export async function createBoard(
+  name = 'Untitled board',
+  projectId: string | null = null,
+  style: DrawStyle = DEFAULT_DRAW_STYLE
+): Promise<BoardMeta> {
   const board: BoardMeta = {
     id: nanoid(10),
     name,
@@ -124,6 +129,7 @@ export async function createBoard(name = 'Untitled board', projectId: string | n
     updatedAt: Date.now(),
     viewport: { x: -200, y: -200, zoom: 1 },
     projectId,
+    style,
   };
   await db.boards.add(board);
   return board;
@@ -131,7 +137,8 @@ export async function createBoard(name = 'Untitled board', projectId: string | n
 
 export async function loadBoardObjects(boardId: string): Promise<SlateObj[]> {
   const rows = await db.objects.where('boardId').equals(boardId).toArray();
-  return rows.map((r) => r.data);
+  // objects saved before seeds existed get their stable id-derived one
+  return backfillSeeds(rows.map((r) => r.data));
 }
 
 export async function updateBoardMeta(id: string, patch: Partial<BoardMeta>) {
