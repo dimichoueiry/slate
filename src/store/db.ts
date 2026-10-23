@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import type { BoardMeta, BrandKit, DrawStyle, Project, SlateObj } from '../types';
 import type { Doc } from '../engine/doc';
 import { backfillSeeds, DEFAULT_DRAW_STYLE } from '../engine/style';
+import { stampEdit } from './editStamp';
 
 interface ObjectRow {
   id: string;
@@ -148,8 +149,15 @@ export async function loadBoardObjects(boardId: string): Promise<SlateObj[]> {
   return backfillSeeds(rows.map((r) => r.data));
 }
 
+/** Write board meta. Bumps updatedAt only for real edits (name, notes, style…) —
+ *  see editStamp.ts for the fields that don't count. */
 export async function updateBoardMeta(id: string, patch: Partial<BoardMeta>) {
-  await db.boards.update(id, { ...patch, updatedAt: Date.now() });
+  await db.boards.update(id, stampEdit(patch, Date.now()));
+}
+
+/** Camera save path (pan/zoom): stores the viewport, never touches updatedAt. */
+export async function saveBoardViewport(id: string, viewport: BoardMeta['viewport']) {
+  await db.boards.update(id, { viewport });
 }
 
 /**
