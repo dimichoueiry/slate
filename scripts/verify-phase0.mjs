@@ -285,6 +285,12 @@ await page.waitForSelector('[role="alertdialog"]');
 const dlgFocus = await page.evaluate(() => document.activeElement?.textContent);
 await page.screenshot({ path: `${SHOTS}/06-delete-forever-dialog.png` });
 check('dialog: role=alertdialog, focus on primary', dlgFocus === 'Delete forever', dlgFocus);
+// opened by a mouse click: the auto-focused button must still show a ring
+const ring = await page.evaluate(() => {
+  const cs = getComputedStyle(document.activeElement);
+  return `${cs.outlineStyle} ${cs.outlineWidth}`;
+});
+check('dialog: focus ring visible after mouse open', ring.startsWith('solid') && ring !== 'solid 0px', ring);
 // focus trap: Tab twice stays inside
 await page.keyboard.press('Tab');
 await page.keyboard.press('Tab');
@@ -308,6 +314,73 @@ await page.click('button:has-text("New project")');
 await page.waitForSelector('[role="dialog"] input');
 await page.screenshot({ path: `${SHOTS}/07-new-project-dialog.png` });
 await page.keyboard.press('Escape');
+
+// ---- "Edited" timestamp: pan/zoom + leaving the board (thumbnail) don't move it; edits do ----
+const metaOf = (id) =>
+  page.evaluate(async (id) => {
+    const { db } = await import('/src/store/db.ts');
+    const b = await db.boards.get(id);
+    return { updatedAt: b.updatedAt, viewport: b.viewport, thumb: !!b.thumb };
+  }, id);
+const eid = boardIds['RAG lesson sketch'];
+const e0 = (await metaOf(eid)).updatedAt;
+await page.goto(`${BASE}/board/${eid}`);
+await page.waitForSelector('.overlay-canvas');
+await page.waitForTimeout(500);
+await page.keyboard.press('r');
+await page.mouse.move(500, 400);
+await page.mouse.down();
+await page.mouse.move(700, 520, { steps: 5 });
+await page.mouse.up();
+await page.waitForTimeout(2600); // autosave (300ms debounce, 2s max-wait)
+const t1 = (await metaOf(eid)).updatedAt;
+check('edited timestamp: drawing a shape bumps updatedAt', t1 > e0);
+
+// ---- StyleBar "⊕ Save" → in-app prompt; IconTray right-click delete → in-app confirm ----
+await page.click('button[title="Save selection as a reusable component"]');
+await page.waitForSelector('[role="dialog"] input');
+const inputRing = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
+check('StyleBar save: in-app prompt with focused input (ring visible)', inputRing === 'solid', inputRing);
+await page.screenshot({ path: `${SHOTS}/09-save-component-dialog.png` });
+await page.keyboard.type('Phase0 component');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(400);
+const comps = () => page.evaluate(async () => (await (await import('/src/store/db.ts')).listComponents()).map((c) => c.name));
+check('StyleBar save: component created', (await comps()).includes('Phase0 component'));
+// saving a component opens the tray itself (controller.saveSelectionAsComponent)
+if (!(await page.locator('.icon-tray').count())) await page.click('button[title="Icon library (I)"]');
+await page.fill('.icon-tray-header input', 'Phase0');
+await page.waitForSelector('.comp-cell');
+await page.click('.comp-cell', { button: 'right' });
+await page.waitForSelector('[role="alertdialog"]');
+const delTitle = await page.textContent('[role="alertdialog"] .dlg-title');
+await page.click('[role="alertdialog"] button:has-text("Delete")');
+await page.waitForTimeout(400);
+check('IconTray delete: in-app confirm, component removed', delTitle.includes('Phase0 component') && !(await comps()).includes('Phase0 component'), delTitle);
+await page.click('.icon-tray-header button[title="Close"]');
+
+// leave (thumbnail is written on unmount), reopen, pan + zoom, leave again
+await page.click('button[title="All boards"]'); // in-app nav, so BoardView unmounts and writes the thumb
+await page.waitForSelector('.board-card');
+await page.waitForTimeout(1500);
+const m1 = await metaOf(eid);
+await page.goto(`${BASE}/board/${eid}`);
+await page.waitForSelector('.overlay-canvas');
+await page.waitForTimeout(500);
+await page.mouse.move(700, 450);
+for (let i = 0; i < 6; i++) await page.mouse.wheel(120, 80); // pan
+await page.keyboard.down('Control');
+for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -60); // pinch-zoom
+await page.keyboard.up('Control');
+await page.waitForTimeout(1200); // viewport save is debounced 500ms
+const m2 = await metaOf(eid);
+await page.click('button[title="All boards"]');
+await page.waitForSelector('.board-card');
+await page.waitForTimeout(1500);
+const m3 = await metaOf(eid);
+check('edited timestamp: thumbnail written on leave without bumping it', m1.thumb && m1.updatedAt === t1, `${m1.updatedAt} vs ${t1}`);
+check('edited timestamp: pan/zoom saved the camera', JSON.stringify(m2.viewport) !== JSON.stringify(m1.viewport), JSON.stringify(m2.viewport));
+check('edited timestamp: pan/zoom + leaving did not bump it', m2.updatedAt === t1 && m3.updatedAt === t1, `${m3.updatedAt} vs ${t1}`);
 
 // ---- disk mirror: projects.json written; fresh IndexedDB restores boards INTO the project ----
 await page.waitForTimeout(2200); // fsync debounce is 1.5s
