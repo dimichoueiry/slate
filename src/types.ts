@@ -233,6 +233,7 @@ export interface BoardMeta {
   projectId?: string | null; // folder/project this board belongs to
   canvasDark?: boolean; // per-board dark canvas surface (default = light paper)
   style?: DrawStyle; // default drawing style for this board's objects (absent = 'sketch')
+  deletedAt?: number; // set = in Trash (soft delete); absent = live
 }
 
 /** A folder/project grouping boards on the home screen. */
@@ -241,6 +242,7 @@ export interface Project {
   name: string;
   createdAt: number;
   brandKitId?: string | null; // default brand kit for boards in this project
+  deletedAt?: number; // set = in Trash (soft delete); absent = live
 }
 
 /** A reusable brand kit applied to AI nodes on a board. */

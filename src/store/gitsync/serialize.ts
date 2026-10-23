@@ -10,7 +10,8 @@
 
 import { nanoid } from 'nanoid';
 import { db } from '../db';
-import type { BoardMeta, SlateObj } from '../../types';
+import type { BoardMeta, Project, SlateObj } from '../../types';
+import { groupBoards } from '../boardGroups';
 
 export interface BoardFile {
   format: 'slate-git-board';
@@ -236,6 +237,13 @@ const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id 
  */
 export async function buildReadme(): Promise<string> {
   const [boards, projects] = await Promise.all([db.boards.toArray(), db.projects.toArray()]);
+  return renderReadme(boards, projects);
+}
+
+/** Pure README renderer. Every board is listed exactly once: Trash last, and a
+ *  board whose project is missing or trashed under General (same rule as the
+ *  dashboard), so the index never hides a board that's in the repo. */
+export function renderReadme(boards: BoardMeta[], projects: Project[]): string {
   const byUpdated = (a: BoardMeta, b: BoardMeta) => b.updatedAt - a.updatedAt;
   const line = (b: BoardMeta) =>
     `- [${escapeMd(b.name)}](slate/boards/${b.id}.json) — updated ${new Date(b.updatedAt).toISOString().slice(0, 10)}`;
@@ -246,13 +254,18 @@ export async function buildReadme(): Promise<string> {
     '_Synced by [Slate](https://github.com/dimichoueiry/slate). This index is regenerated on every sync — edits to it will be overwritten._',
     '',
   ];
-  const general = boards.filter((b) => !b.projectId).sort(byUpdated);
+  const { unfiled, byProject } = groupBoards(boards, projects);
+  const general = unfiled.sort(byUpdated);
   if (general.length) {
     parts.push('## General', '', ...general.map(line), '');
   }
-  for (const p of projects.sort((a, b) => a.createdAt - b.createdAt)) {
-    const inProject = boards.filter((b) => b.projectId === p.id).sort(byUpdated);
+  for (const p of projects.filter((p) => !p.deletedAt).sort((a, b) => a.createdAt - b.createdAt)) {
+    const inProject = (byProject.get(p.id) ?? []).sort(byUpdated);
     parts.push(`## ${escapeMd(p.name)}`, '', ...(inProject.length ? inProject.map(line) : ['_no boards yet_']), '');
+  }
+  const trashed = boards.filter((b) => b.deletedAt).sort(byUpdated);
+  if (trashed.length) {
+    parts.push('## Trash', '', '_In Slate\'s Trash — kept here until deleted forever._', '', ...trashed.map(line), '');
   }
   if (!boards.length) parts.push('_No boards yet._', '');
   return parts.join('\n');
