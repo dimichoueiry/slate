@@ -14,6 +14,7 @@ import {
 } from '../store/db';
 import { nanoid } from 'nanoid';
 import { BRAND_PRESETS } from '../engine/brandPresets';
+import { confirmDialog } from './Dialogs';
 
 const CSS = `
 .brand-pill{display:flex;align-items:center;gap:5px;border:none;background:var(--surface-2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap}
@@ -84,7 +85,7 @@ export function BrandKitEditor({ kit, onClose, afterChange }: { kit: BrandKit; o
   };
 
   const remove = async () => {
-    if (!confirm(`Delete brand kit “${draft.name}”?`)) return;
+    if (!(await confirmDialog({ title: `Delete brand kit “${draft.name}”?`, confirmLabel: 'Delete', danger: true }))) return;
     await deleteBrandKit(draft.id);
     const s = useUI.getState();
     if (s.activeBrandKit?.id === draft.id) s.set({ activeBrandKit: null });
