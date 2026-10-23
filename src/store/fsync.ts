@@ -1,7 +1,8 @@
 // File persistence sync (dev): mirrors IndexedDB → ./data on every change and
-// restores missing boards/components from disk on startup. Injected by the
+// restores missing boards/projects/components from disk on startup. Injected by the
 // vite-slate-persist plugin; fails silently when the endpoints don't exist.
 import { db } from './db';
+import { restoreSnapshot, type Snapshot } from './fsyncRestore';
 
 const API = '/__slate';
 let restoring = false;
@@ -19,6 +20,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 const boardTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let compTimer: ReturnType<typeof setTimeout> | null = null;
+let projTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleBoardPush(boardId: string | undefined) {
   if (restoring || !boardId) return;
@@ -33,6 +35,12 @@ function scheduleComponentsPush() {
   if (restoring) return;
   if (compTimer) clearTimeout(compTimer);
   compTimer = setTimeout(() => void pushComponents(), 1500);
+}
+
+function scheduleProjectsPush() {
+  if (restoring) return;
+  if (projTimer) clearTimeout(projTimer);
+  projTimer = setTimeout(() => void pushProjects(), 1500);
 }
 
 async function pushBoard(boardId: string) {
@@ -74,35 +82,34 @@ async function pushComponents() {
   }
 }
 
+// projects (incl. trashed ones) — without these a restored board's projectId
+// points at nothing and, before the dashboard's orphan fallback, the board
+// vanished from every screen
+async function pushProjects() {
+  try {
+    const projects = await db.projects.toArray();
+    await fetch(`${API}/projects`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(projects),
+    });
+  } catch {
+    // ignore
+  }
+}
+
 // ---------- restore: disk → IndexedDB (only what's missing) ----------
 
 async function restore() {
+  let restored = false;
   try {
     const res = await fetch(`${API}/snapshot`);
     if (!res.ok) return;
-    const snap = (await res.json()) as {
-      boards?: { meta: any; objects: any[]; blobs?: Record<string, string> }[];
-      components?: any[];
-    };
+    const snap = (await res.json()) as Snapshot;
     restoring = true;
-    for (const sb of snap.boards ?? []) {
-      if (!sb?.meta?.id) continue;
-      if (await db.boards.get(sb.meta.id)) continue;
-      await db.boards.put(sb.meta);
-      await db.objects.bulkPut(
-        (sb.objects ?? []).map((o: any) => ({ id: `${sb.meta.id}:${o.id}`, boardId: sb.meta.id, data: o }))
-      );
-      for (const [bid, dataUrl] of Object.entries(sb.blobs ?? {})) {
-        if (!(await db.blobs.get(bid))) {
-          const blob = await (await fetch(dataUrl)).blob();
-          await db.blobs.put({ id: bid, blob });
-        }
-      }
-    }
-    for (const c of snap.components ?? []) {
-      if (c?.id && !(await db.components.get(c.id))) await db.components.put(c);
-    }
-    if ((snap.boards?.length ?? 0) > 0 && /^\/app\/?$/.test(location.pathname) && document.visibilityState === 'visible') {
+    await restoreSnapshot(snap, db, async (dataUrl) => (await fetch(dataUrl)).blob());
+    restored = true;
+    if ((snap.boards?.length ?? 0) + (snap.projects?.length ?? 0) > 0 && /^\/app\/?$/.test(location.pathname) && document.visibilityState === 'visible') {
       // boards restored before the home screen first rendered need a refresh of the list
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
@@ -111,6 +118,10 @@ async function restore() {
   } finally {
     restoring = false;
   }
+  // mirrors written before projects were mirrored have no projects.json yet:
+  // write it once now. Only after a successful restore — IndexedDB then holds
+  // every project the disk had, so this write can't drop one.
+  if (restored) scheduleProjectsPush();
 }
 
 // ---------- wire Dexie hooks (no app code changes needed) ----------
@@ -124,6 +135,9 @@ db.boards.hook('deleting', (pk) => scheduleBoardPush(String(pk)));
 db.components.hook('creating', () => scheduleComponentsPush());
 db.components.hook('updating', () => scheduleComponentsPush());
 db.components.hook('deleting', () => scheduleComponentsPush());
+db.projects.hook('creating', () => scheduleProjectsPush());
+db.projects.hook('updating', () => scheduleProjectsPush());
+db.projects.hook('deleting', () => scheduleProjectsPush());
 
 void restore();
 
