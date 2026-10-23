@@ -25,10 +25,18 @@ export function createMirrorHandler(dataDir: string) {
       res.setHeader('content-type', 'application/json');
       res.end(body);
     };
+    // the write runs in a later callback, outside the try below — an fs error
+    // there (e.g. the data dir was removed) must answer 500, not crash the dev server
     const readBody = (cb: (body: string) => void) => {
       let body = '';
       req.on('data', (d) => (body += d));
-      req.on('end', () => cb(body));
+      req.on('end', () => {
+        try {
+          cb(body);
+        } catch (e) {
+          send(500, JSON.stringify({ error: String(e) }));
+        }
+      });
     };
     try {
       if (req.method === 'GET' && url === '/snapshot') {
@@ -62,6 +70,7 @@ export function createMirrorHandler(dataDir: string) {
       }
       if (req.method === 'PUT' && (url === '/components' || url === '/projects')) {
         readBody((body) => {
+          fs.mkdirSync(dataDir, { recursive: true });
           fs.writeFileSync(path.join(dataDir, `${url.slice(1)}.json`), body);
           send(200);
         });

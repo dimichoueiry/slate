@@ -114,3 +114,16 @@ test('restore never overwrites rows IndexedDB already has', async () => {
   assert.equal(db.projects.m.get('p1').name, 'Local name');
   assert.equal(db.boards.m.get('b1').name, 'Local board');
 });
+
+test('mirror: a write after the data dir vanished answers (recreates it), never throws', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slate-mirror-'));
+  try {
+    const h = createMirrorHandler(dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+    assert.equal((await call(h, 'PUT', '/projects', [])).status, 200);
+    assert.equal((await call(h, 'PUT', '/board/b1', { meta: meta('b1', null), objects: [] })).status, 200);
+    assert.ok(fs.existsSync(path.join(dir, 'boards', 'b1.json')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
