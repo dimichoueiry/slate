@@ -7,6 +7,7 @@ import { DRAW_STYLES, DRAW_STYLE_LABELS, effectiveStyle, isDrawStyle } from '../
 import { getStyleRenderer, type StyleRenderer } from '../engine/styles';
 import { ensureVideoModels, cachedVideoModelInfo, getVideoModel, type VideoModelInfo } from '../ai/llm';
 import FloatingPanel from './FloatingPanel';
+import { promptDialog } from './Dialogs';
 import {
   DEFAULT_REVEAL_DURATION,
   DEFAULT_REVEAL_EFFECT,
@@ -647,8 +648,8 @@ function StyleBarInner({ ctl, activeStyle }: { ctl: Controller; activeStyle: Sty
         <button
           className="chrome-btn"
           title="Save selection as a reusable component"
-          onClick={() => {
-            const name = prompt('Component name', 'My component');
+          onClick={async () => {
+            const name = await promptDialog({ title: 'Save as component', label: 'Component name', initial: 'My component' });
             if (name) void ctl.saveSelectionAsComponent(name);
           }}
         >

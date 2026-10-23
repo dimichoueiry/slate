@@ -1565,7 +1565,10 @@ button { font-family: inherit; }
   border-radius: var(--r-sm);
   padding: 8px 10px;
 }
-.dlg-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* :focus, not :focus-visible — a dialog opened by mouse still auto-focuses its
+   input or primary button, and that focus must be visible (Enter acts on it) */
+.dlg-field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dlg .chrome-btn:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .dlg-actions .chrome-btn { padding: 8px 14px; font-size: 13px; }
 .dlg-actions .chrome-btn.primary { color: var(--on-accent); }
