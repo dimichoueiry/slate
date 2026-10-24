@@ -113,8 +113,10 @@ export async function serializeBoard(boardId: string): Promise<Serialized | null
   if (!full) return null;
   // thumb is a regenerated preview PNG (data URL): derived cache, not user
   // data. Inlining it would swamp the file and commit churn on every close.
+  // openedAt is this device's Recents stamp: opening a board isn't a change
   const meta: BoardMeta = { ...full };
   delete meta.thumb;
+  delete meta.openedAt;
   const rows = await db.objects.where('boardId').equals(boardId).toArray();
   const objects = rows.map((r) => r.data).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const { refs, assets } = await collectAssets(objects);
@@ -151,10 +153,12 @@ export async function applyRemoteBoard(
     if (blobPuts.length) await db.blobs.bulkPut(blobPuts);
     await db.objects.where('boardId').equals(boardId).delete();
     await db.objects.bulkPut(data.objects.map((o) => ({ id: `${boardId}:${o.id}`, boardId, data: o })));
-    // repo files carry no thumb (derived cache) — keep the local one so the
-    // dashboard preview survives a pull; it regenerates on next open anyway
+    // repo files carry no thumb (derived cache) or openedAt (per device) — keep
+    // the local ones so the dashboard preview and Recents survive a pull
     const local = await db.boards.get(boardId);
-    await db.boards.put(data.meta.thumb || !local?.thumb ? data.meta : { ...data.meta, thumb: local.thumb });
+    const meta = data.meta.thumb || !local?.thumb ? { ...data.meta } : { ...data.meta, thumb: local.thumb };
+    if (local?.openedAt && !meta.openedAt) meta.openedAt = local.openedAt;
+    await db.boards.put(meta);
   });
 }
 

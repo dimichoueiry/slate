@@ -8,7 +8,7 @@ import { exportSlateFileById, downloadBlob } from '../export/export';
 import { fullTime, relativeTime } from '../store/relativeTime';
 import { openBoard } from '../App';
 import { promptDialog, toast } from './Dialogs';
-import { Ellipsis, Pin } from 'lucide-react';
+import { Ellipsis, PenLine, Pin } from 'lucide-react';
 
 interface Props {
   board: BoardMeta;
@@ -17,23 +17,37 @@ interface Props {
   refresh: () => void;
   /** shown in the meta line when the view spans projects */
   projectName?: string;
+  /** Recents: say "Opened" when that's newer than the last edit */
+  showOpened?: boolean;
+  /** search text to mark in the name */
+  highlight?: string;
 }
 
-export default function BoardCard({ board: b, projects, now, refresh, projectName }: Props) {
+export default function BoardCard({ board: b, projects, now, refresh, projectName, showOpened, highlight }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuBtn = useRef<HTMLButtonElement>(null);
+  const opened = showOpened && (b.openedAt ?? 0) > b.updatedAt;
+  const at = opened ? b.openedAt! : b.updatedAt;
 
   return (
     <div className={`board-card${menuOpen ? ' menu-open' : ''}`}>
       <button className="card-open" onClick={() => openBoard(b.id)} aria-label={`Open board ${b.name}`}>
-        {b.thumb ? <img className="thumb" src={b.thumb} alt="" /> : <div className="thumb empty" aria-hidden="true" />}
+        {b.thumb ? (
+          <img className="thumb" src={b.thumb} alt="" />
+        ) : (
+          <div className="thumb empty" aria-hidden="true">
+            <PenLine size={18} strokeWidth={1.75} />
+            <span>Blank board</span>
+          </div>
+        )}
         <div className="meta">
           <div className="name">
             {b.pinned ? <Pin className="pin" size={12} aria-label="Pinned" /> : null}
-            <span className="name-text">{b.name}</span>
+            <span className="name-text">{marked(b.name, highlight)}</span>
           </div>
           <div className="date">
-            {projectName ? `${projectName} · ` : ''}Edited <time dateTime={new Date(b.updatedAt).toISOString()} title={fullTime(b.updatedAt)}>{relativeTime(b.updatedAt, now)}</time>
+            {projectName ? <span className="date-project">{projectName} · </span> : ''}
+            {opened ? 'Opened' : 'Edited'} <time dateTime={new Date(at).toISOString()} title={fullTime(at)}>{relativeTime(at, now)}</time>
           </div>
         </div>
       </button>
@@ -60,6 +74,19 @@ export default function BoardCard({ board: b, projects, now, refresh, projectNam
         />
       )}
     </div>
+  );
+}
+
+/** Wrap the first case-insensitive match of `q` in <mark>. */
+function marked(text: string, q?: string) {
+  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (!q || i < 0) return text;
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark>{text.slice(i, i + q.length)}</mark>
+      {text.slice(i + q.length)}
+    </>
   );
 }
 

@@ -671,7 +671,7 @@ button, input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: center;
 }
-.minimap-chip:hover { color: #fff; }
+.minimap-chip:hover { color: var(--ink-text); }
 
 .hint {
   position: absolute;
@@ -1123,7 +1123,7 @@ button, input, select, textarea { font-family: inherit; }
   border-radius: 13px;
 }
 .chat-msg.user .chat-bubble {
-  background: linear-gradient(135deg, var(--accent), #6741d9);
+  background: var(--accent-grad);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
@@ -1677,6 +1677,24 @@ kbd, .lib-search kbd {
 .lib-group-label { font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 var(--s3); }
 .lib-empty { padding: var(--s10, 40px) 0; color: var(--text-dim); display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
 .lib-empty p { margin: 0; }
+.lib-empty-icon { color: var(--text-faint); margin-bottom: var(--s1); }
+.lib-empty .lib-empty-title { font-family: var(--font-display); font-size: var(--fs-lg); font-weight: 600; color: var(--text); }
+.lib-empty-acts { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s1); }
+.lib-sub { flex-basis: 100%; order: 3; margin: calc(-1 * var(--s2)) 0 0; font-size: var(--fs-sm); color: var(--text-dim); }
+.lib-project-hits { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s2); }
+.lib-project-hit {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s3); border: none; border-radius: var(--r-md);
+  background: var(--surface-1); box-shadow: var(--tonal-hi), 0 0 0 1px var(--line);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.lib-project-hit svg { color: var(--ink-text); flex: none; }
+.lib-project-hit:hover { background: var(--surface-2); }
+.lib-project-hit:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--highlight); }
+.lib-project-hit-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.lib-more { margin: var(--s5) 0 0; font-size: var(--fs-sm); color: var(--text-dim); }
+.lib-link { border: none; background: none; padding: 0; font: inherit; color: var(--ink-text); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.lib-link:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--highlight); border-radius: 2px; }
 
 /* focus: a highlighter halo, offset from the element */
 .lib-icon-btn:focus-visible,
@@ -1717,10 +1735,18 @@ kbd, .lib-search kbd {
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 .board-card .thumb.empty {
-  background-color: var(--surface-2);
-  background-image: radial-gradient(color-mix(in srgb, var(--text) 14%, transparent) 1px, transparent 1px);
-  background-size: 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  background: var(--surface-2);
+  color: var(--text-faint);
 }
+.board-card .thumb.empty span { font-family: var(--font-mono); font-size: 11px; line-height: 14px; letter-spacing: 0.02em; }
+.board-card:hover .thumb.empty { color: var(--ink-text); }
+.board-card .name mark { background: var(--highlight); color: var(--on-highlight); border-radius: 2px; padding: 0 1px; }
+.board-card .date-project { color: var(--text); }
 .board-card:hover .thumb { transform: translateY(-2px); box-shadow: var(--shadow); }
 .board-card .card-open:focus-visible .thumb { box-shadow: 0 0 0 2px var(--bg), 0 0 0 5px var(--highlight); }
 .board-card .meta { padding: var(--s2) 2px 0; }
@@ -1765,8 +1791,11 @@ kbd, .lib-search kbd {
 .board-grid.list .card-open:hover { background: var(--surface-2); }
 .board-grid.list .card-open:focus-visible { box-shadow: inset 0 0 0 2px var(--highlight); }
 .board-grid.list .thumb { width: 64px; flex: none; border-radius: var(--r-xs); }
+.board-grid.list .thumb.empty span { display: none; }
 .board-grid.list .board-card:hover .thumb { transform: none; box-shadow: var(--tonal-hi); }
 .board-grid.list .meta { flex: 1; min-width: 0; padding: 0; display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); }
+.board-grid.list .name { flex: 1 1 auto; min-width: 0; }
+.board-grid.list .date { flex: 0 1 auto; min-width: 0; }
 .board-grid.list .card-menu-btn { top: 50%; translate: 0 -50%; opacity: 1; background: transparent; box-shadow: none; color: var(--text-dim); }
 .board-grid.list .card-menu { top: calc(50% + 18px); }
 
@@ -1794,8 +1823,12 @@ kbd, .lib-search kbd {
   .home.nav-open .lib-scrim { display: block; position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
   .lib-menu-btn { display: inline-flex; margin-left: calc(-1 * var(--s2)); }
   .lib-main { padding: var(--s4); }
-  .lib-controls { margin-left: 0; width: 100%; justify-content: flex-end; }
+  .lib-controls { margin-left: 0; width: 100%; justify-content: flex-start; }
   .board-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s4); }
+  .board-grid.list { grid-template-columns: minmax(0, 1fr); }
+  .board-grid.list .meta { flex-direction: column; align-items: flex-start; gap: 0; }
+  .board-grid.list .name, .board-grid.list .date { max-width: 100%; }
+  .board-grid.list .thumb { width: 56px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lib-sidebar, .board-card .thumb, .lib-new { transition: none; }
