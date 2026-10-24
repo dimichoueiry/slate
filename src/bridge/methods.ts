@@ -16,6 +16,7 @@ import { boardStyleOf, DRAW_STYLES, isDrawStyle } from '../engine/style';
 import { readUpload, uploadLabel } from '../ui/upload';
 import { runAINode, isAINode } from '../ui/ainodes';
 import { getActiveCtl, waitForBoard } from './registry';
+import { askPermission } from './agentStore';
 import { layoutLayered, layoutGrid, type LayoutItem, type LayoutEdge } from './layout';
 import { checkSvg, svgNaturalSize, withExplicitSize } from './svgCheck';
 import type { RevealEffect } from '../types';
@@ -879,7 +880,19 @@ export async function add_upload(params: AnyObj): Promise<AnyObj> {
 
 // ---------- dispatcher (capability ceiling: exactly these thirteen methods) ----------
 
+/**
+ * Agent permission prompt (served to the spawned claude via
+ * --permission-prompt-tool → slate-mcp request_permission → here). Shows the
+ * user an Allow/Deny chip in the agent panel and returns their decision.
+ */
+async function permission_ask(params: AnyObj) {
+  const toolName = str(params.tool_name, 'a tool');
+  const decision = await askPermission(toolName, params.input ?? {});
+  return { approved: !!decision.approved, message: decision.message };
+}
+
 export const METHODS: Record<string, (params: AnyObj) => Promise<any>> = {
+  'permission.ask': permission_ask,
   list_boards,
   read_board,
   get_selection,
