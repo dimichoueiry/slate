@@ -1644,7 +1644,7 @@ kbd, .lib-search kbd {
 .lib-foot-btn:hover { background: var(--surface-2); color: var(--text); }
 
 .lib-main { flex: 1; min-width: 0; overflow-y: auto; padding: var(--s5) var(--s6) var(--s6); }
-.lib-header { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; min-height: 40px; margin-bottom: var(--s5); }
+.lib-header { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; min-height: 40px; margin-bottom: var(--s5); padding-right: 40px; /* clears the global settings gear */ }
 .lib-title { font-family: var(--font-display); font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -0.02em; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-project-acts { display: flex; align-items: center; gap: var(--s1); }
 .lib-controls { margin-left: auto; display: flex; align-items: center; gap: var(--s2); }
