@@ -30,9 +30,11 @@ export default defineConfig({
         name: 'Slate',
         short_name: 'Slate',
         description: 'An infinite-canvas sketchbook for thinking, drawing, diagramming, and planning.',
-        theme_color: '#101012',
-        background_color: '#101012',
+        theme_color: '#0B0D10',
+        background_color: '#0B0D10',
         display: 'standalone',
+        start_url: '/app',
+        scope: '/',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },

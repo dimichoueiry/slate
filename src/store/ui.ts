@@ -225,7 +225,7 @@ export const useUI = create<UIState>((setState) => ({
   toggleTheme: () =>
     setState((s) => {
       const next: Theme = s.theme === 'dark' ? 'light' : 'dark';
-      applyTheme(next);
+      applyTheme(next, true);
       return { theme: next };
     }),
   canvasDark: false,

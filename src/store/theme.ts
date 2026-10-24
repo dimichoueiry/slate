@@ -8,26 +8,47 @@ import { setStyleInk } from '../engine/style';
 export type Theme = 'light' | 'dark';
 const KEY = 'slate-theme';
 
-export function loadTheme(): Theme {
+/** The theme the user picked with the toggle, or null = follow the OS. */
+export function savedTheme(): Theme | null {
   try {
     const t = localStorage.getItem(KEY);
     if (t === 'light' || t === 'dark') return t;
   } catch {
     /* storage unavailable */
   }
-  // default 'dark' = today's dark glassy chrome (zero regression). The canvas stays
-  // light paper in both themes for now; 'light' reskins the chrome to a light UI.
-  return 'dark';
+  return null;
 }
 
-/** Apply the global chrome theme (panels/dashboard). The canvas surface is per-board. */
-export function applyTheme(theme: Theme) {
+function osTheme(): Theme {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+/** A manual pick wins; otherwise follow prefers-color-scheme. */
+export function loadTheme(): Theme {
+  return savedTheme() ?? osTheme();
+}
+
+/** Apply the global chrome theme (panels/dashboard). The canvas surface is per-board.
+ *  `persist` = a manual pick from the toggle; startup/OS changes don't persist. */
+export function applyTheme(theme: Theme, persist = false) {
   document.documentElement.dataset.theme = theme;
+  if (!persist) return;
   try {
     localStorage.setItem(KEY, theme);
   } catch {
     /* ignore */
   }
+}
+
+/** Follow OS theme changes until the user picks one manually. */
+export function watchOsTheme(onChange: (t: Theme) => void) {
+  if (typeof matchMedia !== 'function') return;
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (savedTheme()) return;
+    const t = osTheme();
+    applyTheme(t);
+    onChange(t);
+  });
 }
 
 // Canvas surface is a per-board choice, independent of the chrome theme.
