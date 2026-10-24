@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useUI } from '../store/ui';
 import type { BoardMeta, Project } from '../types';
 import {
@@ -27,11 +27,39 @@ import { requestNameOnOpen } from '../store/pendingName';
 import { alertDialog, promptDialog, toast } from './Dialogs';
 import BoardCard from './BoardCard';
 import TrashView from './TrashView';
+import {
+  Clock,
+  Download,
+  Folder,
+  FolderPlus,
+  LayoutGrid,
+  LifeBuoy,
+  List,
+  Menu,
+  Moon,
+  Pencil,
+  Pin,
+  Plus,
+  Search,
+  Sun,
+  Trash2,
+  TriangleAlert,
+  Upload,
+} from 'lucide-react';
 
 const ONBOARD_KEY = 'slate-onboarded';
 
-/** What the dashboard's main pane shows. A sidebar can drive this next. */
-export type HomeSection = 'boards' | 'trash';
+/** What the dashboard's main pane shows, picked in the sidebar. */
+export type Section = 'recents' | 'pinned' | 'all' | 'trash' | `project:${string}`;
+type SortKey = 'edited' | 'name' | 'created';
+
+function readPref(k: string): string | null {
+  try {
+    return localStorage.getItem(`slate-home-${k}`);
+  } catch {
+    return null;
+  }
+}
 
 /** Re-render on a slow tick so "Edited 2m ago" labels stay true. */
 function useNow(everyMs = 60_000): number {
@@ -48,7 +76,34 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [trashedBoards, setTrashedBoards] = useState<BoardMeta[]>([]);
   const [trashedProjects, setTrashedProjects] = useState<Project[]>([]);
-  const [section, setSection] = useState<HomeSection>('boards');
+  const [section, setSection] = useState<Section>('recents');
+  const [query, setQuery] = useState('');
+  const [navOpen, setNavOpen] = useState(false);
+  const [sort, setSort] = useState<SortKey>(() => (readPref('sort') as SortKey) ?? 'edited');
+  const [view, setView] = useState<'grid' | 'list'>(() => (readPref('view') === 'list' ? 'list' : 'grid'));
+  const searchRef = useRef<HTMLInputElement>(null);
+  const setPref = (k: 'sort' | 'view', v: string) => {
+    if (k === 'sort') setSort(v as SortKey);
+    else setView(v as 'grid' | 'list');
+    try {
+      localStorage.setItem(`slate-home-${k}`, v);
+    } catch {
+      /* ignore */
+    }
+  };
+  // ⌘K / Ctrl+K focuses the board search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setNavOpen(true);
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const now = useNow();
   const [kits, setKits] = useState<BrandKit[]>([]);
   const [onboarded, setOnboarded] = useState(() => {
@@ -130,7 +185,7 @@ export default function Home() {
     refresh();
     toast(
       boardCount
-        ? `Project “${p.name}” moved to Trash. Its ${boardCount} board${boardCount === 1 ? '' : 's'} show under Unfiled until you restore it.`
+        ? `Project “${p.name}” moved to Trash. Its ${boardCount} board${boardCount === 1 ? '' : 's'} stay in All boards until you restore it.`
         : `Project “${p.name}” moved to Trash.`,
       {
         action: {
@@ -164,7 +219,7 @@ export default function Home() {
   };
 
   // a board whose project is missing or trashed lands in `unfiled` — never hidden
-  const { unfiled, byProject } = groupBoards(boards ?? [], projects);
+  const { byProject } = groupBoards(boards ?? [], projects);
   const trashCount = trashedBoards.length + trashedProjects.length;
 
   const theme = useUI((s) => s.theme);
@@ -173,169 +228,282 @@ export default function Home() {
   if (dbError) {
     return (
       <div className="home">
-        <h1>
-          <span className="logo">▱</span> Slate
-        </h1>
-        <div className="durability warn" style={{ margin: '24px 0', maxWidth: 720 }}>
-          <span>
-            ⚠ Slate couldn't open its local storage — your boards are <b>not deleted</b>, this tab just lost its
-            connection (usually after an update in another tab).{' '}
-            <button className="chrome-btn" onClick={() => location.reload()}>
-              Reload to reconnect
-            </button>
-          </span>
-          <span style={{ opacity: 0.7, fontSize: 12 }}>({dbError})</span>
-        </div>
+        <main className="lib-main">
+          <h1 className="lib-title">Slate</h1>
+          <div className="durability warn" style={{ margin: '24px 0', maxWidth: 720 }}>
+            <span>
+              <TriangleAlert size={16} aria-hidden="true" /> Slate couldn't open its local storage — your boards are{' '}
+              <b>not deleted</b>, this tab just lost its connection (usually after an update in another tab).{' '}
+              <button className="chrome-btn" onClick={() => location.reload()}>
+                Reload to reconnect
+              </button>
+            </span>
+            <span style={{ opacity: 0.7, fontSize: 12 }}>({dbError})</span>
+          </div>
+        </main>
       </div>
     );
   }
 
+  const q = query.trim().toLowerCase();
+  const matches = (b: BoardMeta) => !q || b.name.toLowerCase().includes(q);
+  const sortFn = (a: BoardMeta, b: BoardMeta) =>
+    sort === 'name'
+      ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+      : sort === 'created'
+        ? b.createdAt - a.createdAt
+        : b.updatedAt - a.updatedAt;
+  const pinnedFirst = (a: BoardMeta, b: BoardMeta) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || sortFn(a, b);
+
+  const all = boards ?? [];
+  const project = section.startsWith('project:') ? projects.find((p) => `project:${p.id}` === section) : undefined;
+  // a project that just went to Trash (or vanished) falls back to All boards
+  const current: Section = section.startsWith('project:') && !project ? 'all' : section;
+  const pinnedCount = all.filter((b) => b.pinned).length;
+
+  let shown: BoardMeta[] = [];
+  if (current === 'recents') shown = [...all].sort(sortFn);
+  else if (current === 'pinned') shown = all.filter((b) => b.pinned).sort(sortFn);
+  else if (current === 'all') shown = [...all].sort(pinnedFirst);
+  else if (project) shown = [...(byProject.get(project.id) ?? [])].sort(pinnedFirst);
+  shown = shown.filter(matches);
+
+  const title =
+    current === 'recents' ? 'Recents' : current === 'pinned' ? 'Pinned' : current === 'all' ? 'All boards' : current === 'trash' ? 'Trash' : project?.name ?? '';
+
+  const go = (s: Section) => {
+    setSection(s);
+    setNavOpen(false);
+  };
+
+  const navItem = (s: Section, label: string, icon: React.ReactNode, count?: number) => (
+    <button className={`lib-nav-item${current === s ? ' active' : ''}`} aria-current={current === s ? 'page' : undefined} onClick={() => go(s)}>
+      <span className="lib-nav-icon" aria-hidden="true">{icon}</span>
+      <span className="lib-nav-label">{label}</span>
+      {count != null && count > 0 && <span className="lib-count">{count}</span>}
+    </button>
+  );
+
+  // Recents reads as a timeline when sorted by edit time; other sorts are one flat grid
+  const groups: { label: string | null; items: BoardMeta[] }[] =
+    current === 'recents' && sort === 'edited' ? timeGroups(shown, now) : [{ label: null, items: shown }];
+
   return (
-    <div className="home">
-      <button
-        className="home-theme-toggle"
-        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-        onClick={() => toggleTheme()}
-      >
-        {theme === 'dark' ? '☀' : '☾'}
-      </button>
-      <h1>
-        <span className="logo">▱</span> Slate
-      </h1>
-      <p className="sub">
-        Your infinite sketchbook — local, instant, offline.{' '}
-        <button className="chrome-btn" style={{ marginLeft: 8 }} onClick={() => fileRef.current?.click()}>
-          Import .slate
-        </button>
-        <button className="chrome-btn" style={{ marginLeft: 6 }} title="Download every board, project and asset as one backup file" onClick={() => void onExportAll()}>
-          ⬇ Export all
-        </button>
-        <button className="chrome-btn" style={{ marginLeft: 6 }} onClick={onNewProject}>
-          ＋ New project
-        </button>
-        <button
-          className={`chrome-btn${section === 'trash' ? ' primary' : ''}`}
-          style={{ marginLeft: 6 }}
-          aria-pressed={section === 'trash'}
-          onClick={() => setSection(section === 'trash' ? 'boards' : 'trash')}
-        >
-          🗑 Trash{trashCount ? ` (${trashCount})` : ''}
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".slate,application/json"
-          hidden
-          onChange={(e) => onImport(e.target.files?.[0])}
-        />
-      </p>
-
-      <DurabilityBanner />
-
-      {showOnboarding && (
-        <div className="onboard-card">
-          <div className="onboard-title">What will you use Slate for?</div>
-          <div className="onboard-sub">
-            We'll set a brand voice so AI nodes match your style. You can change or add more anytime in ⚙ Settings.
-          </div>
-          <div className="onboard-presets">
-            {BRAND_PRESETS.map((p) => (
-              <button key={p.id} className="onboard-preset" onClick={() => void pickWorkspace(p.id)}>
-                <span className="oemoji">{p.emoji}</span>
-                <span className="oname">{p.name}</span>
-              </button>
-            ))}
-          </div>
-          <button className="onboard-skip" onClick={() => void pickWorkspace(null)}>
-            Skip for now
+    <div className={`home lib${navOpen ? ' nav-open' : ''}`}>
+      <aside className="lib-sidebar" aria-label="Library">
+        <div className="lib-brand">
+          <span className="lib-wordmark">Slate</span>
+          <button
+            className="lib-icon-btn"
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            onClick={() => toggleTheme()}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
         </div>
-      )}
-
-      {section === 'trash' ? (
-        <TrashView
-          boards={trashedBoards}
-          projects={trashedProjects}
-          liveProjects={projects}
-          now={now}
-          refresh={refresh}
-          onBack={() => setSection('boards')}
-        />
-      ) : (
-        <>
-          {/* standalone / unfiled boards (incl. any whose project is missing or trashed) */}
-          <div className="board-grid">
-            <button className="new-board" onClick={() => onNew(null)}>
-              <span className="plus" aria-hidden="true">＋</span> New board
+        <button className="lib-new" onClick={() => void onNew(project?.id ?? null)}>
+          <Plus size={16} aria-hidden="true" /> New board
+        </button>
+        <label className="lib-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder="Search boards"
+            aria-label="Search boards by name"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setQuery('');
+                e.currentTarget.blur();
+              }
+            }}
+          />
+          <kbd>⌘K</kbd>
+        </label>
+        <nav className="lib-nav">
+          {navItem('recents', 'Recents', <Clock size={16} />)}
+          {navItem('pinned', 'Pinned', <Pin size={16} />, pinnedCount)}
+          {navItem('all', 'All boards', <LayoutGrid size={16} />, all.length)}
+          <div className="lib-nav-heading">
+            <span>Projects</span>
+            <button className="lib-icon-btn sm" title="New project" aria-label="New project" onClick={onNewProject}>
+              <Plus size={14} />
             </button>
-            {unfiled.map((b) => (
-              <BoardCard key={b.id} board={b} projects={projects} now={now} refresh={refresh} />
-            ))}
           </div>
+          {projects.map((p) => (
+            <div key={p.id}>{navItem(`project:${p.id}`, p.name, <Folder size={16} />, byProject.get(p.id)?.length ?? 0)}</div>
+          ))}
+          <button className="lib-nav-item subtle" onClick={onNewProject}>
+            <span className="lib-nav-icon" aria-hidden="true"><FolderPlus size={16} /></span>
+            <span className="lib-nav-label">New project</span>
+          </button>
+          <div className="lib-nav-sep" />
+          {navItem('trash', 'Trash', <Trash2 size={16} />, trashCount)}
+        </nav>
+        <div className="lib-foot">
+          <button className="lib-foot-btn" onClick={() => fileRef.current?.click()}>
+            <Upload size={14} aria-hidden="true" /> Import .slate
+          </button>
+          <button className="lib-foot-btn" title="Download every board, project and asset as one backup file" onClick={() => void onExportAll()}>
+            <Download size={14} aria-hidden="true" /> Export all
+          </button>
+          <input ref={fileRef} type="file" accept=".slate,application/json" hidden onChange={(e) => onImport(e.target.files?.[0])} />
+        </div>
+      </aside>
+      <div className="lib-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />
 
-          {/* projects */}
-          {projects.map((p) => {
-            const inProject = byProject.get(p.id) ?? [];
-            return (
-              <section key={p.id} className="project-section" aria-label={`Project ${p.name}`}>
-                <div className="project-header">
-                  <h2 className="project-name">📁 {p.name}</h2>
-                  <span className="project-count">{inProject.length}</span>
-                  <select
-                    className="move-select"
-                    title="Default brand kit for this project"
-                    aria-label={`Default brand kit for ${p.name}`}
-                    value={p.brandKitId ?? ''}
-                    onChange={async (e) => {
-                      await setProjectKit(p.id, e.target.value || null);
-                      refresh();
-                    }}
-                  >
-                    <option value="">⬡ Brand: default</option>
-                    {kits.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        ⬡ {k.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className="proj-act"
-                    title="Rename project"
-                    aria-label={`Rename project ${p.name}`}
-                    onClick={async () => {
-                      const name = await promptDialog({ title: 'Rename project', label: 'Project name', initial: p.name });
-                      if (name) {
-                        await renameProject(p.id, name);
-                        refresh();
-                      }
-                    }}
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    className="proj-act"
-                    title="Move project to Trash (its boards stay, under Unfiled)"
-                    aria-label={`Move project ${p.name} to Trash`}
-                    onClick={() => void onTrashProject(p, inProject.length)}
-                  >
-                    🗑
-                  </button>
-                </div>
-                <div className="board-grid">
-                  <button className="new-board small" onClick={() => onNew(p.id)}>
-                    <span className="plus" aria-hidden="true">＋</span> New board
-                  </button>
-                  {inProject.map((b) => (
-                    <BoardCard key={b.id} board={b} projects={projects} now={now} refresh={refresh} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </>
-      )}
+      <main className="lib-main">
+        <header className="lib-header">
+          <button className="lib-icon-btn lib-menu-btn" aria-label="Open library menu" aria-expanded={navOpen} onClick={() => setNavOpen(true)}>
+            <Menu size={18} />
+          </button>
+          <h1 className="lib-title">{title}</h1>
+          {project && (
+            <div className="lib-project-acts">
+              <select
+                className="lib-select"
+                title="Default brand kit for this project"
+                aria-label={`Default brand kit for ${project.name}`}
+                value={project.brandKitId ?? ''}
+                onChange={async (e) => {
+                  await setProjectKit(project.id, e.target.value || null);
+                  refresh();
+                }}
+              >
+                <option value="">Brand: default</option>
+                {kits.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    Brand: {k.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="lib-icon-btn"
+                title="Rename project"
+                aria-label={`Rename project ${project.name}`}
+                onClick={async () => {
+                  const name = await promptDialog({ title: 'Rename project', label: 'Project name', initial: project.name });
+                  if (name) {
+                    await renameProject(project.id, name);
+                    refresh();
+                  }
+                }}
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                className="lib-icon-btn"
+                title="Move project to Trash (its boards stay, under All boards)"
+                aria-label={`Move project ${project.name} to Trash`}
+                onClick={() => void onTrashProject(project, byProject.get(project.id)?.length ?? 0)}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          )}
+          {current !== 'trash' && (
+            <div className="lib-controls">
+              <select className="lib-select" aria-label="Sort boards" value={sort} onChange={(e) => setPref('sort', e.target.value as SortKey)}>
+                <option value="edited">Last edited</option>
+                <option value="name">Name</option>
+                <option value="created">Created</option>
+              </select>
+              <div className="lib-seg" role="group" aria-label="View">
+                <button className={view === 'grid' ? 'on' : ''} aria-pressed={view === 'grid'} title="Grid" aria-label="Grid view" onClick={() => setPref('view', 'grid')}>
+                  <LayoutGrid size={15} />
+                </button>
+                <button className={view === 'list' ? 'on' : ''} aria-pressed={view === 'list'} title="List" aria-label="List view" onClick={() => setPref('view', 'list')}>
+                  <List size={15} />
+                </button>
+              </div>
+            </div>
+          )}
+        </header>
+
+        <DurabilityBanner />
+
+        {showOnboarding && (
+          <div className="onboard-card">
+            <div className="onboard-title">What will you use Slate for?</div>
+            <div className="onboard-sub">
+              We'll set a brand voice so AI nodes match your style. You can change or add more anytime in Settings.
+            </div>
+            <div className="onboard-presets">
+              {BRAND_PRESETS.map((p) => (
+                <button key={p.id} className="onboard-preset" onClick={() => void pickWorkspace(p.id)}>
+                  <span className="oemoji">{p.emoji}</span>
+                  <span className="oname">{p.name}</span>
+                </button>
+              ))}
+            </div>
+            <button className="onboard-skip" onClick={() => void pickWorkspace(null)}>
+              Skip for now
+            </button>
+          </div>
+        )}
+
+        {current === 'trash' ? (
+          <TrashView
+            boards={trashedBoards.filter(matches)}
+            projects={trashedProjects.filter((p) => !q || p.name.toLowerCase().includes(q))}
+            liveProjects={projects}
+            now={now}
+            refresh={refresh}
+          />
+        ) : boards && shown.length === 0 ? (
+          <div className="lib-empty">
+            {q ? (
+              <p>No boards match “{query.trim()}”.</p>
+            ) : current === 'pinned' ? (
+              <p>Nothing pinned yet. Use a board’s ⋯ menu → Pin to top.</p>
+            ) : (
+              <>
+                <p>No boards here yet.</p>
+                <button className="chrome-btn primary" onClick={() => void onNew(project?.id ?? null)}>
+                  <Plus size={14} aria-hidden="true" /> New board
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          groups.map((g) => (
+            <section key={g.label ?? 'all'} className="lib-group" aria-label={g.label ?? title}>
+              {g.label && <h2 className="lib-group-label">{g.label}</h2>}
+              <div className={`board-grid${view === 'list' ? ' list' : ''}`}>
+                {g.items.map((b) => (
+                  <BoardCard
+                    key={b.id}
+                    board={b}
+                    projects={projects}
+                    now={now}
+                    refresh={refresh}
+                    projectName={project ? undefined : projects.find((p) => p.id === b.projectId)?.name}
+                  />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
+      </main>
     </div>
   );
+}
+
+/** Today / This week / Earlier — every board lands in exactly one group. */
+function timeGroups(items: BoardMeta[], now: number): { label: string; items: BoardMeta[] }[] {
+  const d = new Date(now);
+  const today = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const week = today - 6 * 24 * 60 * 60 * 1000;
+  const out = [
+    { label: 'Today', items: [] as BoardMeta[] },
+    { label: 'This week', items: [] as BoardMeta[] },
+    { label: 'Earlier', items: [] as BoardMeta[] },
+  ];
+  for (const b of items) out[b.updatedAt >= today ? 0 : b.updatedAt >= week ? 1 : 2].items.push(b);
+  return out.filter((g) => g.items.length);
 }
 
 /**
@@ -352,13 +520,13 @@ function DurabilityBanner() {
     <div className={`durability ${atRisk || backup === 'needs-permission' || backupError ? 'warn' : ''}`}>
       {atRisk && (
         <span>
-          ⚠ Your browser treats Slate's data as evictable — it can be deleted without warning.{' '}
+          <TriangleAlert size={14} aria-hidden="true" /> Your browser treats Slate's data as evictable — it can be deleted without warning.{' '}
           {backup === 'ok' ? 'Auto-backup has you covered.' : 'Export or set up auto-backup.'}
         </span>
       )}
       {backup === 'off' && (
         <span>
-          🛟 Back up automatically to a folder on your disk —{' '}
+          <LifeBuoy size={14} aria-hidden="true" /> Back up automatically to a folder on your disk —{' '}
           <button className="chrome-btn" onClick={() => void enableAutoBackup()}>
             Choose backup folder
           </button>
@@ -366,7 +534,7 @@ function DurabilityBanner() {
       )}
       {backup === 'needs-permission' && (
         <span>
-          🛟 Backups paused after browser restart —{' '}
+          <LifeBuoy size={14} aria-hidden="true" /> Backups paused after browser restart —{' '}
           <button className="chrome-btn" onClick={() => void regrantAutoBackup()}>
             Resume backups
           </button>
@@ -374,13 +542,13 @@ function DurabilityBanner() {
       )}
       {backup === 'ok' && (
         <span>
-          🛟 Auto-backup on{lastBackupAt ? ` · last ${new Date(lastBackupAt).toLocaleTimeString()}` : ''}{' '}
+          <LifeBuoy size={14} aria-hidden="true" /> Auto-backup on{lastBackupAt ? ` · last ${new Date(lastBackupAt).toLocaleTimeString()}` : ''}{' '}
           <button className="chrome-btn subtle" title="Stop writing backups (existing files stay)" onClick={() => void disableAutoBackup()}>
             turn off
           </button>
         </span>
       )}
-      {backupError && <span>⚠ Last backup failed: {backupError}</span>}
+      {backupError && <span><TriangleAlert size={14} aria-hidden="true" /> Last backup failed: {backupError}</span>}
     </div>
   );
 }

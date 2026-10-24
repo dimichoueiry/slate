@@ -554,6 +554,13 @@ export function getGitSyncConfig(): GitSyncConfig | null {
   return cfg;
 }
 
+let ready: Promise<void> = Promise.resolve();
+/** Resolves once Git Sync has restored its config and finished the first
+ *  catch-up (or found it's off) — after this, a delete is tracked for the repo. */
+export function whenGitSyncReady(): Promise<void> {
+  return ready;
+}
+
 /** Call once from App (after the welcome screen). Restores config and catches up. */
 export function initGitSync(): void {
   if (started) return;
@@ -580,7 +587,7 @@ export function initGitSync(): void {
     if (document.visibilityState === 'hidden') flushAll();
   });
 
-  void (async () => {
+  ready = (async () => {
     const row = await db.kv.get(CONFIG_KEY).catch(() => undefined);
     const saved = row?.value as GitSyncConfig | undefined;
     if (!saved?.token || !saved.owner || !saved.repo) return;
@@ -589,6 +596,6 @@ export function initGitSync(): void {
     cfg = saved;
     client = new GitClient(saved);
     useGitSync.setState({ repo: { host: saved.host, owner: saved.owner, repo: saved.repo }, status: 'syncing' });
-    void enqueue(catchUp);
-  })();
+    await enqueue(catchUp).catch(() => undefined);
+  })().catch(() => undefined);
 }

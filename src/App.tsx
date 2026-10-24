@@ -7,7 +7,8 @@ import SettingsPanel from './settings/SettingsPanel';
 import BridgeUI from './bridge/BridgeUI';
 import { startBridge } from './bridge/bridge';
 import { initDurability } from './store/durability';
-import { initGitSync } from './store/gitsync/engine';
+import { initGitSync, whenGitSyncReady } from './store/gitsync/engine';
+import { purgeOldTrash } from './store/db';
 import GitSyncIndicator from './components/GitSyncIndicator';
 import DialogHost from './components/Dialogs';
 
@@ -39,6 +40,9 @@ export default function App() {
       startBridge();
       initDurability();
       initGitSync();
+      // Trash keeps boards 30 days, then deletes them through the delete-forever
+      // path — after Git Sync is up, so the repo file is removed too
+      void whenGitSyncReady().then(() => purgeOldTrash()).catch(() => undefined);
     }
   }, [route.view]);
 

@@ -2,13 +2,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
-import { applyTheme, loadTheme } from './store/theme';
+import { applyTheme, loadTheme, watchOsTheme } from './store/theme';
+import { useUI } from './store/ui';
 // file-persistence sync (no-ops gracefully when the dev /__slate endpoints are absent)
 import './store/fsync';
 import { loadDefaultFonts } from './engine/fonts';
 
-// apply the saved (or default dark) theme before first paint
+// apply the saved theme (or the OS one) before first paint
 applyTheme(loadTheme());
+watchOsTheme((theme) => useUI.setState({ theme }));
 // bundled open-source fonts (latin, regular weight) — keeps the font picker offline-safe
 import '@fontsource/inter';
 import '@fontsource/roboto';

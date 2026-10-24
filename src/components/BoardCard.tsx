@@ -8,29 +8,32 @@ import { exportSlateFileById, downloadBlob } from '../export/export';
 import { fullTime, relativeTime } from '../store/relativeTime';
 import { openBoard } from '../App';
 import { promptDialog, toast } from './Dialogs';
+import { Ellipsis, Pin } from 'lucide-react';
 
 interface Props {
   board: BoardMeta;
   projects: Project[];
   now: number;
   refresh: () => void;
+  /** shown in the meta line when the view spans projects */
+  projectName?: string;
 }
 
-export default function BoardCard({ board: b, projects, now, refresh }: Props) {
+export default function BoardCard({ board: b, projects, now, refresh, projectName }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuBtn = useRef<HTMLButtonElement>(null);
 
   return (
     <div className={`board-card${menuOpen ? ' menu-open' : ''}`}>
       <button className="card-open" onClick={() => openBoard(b.id)} aria-label={`Open board ${b.name}`}>
-        {b.thumb ? <img className="thumb" src={b.thumb} alt="" /> : <div className="thumb empty">empty board</div>}
+        {b.thumb ? <img className="thumb" src={b.thumb} alt="" /> : <div className="thumb empty" aria-hidden="true" />}
         <div className="meta">
           <div className="name">
-            {b.pinned ? <span title="Pinned">📌 </span> : ''}
-            {b.name}
+            {b.pinned ? <Pin className="pin" size={12} aria-label="Pinned" /> : null}
+            <span className="name-text">{b.name}</span>
           </div>
           <div className="date">
-            Edited <time dateTime={new Date(b.updatedAt).toISOString()} title={fullTime(b.updatedAt)}>{relativeTime(b.updatedAt, now)}</time>
+            {projectName ? `${projectName} · ` : ''}Edited <time dateTime={new Date(b.updatedAt).toISOString()} title={fullTime(b.updatedAt)}>{relativeTime(b.updatedAt, now)}</time>
           </div>
         </div>
       </button>
@@ -42,7 +45,7 @@ export default function BoardCard({ board: b, projects, now, refresh }: Props) {
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((o) => !o)}
       >
-        ⋯
+        <Ellipsis size={16} aria-hidden="true" />
       </button>
       {menuOpen && (
         <CardMenu

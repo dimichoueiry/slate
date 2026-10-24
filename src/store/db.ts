@@ -183,6 +183,16 @@ export async function deleteBoard(id: string) {
   });
 }
 
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Delete forever every board trashed more than 30 days ago. Uses deleteBoard,
+ *  the same path as Trash → "Delete forever", so Git Sync removes the repo file. */
+export async function purgeOldTrash(now = Date.now()): Promise<number> {
+  const old = (await db.boards.toArray()).filter((b) => b.deletedAt && now - b.deletedAt > TRASH_RETENTION_MS);
+  for (const b of old) await deleteBoard(b.id);
+  return old.length;
+}
+
 export async function duplicateBoard(id: string): Promise<BoardMeta | null> {
   const src = await db.boards.get(id);
   if (!src) return null;

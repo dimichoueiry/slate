@@ -10,6 +10,7 @@ import BrandKitControl from './BrandKit';
 import { DRAW_STYLES, DRAW_STYLE_LABELS, isDrawStyle } from '../engine/style';
 import { takeNameRequest } from '../store/pendingName';
 import { toast } from './Dialogs';
+import { ArrowLeft, Contrast, Frame, NotebookText, Play, Grid3x3, Grip, Magnet, Moon, Redo2, Square, Sun, Undo2 } from 'lucide-react';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
@@ -108,8 +109,8 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
   return (
     <>
       <div className="panel topbar">
-        <button className="chrome-btn" title="All boards" onClick={() => goHome()}>
-          ←
+        <button className="chrome-btn" title="All boards" aria-label="All boards" onClick={() => goHome()}>
+          <ArrowLeft size={16} aria-hidden="true" />
         </button>
         <span className="board-name-wrap">
           <input
@@ -129,11 +130,11 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
             </span>
           )}
         </span>
-        <button className="chrome-btn" disabled={!ui.canUndo} title="Undo (⌘Z)" onClick={() => ctl.undo()}>
-          ↩
+        <button className="chrome-btn" disabled={!ui.canUndo} title="Undo (⌘Z)" aria-label="Undo" onClick={() => ctl.undo()}>
+          <Undo2 size={16} aria-hidden="true" />
         </button>
-        <button className="chrome-btn" disabled={!ui.canRedo} title="Redo (⌘⇧Z)" onClick={() => ctl.redo()}>
-          ↪
+        <button className="chrome-btn" disabled={!ui.canRedo} title="Redo (⌘⇧Z)" aria-label="Redo" onClick={() => ctl.redo()}>
+          <Redo2 size={16} aria-hidden="true" />
         </button>
         <button
           className="chrome-btn"
@@ -144,7 +145,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
             ctl.markSceneDirty();
           }}
         >
-          {ui.gridMode === 'dots' ? '⋮⋮' : ui.gridMode === 'lines' ? '⊞' : '▢'}
+          {ui.gridMode === 'dots' ? <Grip size={16} aria-hidden="true" /> : ui.gridMode === 'lines' ? <Grid3x3 size={16} aria-hidden="true" /> : <Square size={16} aria-hidden="true" />}
         </button>
         <button
           className={`chrome-btn`}
@@ -152,18 +153,19 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
           style={{ opacity: ui.snapEnabled ? 1 : 0.5 }}
           onClick={() => ui.set({ snapEnabled: !ui.snapEnabled })}
         >
-          ⌖
+          <Magnet size={16} aria-hidden="true" />
         </button>
         <button
           className="chrome-btn"
           title={ui.theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           onClick={() => ui.toggleTheme()}
         >
-          {ui.theme === 'dark' ? '☀' : '☾'}
+          {ui.theme === 'dark' ? <Sun size={16} aria-hidden="true" /> : <Moon size={16} aria-hidden="true" />}
         </button>
         <button
           className="chrome-btn"
           title={ui.canvasDark ? 'Light canvas for this board' : 'Dark canvas for this board'}
+          aria-pressed={ui.canvasDark}
           style={{ background: ui.canvasDark ? 'var(--accent)' : undefined }}
           onClick={() => {
             const next = !ui.canvasDark;
@@ -174,7 +176,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
             void updateBoardMeta(boardId, { canvasDark: next });
           }}
         >
-          ◐
+          <Contrast size={16} aria-hidden="true" />
         </button>
         <select
           className="font-select board-style-select"
@@ -204,7 +206,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         {flows.length > 0 && (
           <button
             className="chrome-btn"
-            style={{ background: flow ? 'var(--accent)' : 'rgba(103,65,217,0.85)', color: '#fff' }}
+            style={{ background: flow ? 'var(--accent)' : 'var(--ink)', color: '#fff' }}
             disabled={!!flow}
             title="Run a connected flow of nodes in dependency order"
             onClick={() => {
@@ -222,8 +224,8 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
                 ? `Loop ${flow.loop.iter}/${flow.loop.total} · ${flow.done}/${flow.total}…`
                 : `Running ${flow.done}/${flow.total}…`
               : flows.length === 1
-                ? `▶▶ Run flow (${flows[0].nodes.length})`
-                : `▶▶ Run flow (${flows.length} flows)`}
+                ? <><Play size={14} aria-hidden="true" /> Run flow ({flows[0].nodes.length})</>
+                : <><Play size={14} aria-hidden="true" /> Run flow ({flows.length} flows)</>}
           </button>
         )}
         <BrandKitControl ctl={ctl} boardId={boardId} />
@@ -236,7 +238,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
               setMenu(false);
             }}
           >
-            ⧈ {frames.length}
+            <Frame size={14} aria-hidden="true" /> {frames.length}
           </button>
         )}
         <button
@@ -245,7 +247,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
           style={{ background: ui.notesOpen ? 'var(--accent)' : undefined }}
           onClick={() => ui.set({ notesOpen: !ui.notesOpen })}
         >
-          🗒 Notes
+          <NotebookText size={14} aria-hidden="true" /> Notes
         </button>
         <button
           className="chrome-btn primary"

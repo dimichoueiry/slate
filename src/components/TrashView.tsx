@@ -6,6 +6,7 @@ import { deleteBoard, deleteProject, restoreBoard, restoreProject } from '../sto
 import { fullTime, relativeTime } from '../store/relativeTime';
 import { useGitSync } from '../store/gitsync/engine';
 import { confirmDialog, toast } from './Dialogs';
+import { Folder } from 'lucide-react';
 
 interface Props {
   boards: BoardMeta[];
@@ -13,10 +14,9 @@ interface Props {
   liveProjects: Project[];
   now: number;
   refresh: () => void;
-  onBack: () => void;
 }
 
-export default function TrashView({ boards, projects, liveProjects, now, refresh, onBack }: Props) {
+export default function TrashView({ boards, projects, liveProjects, now, refresh }: Props) {
   const syncing = useGitSync((s) => s.status !== 'off');
   const empty = boards.length === 0 && projects.length === 0;
   const projName = (id: string | null | undefined) =>
@@ -63,17 +63,11 @@ export default function TrashView({ boards, projects, liveProjects, now, refresh
 
   return (
     <section className="trash-view" aria-labelledby="trash-title">
-      <div className="project-header">
-        <button className="chrome-btn" onClick={onBack}>
-          ← Boards
-        </button>
-        <h2 id="trash-title" className="project-name">
-          🗑 Trash
-        </h2>
-        <span className="project-count">{boards.length + projects.length}</span>
-      </div>
+      <h2 id="trash-title" className="sr-only">
+        Trash
+      </h2>
       <p className="trash-note">
-        Items stay here until you delete them forever.
+        Boards stay here for 30 days, then are deleted forever. Projects stay until you delete them.
         {syncing ? ' Git Sync keeps trashed boards in your repo until then.' : ''}
       </p>
 
@@ -86,7 +80,7 @@ export default function TrashView({ boards, projects, liveProjects, now, refresh
             {projects.map((p) => (
               <li key={p.id} className="trash-row">
                 <span className="trash-thumb proj" aria-hidden="true">
-                  📁
+                  <Folder size={18} />
                 </span>
                 <span className="trash-info">
                   <span className="name">{p.name}</span>
