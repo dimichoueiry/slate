@@ -48,6 +48,12 @@ import {
 } from 'lucide-react';
 
 const ONBOARD_KEY = 'slate-onboarded';
+/** Recents = boards opened or edited in the last RECENT_DAYS, newest first, at most RECENT_MAX. */
+const RECENT_DAYS = 14;
+const RECENT_MAX = 20;
+const DAY = 24 * 60 * 60 * 1000;
+/** Last time a board was touched: opened or edited, whichever is newer. */
+const lastActive = (b: BoardMeta) => Math.max(b.updatedAt, b.openedAt ?? 0);
 
 /** What the dashboard's main pane shows, picked in the sidebar. */
 export type Section = 'recents' | 'pinned' | 'all' | 'trash' | `project:${string}`;
@@ -91,7 +97,7 @@ export default function Home() {
       /* ignore */
     }
   };
-  // ⌘K / Ctrl+K focuses the board search
+  // ⌘K / Ctrl+K focuses the search (it spans every board and project)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -247,6 +253,7 @@ export default function Home() {
 
   const q = query.trim().toLowerCase();
   const matches = (b: BoardMeta) => !q || b.name.toLowerCase().includes(q);
+  const projectName = (b: BoardMeta) => projects.find((p) => p.id === b.projectId)?.name;
   const sortFn = (a: BoardMeta, b: BoardMeta) =>
     sort === 'name'
       ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
@@ -261,32 +268,62 @@ export default function Home() {
   const current: Section = section.startsWith('project:') && !project ? 'all' : section;
   const pinnedCount = all.filter((b) => b.pinned).length;
 
+  // a query searches the whole library (Trash only searches itself)
+  const searching = !!q && current !== 'trash';
+  const recentAll = all.filter((b) => lastActive(b) >= now - RECENT_DAYS * DAY).sort((a, b) => lastActive(b) - lastActive(a));
+  const recentHidden = Math.max(0, recentAll.length - RECENT_MAX);
+
   let shown: BoardMeta[] = [];
-  if (current === 'recents') shown = [...all].sort(sortFn);
+  let projectHits: Project[] = [];
+  if (searching) {
+    // name hits first, then boards that match through their project's name
+    const nameHit = (b: BoardMeta) => b.name.toLowerCase().includes(q);
+    shown = all
+      .filter((b) => nameHit(b) || !!projectName(b)?.toLowerCase().includes(q))
+      .sort((a, b) => Number(nameHit(b)) - Number(nameHit(a)) || pinnedFirst(a, b));
+    projectHits = projects.filter((p) => p.name.toLowerCase().includes(q));
+  } else if (current === 'recents') shown = recentAll.slice(0, RECENT_MAX);
   else if (current === 'pinned') shown = all.filter((b) => b.pinned).sort(sortFn);
   else if (current === 'all') shown = [...all].sort(pinnedFirst);
   else if (project) shown = [...(byProject.get(project.id) ?? [])].sort(pinnedFirst);
-  shown = shown.filter(matches);
 
-  const title =
-    current === 'recents' ? 'Recents' : current === 'pinned' ? 'Pinned' : current === 'all' ? 'All boards' : current === 'trash' ? 'Trash' : project?.name ?? '';
+  const title = searching
+    ? 'Search'
+    : current === 'recents'
+      ? 'Recents'
+      : current === 'pinned'
+        ? 'Pinned'
+        : current === 'all'
+          ? 'All boards'
+          : current === 'trash'
+            ? 'Trash'
+            : project?.name ?? '';
 
   const go = (s: Section) => {
     setSection(s);
+    setQuery('');
     setNavOpen(false);
   };
 
   const navItem = (s: Section, label: string, icon: React.ReactNode, count?: number) => (
-    <button className={`lib-nav-item${current === s ? ' active' : ''}`} aria-current={current === s ? 'page' : undefined} onClick={() => go(s)}>
+    <button
+      className={`lib-nav-item${current === s && !searching ? ' active' : ''}`}
+      aria-current={current === s && !searching ? 'page' : undefined}
+      onClick={() => go(s)}
+    >
       <span className="lib-nav-icon" aria-hidden="true">{icon}</span>
       <span className="lib-nav-label">{label}</span>
       {count != null && count > 0 && <span className="lib-count">{count}</span>}
     </button>
   );
 
-  // Recents reads as a timeline when sorted by edit time; other sorts are one flat grid
-  const groups: { label: string | null; items: BoardMeta[] }[] =
-    current === 'recents' && sort === 'edited' ? timeGroups(shown, now) : [{ label: null, items: shown }];
+  // Recents is always a timeline; search splits into the projects and boards it found
+  const groups: { label: string | null; items: BoardMeta[] }[] = searching
+    ? [{ label: projectHits.length ? 'Boards' : null, items: shown }]
+    : current === 'recents'
+      ? timeGroups(shown, now)
+      : [{ label: null, items: shown }];
+  const resultCount = shown.length + projectHits.length;
 
   return (
     <div className={`home lib${navOpen ? ' nav-open' : ''}`}>
@@ -310,8 +347,8 @@ export default function Home() {
           <input
             ref={searchRef}
             type="search"
-            placeholder="Search boards"
-            aria-label="Search boards by name"
+            placeholder="Search everything"
+            aria-label="Search all boards and projects"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -361,7 +398,7 @@ export default function Home() {
             <Menu size={18} />
           </button>
           <h1 className="lib-title">{title}</h1>
-          {project && (
+          {project && !searching && (
             <div className="lib-project-acts">
               <select
                 className="lib-select"
@@ -404,13 +441,20 @@ export default function Home() {
               </button>
             </div>
           )}
+          {searching && boards && (
+            <p className="lib-sub" role="status">
+              {resultCount} result{resultCount === 1 ? '' : 's'} for “{query.trim()}” across your library
+            </p>
+          )}
           {current !== 'trash' && (
             <div className="lib-controls">
-              <select className="lib-select" aria-label="Sort boards" value={sort} onChange={(e) => setPref('sort', e.target.value as SortKey)}>
-                <option value="edited">Last edited</option>
-                <option value="name">Name</option>
-                <option value="created">Created</option>
-              </select>
+              {(searching || current !== 'recents') && (
+                <select className="lib-select" aria-label="Sort boards" value={sort} onChange={(e) => setPref('sort', e.target.value as SortKey)}>
+                  <option value="edited">Last edited</option>
+                  <option value="name">Name</option>
+                  <option value="created">Created</option>
+                </select>
+              )}
               <div className="lib-seg" role="group" aria-label="View">
                 <button className={view === 'grid' ? 'on' : ''} aria-pressed={view === 'grid'} title="Grid" aria-label="Grid view" onClick={() => setPref('view', 'grid')}>
                   <LayoutGrid size={15} />
@@ -453,10 +497,39 @@ export default function Home() {
             now={now}
             refresh={refresh}
           />
-        ) : boards && shown.length === 0 ? (
+        ) : boards && resultCount === 0 ? (
           <div className="lib-empty">
-            {q ? (
-              <p>No boards match “{query.trim()}”.</p>
+            {searching ? (
+              <>
+                <Search className="lib-empty-icon" size={20} aria-hidden="true" />
+                <p className="lib-empty-title">Nothing matches “{query.trim()}”</p>
+                <p>Search looks at board and project names. Boards in Trash aren’t included.</p>
+                <button
+                  className="chrome-btn"
+                  onClick={() => {
+                    setQuery('');
+                    searchRef.current?.focus();
+                  }}
+                >
+                  Clear search
+                </button>
+              </>
+            ) : current === 'recents' ? (
+              <>
+                <Clock className="lib-empty-icon" size={20} aria-hidden="true" />
+                <p className="lib-empty-title">Nothing recent</p>
+                <p>Boards you open or edit show up here for {RECENT_DAYS} days.</p>
+                <div className="lib-empty-acts">
+                  <button className="chrome-btn primary" onClick={() => void onNew(null)}>
+                    <Plus size={14} aria-hidden="true" /> New board
+                  </button>
+                  {all.length > 0 && (
+                    <button className="chrome-btn" onClick={() => go('all')}>
+                      Browse all {all.length} board{all.length === 1 ? '' : 's'}
+                    </button>
+                  )}
+                </div>
+              </>
             ) : current === 'pinned' ? (
               <p>Nothing pinned yet. Use a board’s ⋯ menu → Pin to top.</p>
             ) : (
@@ -469,30 +542,63 @@ export default function Home() {
             )}
           </div>
         ) : (
-          groups.map((g) => (
-            <section key={g.label ?? 'all'} className="lib-group" aria-label={g.label ?? title}>
-              {g.label && <h2 className="lib-group-label">{g.label}</h2>}
-              <div className={`board-grid${view === 'list' ? ' list' : ''}`}>
-                {g.items.map((b) => (
-                  <BoardCard
-                    key={b.id}
-                    board={b}
-                    projects={projects}
-                    now={now}
-                    refresh={refresh}
-                    projectName={project ? undefined : projects.find((p) => p.id === b.projectId)?.name}
-                  />
-                ))}
-              </div>
-            </section>
-          ))
+          <>
+            {searching && projectHits.length > 0 && (
+              <section className="lib-group" aria-label="Projects">
+                <h2 className="lib-group-label">Projects</h2>
+                <div className="lib-project-hits">
+                  {projectHits.map((p) => {
+                    const n = byProject.get(p.id)?.length ?? 0;
+                    return (
+                      <button key={p.id} className="lib-project-hit" onClick={() => go(`project:${p.id}`)}>
+                        <Folder size={16} aria-hidden="true" />
+                        <span className="lib-project-hit-name">{p.name}</span>
+                        <span className="lib-count">
+                          {n} board{n === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+            {groups
+              .filter((g) => g.items.length)
+              .map((g) => (
+                <section key={g.label ?? 'all'} className="lib-group" aria-label={g.label ?? title}>
+                  {g.label && <h2 className="lib-group-label">{g.label}</h2>}
+                  <div className={`board-grid${view === 'list' ? ' list' : ''}`}>
+                    {g.items.map((b) => (
+                      <BoardCard
+                        key={b.id}
+                        board={b}
+                        projects={projects}
+                        now={now}
+                        refresh={refresh}
+                        projectName={searching ? projectName(b) ?? 'Unfiled' : project ? undefined : projectName(b)}
+                        showOpened={current === 'recents' && !searching}
+                        highlight={searching ? query.trim() : undefined}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            {current === 'recents' && !searching && recentHidden > 0 && (
+              <p className="lib-more">
+                {recentHidden} more board{recentHidden === 1 ? ' was' : 's were'} active in the last {RECENT_DAYS} days.{' '}
+                <button className="lib-link" onClick={() => go('all')}>
+                  See all boards
+                </button>
+              </p>
+            )}
+          </>
         )}
       </main>
     </div>
   );
 }
 
-/** Today / This week / Earlier — every board lands in exactly one group. */
+/** Today / This week / Earlier, by last activity — every board lands in exactly one group. */
 function timeGroups(items: BoardMeta[], now: number): { label: string; items: BoardMeta[] }[] {
   const d = new Date(now);
   const today = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -502,7 +608,10 @@ function timeGroups(items: BoardMeta[], now: number): { label: string; items: Bo
     { label: 'This week', items: [] as BoardMeta[] },
     { label: 'Earlier', items: [] as BoardMeta[] },
   ];
-  for (const b of items) out[b.updatedAt >= today ? 0 : b.updatedAt >= week ? 1 : 2].items.push(b);
+  for (const b of items) {
+    const t = lastActive(b);
+    out[t >= today ? 0 : t >= week ? 1 : 2].items.push(b);
+  }
   return out.filter((g) => g.items.length);
 }
 

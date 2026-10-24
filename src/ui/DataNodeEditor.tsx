@@ -29,7 +29,7 @@ const CSS = `
 .data-editor .addhdr{margin-top:6px}
 .data-editor .foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
 .data-editor .send{border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;
-  color:#fff;background:linear-gradient(135deg,var(--accent),#6741d9)}
+  color:var(--on-accent);background:var(--accent-grad)}
 .data-editor .send:hover{filter:brightness(1.08)}
 .data-editor .note{color:#6f6f78;font-size:10.5px}
 `;

@@ -3,7 +3,7 @@ import { goHome } from '../App';
 import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
 import { boardStyleOf } from '../engine/style';
-import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit, saveBoardViewport } from '../store/db';
+import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit, saveBoardViewport, markBoardOpened } from '../store/db';
 import { pullBoardOnOpen } from '../store/gitsync/engine';
 import { useUI } from '../store/ui';
 import { setCanvasDark } from '../store/theme';
@@ -109,6 +109,7 @@ export default function BoardView({ boardId }: { boardId: string }) {
       });
       useUI.getState().syncCanvasInk(!!meta.canvasDark);
       autosave = startAutosave(controller.doc, boardId);
+      void markBoardOpened(boardId).catch(() => undefined);
       setLoaded(true);
       registerCtl(controller, boardId); // expose the live doc to the MCP bridge
       resumeVideoJobs(controller); // resume any video jobs that were still rendering

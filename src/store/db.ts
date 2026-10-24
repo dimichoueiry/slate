@@ -160,6 +160,11 @@ export async function saveBoardViewport(id: string, viewport: BoardMeta['viewpor
   await db.boards.update(id, { viewport });
 }
 
+/** Stamp "opened just now" for Recents. Like the viewport save, not an edit. */
+export async function markBoardOpened(id: string) {
+  await db.boards.update(id, { openedAt: Date.now() });
+}
+
 /**
  * Move a board to Trash. This is an UPDATE, never a delete: objects stay put,
  * and Git Sync pushes the board (with deletedAt) instead of deleting its repo

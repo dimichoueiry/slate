@@ -225,6 +225,7 @@ export interface BoardMeta {
   name: string;
   createdAt: number;
   updatedAt: number;
+  openedAt?: number; // last time the board was opened (feeds Recents; not an edit)
   viewport: { x: number; y: number; zoom: number };
   thumb?: string; // small png data url
   pinned?: boolean;
