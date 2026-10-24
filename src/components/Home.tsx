@@ -4,30 +4,52 @@ import type { BoardMeta, Project } from '../types';
 import {
   createBoard,
   createProject,
-  deleteBoard,
-  deleteProject,
-  duplicateBoard,
   listBoards,
   listBrandKits,
   listProjects,
+  listTrashedBoards,
+  listTrashedProjects,
   renameProject,
+  restoreProject,
   saveBrandKit,
   setDefaultKitId,
   setProjectKit,
-  updateBoardMeta,
+  trashProject,
 } from '../store/db';
-import { importAnySlateFile, exportArchive, exportSlateFileById, downloadBlob } from '../export/export';
+import { importAnySlateFile, exportArchive, downloadBlob } from '../export/export';
 import { useDurability, enableAutoBackup, regrantAutoBackup, disableAutoBackup } from '../store/durability';
 import { openBoard } from '../App';
 import { BRAND_PRESETS } from '../engine/brandPresets';
 import { nanoid } from 'nanoid';
 import type { BrandKit } from '../types';
+import { groupBoards } from '../store/boardGroups';
+import { requestNameOnOpen } from '../store/pendingName';
+import { alertDialog, promptDialog, toast } from './Dialogs';
+import BoardCard from './BoardCard';
+import TrashView from './TrashView';
 
 const ONBOARD_KEY = 'slate-onboarded';
+
+/** What the dashboard's main pane shows. A sidebar can drive this next. */
+export type HomeSection = 'boards' | 'trash';
+
+/** Re-render on a slow tick so "Edited 2m ago" labels stay true. */
+function useNow(everyMs = 60_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(t);
+  }, [everyMs]);
+  return now;
+}
 
 export default function Home() {
   const [boards, setBoards] = useState<BoardMeta[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [trashedBoards, setTrashedBoards] = useState<BoardMeta[]>([]);
+  const [trashedProjects, setTrashedProjects] = useState<Project[]>([]);
+  const [section, setSection] = useState<HomeSection>('boards');
+  const now = useNow();
   const [kits, setKits] = useState<BrandKit[]>([]);
   const [onboarded, setOnboarded] = useState(() => {
     try {
@@ -44,6 +66,8 @@ export default function Home() {
     // "all my boards got deleted" when the truth is "couldn't open storage"
     listBoards().then(setBoards, (e) => setDbError(String(e?.message ?? e)));
     void listProjects().then(setProjects).catch(() => undefined);
+    void listTrashedBoards().then(setTrashedBoards).catch(() => undefined);
+    void listTrashedProjects().then(setTrashedProjects).catch(() => undefined);
     void listBrandKits().then(setKits).catch(() => undefined);
   };
   useEffect(() => {
@@ -86,16 +110,38 @@ export default function Home() {
   const showOnboarding = !onboarded && kits.length === 0;
 
   const onNew = async (projectId: string | null = null) => {
+    // still one click: the board opens at once with its name field selected —
+    // type to name it, or Enter/Escape to keep the default
     const b = await createBoard('Untitled board', projectId);
+    requestNameOnOpen(b.id);
     openBoard(b.id);
   };
 
   const onNewProject = async () => {
-    const name = prompt('Project name', 'New project');
+    const name = await promptDialog({ title: 'New project', label: 'Project name', initial: 'New project', confirmLabel: 'Create' });
     if (name) {
       await createProject(name);
       refresh();
     }
+  };
+
+  const onTrashProject = async (p: Project, boardCount: number) => {
+    await trashProject(p.id);
+    refresh();
+    toast(
+      boardCount
+        ? `Project “${p.name}” moved to Trash. Its ${boardCount} board${boardCount === 1 ? '' : 's'} show under Unfiled until you restore it.`
+        : `Project “${p.name}” moved to Trash.`,
+      {
+        action: {
+          label: 'Undo',
+          run: async () => {
+            await restoreProject(p.id);
+            refresh();
+          },
+        },
+      }
+    );
   };
 
   const onImport = async (file: File | undefined) => {
@@ -104,11 +150,11 @@ export default function Home() {
       const result = await importAnySlateFile(file);
       if (result.kind === 'board') openBoard(result.board.id);
       else {
-        alert(`Restored ${result.boards} board${result.boards === 1 ? '' : 's'} and ${result.projects} project${result.projects === 1 ? '' : 's'} from the archive.`);
+        toast(`Restored ${result.boards} board${result.boards === 1 ? '' : 's'} and ${result.projects} project${result.projects === 1 ? '' : 's'} from the archive.`);
         refresh();
       }
     } catch (err) {
-      alert(`Import failed: ${err instanceof Error ? err.message : err}`);
+      await alertDialog({ title: 'Import failed', body: err instanceof Error ? err.message : String(err) });
     }
   };
 
@@ -117,8 +163,9 @@ export default function Home() {
     downloadBlob(await exportArchive(), `slate-all-${stamp}.slate`);
   };
 
-  const all = boards ?? [];
-  const unfiled = all.filter((b) => !b.projectId);
+  // a board whose project is missing or trashed lands in `unfiled` — never hidden
+  const { unfiled, byProject } = groupBoards(boards ?? [], projects);
+  const trashCount = trashedBoards.length + trashedProjects.length;
 
   const theme = useUI((s) => s.theme);
   const toggleTheme = useUI((s) => s.toggleTheme);
@@ -166,6 +213,14 @@ export default function Home() {
         <button className="chrome-btn" style={{ marginLeft: 6 }} onClick={onNewProject}>
           ＋ New project
         </button>
+        <button
+          className={`chrome-btn${section === 'trash' ? ' primary' : ''}`}
+          style={{ marginLeft: 6 }}
+          aria-pressed={section === 'trash'}
+          onClick={() => setSection(section === 'trash' ? 'boards' : 'trash')}
+        >
+          🗑 Trash{trashCount ? ` (${trashCount})` : ''}
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -197,77 +252,88 @@ export default function Home() {
         </div>
       )}
 
-      {/* standalone / unfiled boards */}
-      <div className="board-grid">
-        <button className="new-board" onClick={() => onNew(null)}>
-          <span className="plus">＋</span> New board
-        </button>
-        {unfiled.map((b) => (
-          <BoardCard key={b.id} board={b} projects={projects} refresh={refresh} />
-        ))}
-      </div>
-
-      {/* projects */}
-      {projects.map((p) => {
-        const inProject = all.filter((b) => b.projectId === p.id);
-        return (
-          <div key={p.id} className="project-section">
-            <div className="project-header">
-              <span className="project-name">📁 {p.name}</span>
-              <span className="project-count">{inProject.length}</span>
-              <select
-                className="move-select"
-                title="Default brand kit for this project"
-                value={p.brandKitId ?? ''}
-                onChange={async (e) => {
-                  await setProjectKit(p.id, e.target.value || null);
-                  refresh();
-                }}
-              >
-                <option value="">⬡ Brand: default</option>
-                {kits.map((k) => (
-                  <option key={k.id} value={k.id}>
-                    ⬡ {k.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="proj-act"
-                title="Rename project"
-                onClick={async () => {
-                  const name = prompt('Rename project', p.name);
-                  if (name) {
-                    await renameProject(p.id, name);
-                    refresh();
-                  }
-                }}
-              >
-                ✏️
-              </button>
-              <button
-                className="proj-act"
-                title="Delete project (its boards become unfiled)"
-                onClick={async () => {
-                  if (confirm(`Delete project “${p.name}”? Its boards move to Unfiled.`)) {
-                    await deleteProject(p.id);
-                    refresh();
-                  }
-                }}
-              >
-                🗑
-              </button>
-            </div>
-            <div className="board-grid">
-              <button className="new-board small" onClick={() => onNew(p.id)}>
-                <span className="plus">＋</span> New board
-              </button>
-              {inProject.map((b) => (
-                <BoardCard key={b.id} board={b} projects={projects} refresh={refresh} />
-              ))}
-            </div>
+      {section === 'trash' ? (
+        <TrashView
+          boards={trashedBoards}
+          projects={trashedProjects}
+          liveProjects={projects}
+          now={now}
+          refresh={refresh}
+          onBack={() => setSection('boards')}
+        />
+      ) : (
+        <>
+          {/* standalone / unfiled boards (incl. any whose project is missing or trashed) */}
+          <div className="board-grid">
+            <button className="new-board" onClick={() => onNew(null)}>
+              <span className="plus" aria-hidden="true">＋</span> New board
+            </button>
+            {unfiled.map((b) => (
+              <BoardCard key={b.id} board={b} projects={projects} now={now} refresh={refresh} />
+            ))}
           </div>
-        );
-      })}
+
+          {/* projects */}
+          {projects.map((p) => {
+            const inProject = byProject.get(p.id) ?? [];
+            return (
+              <section key={p.id} className="project-section" aria-label={`Project ${p.name}`}>
+                <div className="project-header">
+                  <h2 className="project-name">📁 {p.name}</h2>
+                  <span className="project-count">{inProject.length}</span>
+                  <select
+                    className="move-select"
+                    title="Default brand kit for this project"
+                    aria-label={`Default brand kit for ${p.name}`}
+                    value={p.brandKitId ?? ''}
+                    onChange={async (e) => {
+                      await setProjectKit(p.id, e.target.value || null);
+                      refresh();
+                    }}
+                  >
+                    <option value="">⬡ Brand: default</option>
+                    {kits.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        ⬡ {k.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="proj-act"
+                    title="Rename project"
+                    aria-label={`Rename project ${p.name}`}
+                    onClick={async () => {
+                      const name = await promptDialog({ title: 'Rename project', label: 'Project name', initial: p.name });
+                      if (name) {
+                        await renameProject(p.id, name);
+                        refresh();
+                      }
+                    }}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    className="proj-act"
+                    title="Move project to Trash (its boards stay, under Unfiled)"
+                    aria-label={`Move project ${p.name} to Trash`}
+                    onClick={() => void onTrashProject(p, inProject.length)}
+                  >
+                    🗑
+                  </button>
+                </div>
+                <div className="board-grid">
+                  <button className="new-board small" onClick={() => onNew(p.id)}>
+                    <span className="plus" aria-hidden="true">＋</span> New board
+                  </button>
+                  {inProject.map((b) => (
+                    <BoardCard key={b.id} board={b} projects={projects} now={now} refresh={refresh} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }
@@ -315,89 +381,6 @@ function DurabilityBanner() {
         </span>
       )}
       {backupError && <span>⚠ Last backup failed: {backupError}</span>}
-    </div>
-  );
-}
-
-function BoardCard({ board: b, projects, refresh }: { board: BoardMeta; projects: Project[]; refresh: () => void }) {
-  return (
-    <div className="board-card" onClick={() => openBoard(b.id)}>
-      {b.thumb ? <img className="thumb" src={b.thumb} alt="" /> : <div className="thumb empty">empty board</div>}
-      <div className="meta">
-        <div className="name">
-          {b.pinned ? '📌 ' : ''}
-          {b.name}
-        </div>
-        <div className="date">{new Date(b.updatedAt).toLocaleString()}</div>
-      </div>
-      <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-        <select
-          className="move-select"
-          title="Move to project"
-          value={b.projectId ?? ''}
-          onChange={async (e) => {
-            await updateBoardMeta(b.id, { projectId: e.target.value || null });
-            refresh();
-          }}
-        >
-          <option value="">📂 Unfiled</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              📁 {p.name}
-            </option>
-          ))}
-        </select>
-        <button
-          title={b.pinned ? 'Unpin' : 'Pin'}
-          onClick={async () => {
-            await updateBoardMeta(b.id, { pinned: !b.pinned });
-            refresh();
-          }}
-        >
-          📌
-        </button>
-        <button
-          title="Rename"
-          onClick={async () => {
-            const name = prompt('Rename board', b.name);
-            if (name) {
-              await updateBoardMeta(b.id, { name });
-              refresh();
-            }
-          }}
-        >
-          ✏️
-        </button>
-        <button
-          title="Duplicate"
-          onClick={async () => {
-            await duplicateBoard(b.id);
-            refresh();
-          }}
-        >
-          ⧉
-        </button>
-        <button
-          title="Export as .slate file"
-          onClick={async () => {
-            const out = await exportSlateFileById(b.id);
-            if (out) downloadBlob(out.blob, `${out.name}.slate`);
-          }}
-        >
-          ⬇
-        </button>
-        <button
-          title="Delete"
-          onClick={async () => {
-            if (confirm(`Delete “${b.name}”? This cannot be undone.`)) {
-              await deleteBoard(b.id);
-              refresh();
-            }
-          }}
-        >
-          🗑
-        </button>
-      </div>
     </div>
   );
 }

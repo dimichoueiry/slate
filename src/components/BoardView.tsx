@@ -3,7 +3,7 @@ import { goHome } from '../App';
 import { Controller } from '../engine/controller';
 import { configureImageLoading } from '../engine/renderer';
 import { boardStyleOf } from '../engine/style';
-import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit } from '../store/db';
+import { getBlob, putBlob, db, loadBoardObjects, startAutosave, updateBoardMeta, resolveBoardKit, saveBoardViewport } from '../store/db';
 import { pullBoardOnOpen } from '../store/gitsync/engine';
 import { useUI } from '../store/ui';
 import { setCanvasDark } from '../store/theme';
@@ -114,12 +114,12 @@ export default function BoardView({ boardId }: { boardId: string }) {
       resumeVideoJobs(controller); // resume any video jobs that were still rendering
     })();
 
-    // persist viewport (debounced)
+    // persist viewport (debounced) — camera only, so "Edited …" doesn't move
     let vpTimer: ReturnType<typeof setTimeout> | null = null;
     controller.onViewportChanged = () => {
       if (vpTimer) clearTimeout(vpTimer);
       vpTimer = setTimeout(() => {
-        void updateBoardMeta(boardId, { viewport: { ...controller.camera } });
+        void saveBoardViewport(boardId, { ...controller.camera });
       }, 500);
     };
 

@@ -10,6 +10,7 @@
 // board. Nothing is ever merged, truncated, or silently dropped.
 
 import { create } from 'zustand';
+import Dexie from 'dexie';
 import { db } from '../db';
 import { useUI } from '../ui';
 import { GitClient, GitSyncError, textToBytes, bytesToText, type GitSyncConfig } from './client';
@@ -24,6 +25,7 @@ import {
   serializeBoard,
   serializeWorkspace,
 } from './serialize';
+import { boardCommitMessage, remoteMissingAction } from './policy';
 
 const CONFIG_KEY = 'gitsync-config';
 const STATE_KEY = 'gitsync-state';
@@ -167,7 +169,12 @@ function markBoardDeleted(boardId: string) {
   clearTimeout(boardTimers.get(boardId));
   if (state.boards[boardId]) {
     state.pendingDeletes[boardId] = true;
-    void persistState().then(() => enqueue(() => flushDelete(boardId)));
+    // this runs inside the deleting transaction (boards + objects only), so the
+    // kv write must escape it — otherwise it throws and the pending delete is
+    // never persisted
+    Dexie.ignoreTransaction(() => {
+      void persistState().then(() => enqueue(() => flushDelete(boardId)));
+    });
   }
   refreshStatus();
 }
@@ -211,7 +218,7 @@ async function flushBoard(boardId: string): Promise<void> {
 
   await pushAssets(ser.assets);
   const meta = await db.boards.get(boardId);
-  const message = `slate: update "${meta?.name ?? boardId}"`;
+  const message = boardCommitMessage(meta?.name ?? boardId, !!meta?.deletedAt);
   try {
     const sha = await client.putFile(boardPath(boardId), textToBytes(ser.json), message, known?.remoteSha ?? null);
     state.boards[boardId] = { pushedHash: ser.hash, remoteSha: sha };
@@ -432,8 +439,10 @@ async function catchUp(): Promise<void> {
     const rem = remoteByBoard.get(b.id);
     const known = state.boards[b.id];
     if (!rem) {
-      if (known?.remoteSha) {
-        // existed in the repo before and is gone now → deleted on another machine
+      const local = await serializeBoard(b.id);
+      if (remoteMissingAction(known, local?.hash ?? null) === 'delete-local') {
+        // synced before, unchanged here, gone from the repo now → deleted forever
+        // on another machine. (Trash never removes the file — see policy.ts.)
         restoring = true;
         try {
           await db.transaction('rw', db.boards, db.objects, async () => {
@@ -445,7 +454,9 @@ async function catchUp(): Promise<void> {
         }
         delete state.boards[b.id];
       } else {
-        await flushBoard(b.id); // brand new local board
+        // brand new local board, or local edits the remote deletion would lose:
+        // push — a stale remoteSha makes flushBoard recreate the file
+        await flushBoard(b.id);
       }
       continue;
     }
@@ -553,6 +564,8 @@ export function initGitSync(): void {
   db.objects.hook('updating', (_mods, _pk, obj) => markBoardDirty((obj as { boardId?: string })?.boardId));
   db.objects.hook('deleting', (_pk, obj) => markBoardDirty((obj as { boardId?: string })?.boardId));
   db.boards.hook('creating', (pk) => markBoardDirty(String(pk)));
+  // Trash is an update (deletedAt) → pushed like an edit, repo file kept.
+  // Only a real row delete ("Delete forever") deletes the repo file.
   db.boards.hook('updating', (_mods, pk) => markBoardDirty(String(pk)));
   db.boards.hook('deleting', (pk) => markBoardDeleted(String(pk)));
   for (const table of [db.projects, db.brandKits, db.components, db.prompts]) {

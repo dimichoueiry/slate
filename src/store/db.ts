@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import type { BoardMeta, BrandKit, DrawStyle, Project, SlateObj } from '../types';
 import type { Doc } from '../engine/doc';
 import { backfillSeeds, DEFAULT_DRAW_STYLE } from '../engine/style';
+import { stampEdit } from './editStamp';
 
 interface ObjectRow {
   id: string;
@@ -112,9 +113,16 @@ db.on('versionchange', () => {
   location.reload();
 });
 
+/** Live boards (Trash excluded), pinned first, then most recently edited. */
 export async function listBoards(): Promise<BoardMeta[]> {
-  const boards = await db.boards.toArray();
+  const boards = (await db.boards.toArray()).filter((b) => !b.deletedAt);
   return boards.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt);
+}
+
+/** Boards in Trash, most recently trashed first. */
+export async function listTrashedBoards(): Promise<BoardMeta[]> {
+  const boards = (await db.boards.toArray()).filter((b) => !!b.deletedAt);
+  return boards.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
 }
 
 export async function createBoard(
@@ -141,10 +149,33 @@ export async function loadBoardObjects(boardId: string): Promise<SlateObj[]> {
   return backfillSeeds(rows.map((r) => r.data));
 }
 
+/** Write board meta. Bumps updatedAt only for real edits (name, notes, style…) —
+ *  see editStamp.ts for the fields that don't count. */
 export async function updateBoardMeta(id: string, patch: Partial<BoardMeta>) {
-  await db.boards.update(id, { ...patch, updatedAt: Date.now() });
+  await db.boards.update(id, stampEdit(patch, Date.now()));
 }
 
+/** Camera save path (pan/zoom): stores the viewport, never touches updatedAt. */
+export async function saveBoardViewport(id: string, viewport: BoardMeta['viewport']) {
+  await db.boards.update(id, { viewport });
+}
+
+/**
+ * Move a board to Trash. This is an UPDATE, never a delete: objects stay put,
+ * and Git Sync pushes the board (with deletedAt) instead of deleting its repo
+ * file. Doesn't bump updatedAt — trashing isn't an edit.
+ */
+export async function trashBoard(id: string) {
+  await db.boards.update(id, { deletedAt: Date.now() });
+}
+
+export async function restoreBoard(id: string) {
+  await db.boards.where(':id').equals(id).modify((b) => {
+    delete b.deletedAt;
+  });
+}
+
+/** Permanent delete (Trash → "Delete forever"). Git Sync removes the repo file. */
 export async function deleteBoard(id: string) {
   await db.transaction('rw', db.boards, db.objects, async () => {
     await db.objects.where('boardId').equals(id).delete();
@@ -201,9 +232,30 @@ export async function deletePrompt(id: string) {
 
 // ---------- projects / folders ----------
 
+/** Live projects (Trash excluded). */
 export async function listProjects(): Promise<Project[]> {
-  const rows = await db.projects.toArray();
+  const rows = (await db.projects.toArray()).filter((p) => !p.deletedAt);
   return rows.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function listTrashedProjects(): Promise<Project[]> {
+  const rows = (await db.projects.toArray()).filter((p) => !!p.deletedAt);
+  return rows.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+}
+
+/**
+ * Move a project to Trash. Its boards are NOT touched: they keep their
+ * projectId and show under Unfiled while the project is trashed, and file back
+ * into it on restore.
+ */
+export async function trashProject(id: string) {
+  await db.projects.update(id, { deletedAt: Date.now() });
+}
+
+export async function restoreProject(id: string) {
+  await db.projects.where(':id').equals(id).modify((p) => {
+    delete p.deletedAt;
+  });
 }
 
 export async function createProject(name = 'New project'): Promise<Project> {
@@ -220,7 +272,7 @@ export async function setProjectKit(id: string, brandKitId: string | null) {
   await db.projects.update(id, { brandKitId });
 }
 
-/** Delete a project; its boards become standalone (unfiled), not deleted. */
+/** Permanently delete a project; its boards become standalone (unfiled), not deleted. */
 export async function deleteProject(id: string) {
   await db.transaction('rw', db.projects, db.boards, async () => {
     const boards = await db.boards.where('projectId').equals(id).toArray();

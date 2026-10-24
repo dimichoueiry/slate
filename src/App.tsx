@@ -9,6 +9,7 @@ import { startBridge } from './bridge/bridge';
 import { initDurability } from './store/durability';
 import { initGitSync } from './store/gitsync/engine';
 import GitSyncIndicator from './components/GitSyncIndicator';
+import DialogHost from './components/Dialogs';
 
 // marketing landing — lazy so it never weighs down the canvas bundle
 const Landing = lazy(() => import('./landing/Landing'));
@@ -62,6 +63,8 @@ export default function App() {
           <GitSyncIndicator />
         </>
       )}
+      {/* in-app dialogs + toasts (replace window.prompt/confirm/alert) */}
+      <DialogHost />
     </>
   );
 }

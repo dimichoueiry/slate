@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Controller } from '../engine/controller';
 import { useUI } from '../store/ui';
 import { db, updateBoardMeta } from '../store/db';
@@ -8,6 +8,8 @@ import { getFlows, runFlow, type Flow } from '../ui/ainodes';
 import { setCanvasDark } from '../store/theme';
 import BrandKitControl from './BrandKit';
 import { DRAW_STYLES, DRAW_STYLE_LABELS, isDrawStyle } from '../engine/style';
+import { takeNameRequest } from '../store/pendingName';
+import { toast } from './Dialogs';
 
 export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: string }) {
   const ui = useUI();
@@ -36,6 +38,33 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
     void updateBoardMeta(boardId, { name });
   };
 
+  // Name on create: a board just made from the dashboard opens with its name
+  // selected — typing replaces it, Enter keeps what's there, Escape reverts.
+  const nameRef = useRef<HTMLInputElement>(null);
+  const nameAtFocus = useRef('');
+  const [naming, setNaming] = useState(false);
+  useEffect(() => {
+    if (!takeNameRequest(boardId)) return;
+    setNaming(true);
+    nameRef.current?.focus();
+    nameRef.current?.select();
+  }, [boardId]);
+  const onNameKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.currentTarget.blur();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (ui.boardName !== nameAtFocus.current) rename(nameAtFocus.current);
+      e.currentTarget.blur();
+    }
+  };
+  const onNameBlur = () => {
+    setNaming(false);
+    // an emptied field means "never mind", not a nameless board
+    if (!ui.boardName.trim()) rename(nameAtFocus.current || 'Untitled board');
+  };
+
   const doExport = async (
     format: 'png' | 'png2x' | 'svg' | 'slate',
     selectionOnly: boolean,
@@ -59,7 +88,7 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         }
       }
       if (!box) {
-        alert('Nothing to export yet — the board is empty.');
+        toast('Nothing to export yet — the board is empty.');
         return;
       }
       if (format === 'svg') {
@@ -82,7 +111,24 @@ export default function TopBar({ ctl, boardId }: { ctl: Controller; boardId: str
         <button className="chrome-btn" title="All boards" onClick={() => goHome()}>
           ←
         </button>
-        <input value={ui.boardName} onChange={(e) => rename(e.target.value)} spellCheck={false} />
+        <span className="board-name-wrap">
+          <input
+            ref={nameRef}
+            className={`board-name${naming ? ' naming' : ''}`}
+            aria-label="Board name"
+            value={ui.boardName}
+            onChange={(e) => rename(e.target.value)}
+            onFocus={() => (nameAtFocus.current = useUI.getState().boardName)}
+            onKeyDown={onNameKey}
+            onBlur={onNameBlur}
+            spellCheck={false}
+          />
+          {naming && (
+            <span className="name-hint" role="note">
+              Name your board · <kbd>Enter</kbd> to save · <kbd>Esc</kbd> to keep “{nameAtFocus.current}”
+            </span>
+          )}
+        </span>
         <button className="chrome-btn" disabled={!ui.canUndo} title="Undo (⌘Z)" onClick={() => ctl.undo()}>
           ↩
         </button>

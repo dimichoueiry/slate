@@ -6,6 +6,7 @@ import { TEMPLATES } from '../engine/templates';
 import { PROMPT_STARTERS } from '../engine/prompts';
 import { deleteComponent, deletePrompt, listComponents, listPrompts, savePrompt, type ComponentDef, type PromptDef } from '../store/db';
 import { useUI } from '../store/ui';
+import { confirmDialog, promptDialog, toast } from './Dialogs';
 
 /** A collapsible tray section whose open/closed state persists per id. */
 function Section({ id, label, right, children }: { id: string; label: string; right?: React.ReactNode; children: React.ReactNode }) {
@@ -97,9 +98,9 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
       onClick={() => ctl.placeComponent(c)}
       onContextMenu={(e) => {
         e.preventDefault();
-        if (confirm(`Delete “${c.name}”?`)) {
-          void deleteComponent(c.id).then(() => set({ componentsVersion: useUI.getState().componentsVersion + 1 }));
-        }
+        void confirmDialog({ title: `Delete “${c.name}”?`, confirmLabel: 'Delete', danger: true }).then((ok) => {
+          if (ok) void deleteComponent(c.id).then(() => set({ componentsVersion: useUI.getState().componentsVersion + 1 }));
+        });
       }}
     >
       {c.thumb ? <img src={c.thumb} alt={c.name} /> : <span>{c.name}</span>}
@@ -127,13 +128,13 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
   const visiblePrompts = q ? prompts.filter((p) => p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q)) : prompts;
   const visibleTemplates = q ? TEMPLATES.filter((t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)) : TEMPLATES;
 
-  const saveCurrentPrompt = () => {
+  const saveCurrentPrompt = async () => {
     const text = ctl.selectedPromptText();
     if (!text) {
-      alert('Select a single sticky/text/node first, then Save prompt.');
+      toast('Select a single sticky/text/node first, then Save prompt.');
       return;
     }
-    const name = prompt('Name this prompt', text.split('\n')[0].slice(0, 40));
+    const name = await promptDialog({ title: 'Save prompt', label: 'Name this prompt', initial: text.split('\n')[0].slice(0, 40) });
     if (name) void savePrompt(name, text).then(reloadPrompts);
   };
 
@@ -155,7 +156,7 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
       id="prompt-templates"
       label="Prompt templates"
       right={
-        <button className="chrome-btn" style={{ padding: '2px 8px', fontSize: 11 }} onClick={saveCurrentPrompt}>
+        <button className="chrome-btn" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => void saveCurrentPrompt()}>
           ＋ Save
         </button>
       }
@@ -169,7 +170,9 @@ export default function IconTray({ ctl }: { ctl: Controller }) {
             onClick={() => ctl.addPromptSticky(p.text)}
             onContextMenu={(e) => {
               e.preventDefault();
-              if (confirm(`Delete prompt “${p.name}”?`)) void deletePrompt(p.id).then(reloadPrompts);
+              void confirmDialog({ title: `Delete prompt “${p.name}”?`, confirmLabel: 'Delete', danger: true }).then((ok) => {
+                if (ok) void deletePrompt(p.id).then(reloadPrompts);
+              });
             }}
           >
             <span className="prompt-name">{p.name}</span>
